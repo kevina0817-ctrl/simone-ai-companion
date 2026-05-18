@@ -41,6 +41,21 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "cancel_event",
+      description: "Cancel/remove an event from the user's schedule. Match against the UPCOMING SCHEDULE list shown in context.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_id: { type: "string", description: "Optional exact event id if known" },
+          title: { type: "string", description: "Title of the event to cancel (fuzzy match allowed)" },
+          start_time: { type: "string", description: "Optional ISO 8601 start time to disambiguate" },
+        },
+      },
+    },
+  },
 ];
 
 export const sendChatMessage = createServerFn({ method: "POST" })
