@@ -87,7 +87,7 @@ Do not suggest extreme dieting.
     url = "https://api.agnic.ai/v1/chat/completions"
 
     headers = {
-        "X-Agnic-Token": "agnic_tok_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkaWQ6cHJpdnk6Y21wOHU5cWR3MDFlbzBjanA3dm56Nzk2NiIsIm1heFBlclRyYW5zYWN0aW9uIjo1LCJkYWlseUxpbWl0IjoxMCwibW9udGhseUxpbWl0IjoxNSwibmV0d29ya3MiOlsiYmFzZSIsInNvbGFuYSJdLCJ0eXBlIjoibjhuX2F1dG9tYXRpb24iLCJjcmVhdGVkQXQiOjE3Nzg5NjU4NzY1NzUsInRva2VuSWQiOiJ0b2tlbl8xNzc4OTY1ODc2NTc1XzdjMDdlMjhiIiwiaWF0IjoxNzc4OTY1ODc2LCJleHAiOjE4MTA1MDE4NzZ9.QSqEdH81dovG35osPF8p4RTI-65DRmqJ568SNz53L4g",
+        "X-Agnic-Token": "AGNIC_TOKEN", # to be changed to user's own token
         "Content-Type": "application/json"
     }
 
