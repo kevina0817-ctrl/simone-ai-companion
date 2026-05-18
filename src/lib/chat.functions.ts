@@ -169,7 +169,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
                 .single();
               if (error) throw error;
               result = { ok: true, event: inserted };
-              actions.push({ kind: "schedule_event", payload: inserted });
+              actions.push({ kind: "schedule_event", id: inserted.id, title: inserted.title, start_time: inserted.start_time });
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };
