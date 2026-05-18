@@ -1,46 +1,74 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, DollarSign, History, Menu, Mic, Moon, Package, Send, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { MobileFrame } from "@/components/MobileFrame";
+import { RequireAuth } from "@/components/RequireAuth";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { sendChatMessage } from "@/lib/chat.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({ meta: [{ title: "Concierge — Aura" }] }),
-  component: ChatPage,
+  component: () => <RequireAuth><ChatPage /></RequireAuth>,
 });
 
-type Msg = { from: "ai" | "me"; text: string; time: string };
-
-const initial: Msg[] = [
-  { from: "ai", text: "I checked your day. Two items may need your attention.", time: "9:21 AM" },
-  { from: "me", text: "Thanks! What should I focus on first?", time: "9:22 AM" },
-  { from: "ai", text: "Your 2pm meeting may conflict with a delivery window, and grocery budget is over by $24.", time: "9:22 AM" },
-  { from: "me", text: "Can you handle the delivery reschedule?", time: "9:23 AM" },
-  { from: "ai", text: "On it. I'll update you once it's confirmed.", time: "9:23 AM" },
-];
-
 const quick = [
-  { label: "Schedule", Icon: Calendar },
-  { label: "Orders", Icon: Package },
-  { label: "Budget", Icon: DollarSign },
-  { label: "Sleep", Icon: Moon },
+  { label: "How's my day?", Icon: Calendar },
+  { label: "Any orders pending?", Icon: Package },
+  { label: "Stay on budget?", Icon: DollarSign },
+  { label: "Help me wind down", Icon: Moon },
 ];
 
 function ChatPage() {
-  const [messages, setMessages] = useState<Msg[]>(initial);
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const send = useServerFn(sendChatMessage);
   const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const send = () => {
-    const t = text.trim();
-    if (!t) return;
-    setMessages((m) => [...m, { from: "me", text: t, time: "now" }]);
+  const { data: messages = [] } = useQuery({
+    queryKey: ["chat", user!.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("chat_messages")
+        .select("id,role,content,created_at")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      return data ?? [];
+    },
+  });
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages.length, pending]);
+
+  const submit = async (msg?: string) => {
+    const t = (msg ?? text).trim();
+    if (!t || pending) return;
     setText("");
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        { from: "ai", text: "Got it — I'll take care of that and follow up shortly.", time: "now" },
+    setPending(true);
+    try {
+      // Optimistic
+      qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
+        ...(old ?? []),
+        { id: `tmp-${Date.now()}`, role: "user", content: t, created_at: new Date().toISOString() },
       ]);
-    }, 700);
+      await send({ data: { message: t } });
+      await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Aura couldn't respond");
+    } finally {
+      setPending(false);
+    }
   };
+
+  const fmtTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
   return (
     <MobileFrame>
@@ -56,53 +84,74 @@ function ChatPage() {
           <button className="rounded-full bg-card/70 p-2"><History className="h-4 w-4" /></button>
         </header>
 
-        <div className="flex-1 space-y-3 overflow-y-auto py-2">
-          {messages.map((m, i) => (
-            <div key={i} className={`flex items-end gap-2 ${m.from === "me" ? "justify-end" : ""}`}>
-              {m.from === "ai" && (
+        <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto py-2">
+          {messages.length === 0 && (
+            <div className="mx-auto max-w-[280px] py-10 text-center text-sm text-muted-foreground">
+              <Sparkles className="mx-auto mb-3 h-6 w-6 text-primary" />
+              Hi, I'm Aura. Ask me anything about your day, your wellness, or your orders.
+            </div>
+          )}
+          {messages.map((m) => (
+            <div key={m.id} className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : ""}`}>
+              {m.role !== "user" && (
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15">
                   <Sparkles className="h-4 w-4 text-primary" />
                 </div>
               )}
               <div
                 className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-card ${
-                  m.from === "me"
+                  m.role === "user"
                     ? "rounded-br-md bg-primary text-primary-foreground"
                     : "rounded-bl-md bg-card/80"
                 }`}
               >
-                <p>{m.text}</p>
-                <div className={`mt-1 text-[10px] ${m.from === "me" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                  {m.time}
+                <p className="whitespace-pre-wrap">{m.content}</p>
+                <div className={`mt-1 text-[10px] ${m.role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                  {fmtTime(m.created_at)}
                 </div>
               </div>
             </div>
           ))}
+          {pending && (
+            <div className="flex items-end gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                <Sparkles className="h-4 w-4 animate-pulse text-primary" />
+              </div>
+              <div className="rounded-2xl rounded-bl-md bg-card/80 px-4 py-2.5 text-sm text-muted-foreground shadow-card">
+                Aura is thinking…
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
-          {quick.map(({ label, Icon }) => (
-            <button
-              key={label}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              <Icon className="h-3.5 w-3.5" /> {label}
-            </button>
-          ))}
-        </div>
+        {messages.length === 0 && (
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
+            {quick.map(({ label, Icon }) => (
+              <button
+                key={label}
+                onClick={() => submit(label)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground"
+              >
+                <Icon className="h-3.5 w-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-2 rounded-full bg-card/70 px-2 py-2 shadow-card">
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="Message your AI concierge…"
             className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
+            disabled={pending}
           />
           <button className="p-2 text-muted-foreground"><Mic className="h-4 w-4" /></button>
           <button
-            onClick={send}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow"
+            onClick={() => submit()}
+            disabled={pending}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow disabled:opacity-50"
           >
             <Send className="h-4 w-4" />
           </button>

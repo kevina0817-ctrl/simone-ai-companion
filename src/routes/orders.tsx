@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Bell, Check, MapPin, Menu, ShoppingBag, Truck } from "lucide-react";
 import { useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
+import { RequireAuth } from "@/components/RequireAuth";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Aura" }] }),
-  component: OrdersPage,
+  component: () => <RequireAuth><OrdersPage /></RequireAuth>,
 });
 
 const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
