@@ -75,7 +75,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       supabase.from("wellness_data").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
       supabase
         .from("schedule_events")
-        .select("start_time,title,subtitle,level")
+        .select("id,start_time,title,subtitle,level")
         .eq("user_id", userId)
         .gte("start_time", new Date().toISOString())
         .order("start_time", { ascending: true })
