@@ -192,6 +192,40 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               if (error) throw error;
               result = { ok: true, event: inserted };
               actions.push({ kind: "schedule_event", id: inserted.id, title: inserted.title, start_time: inserted.start_time });
+            } else if (tc.function.name === "cancel_event") {
+              const parsed = z
+                .object({
+                  event_id: z.string().optional(),
+                  title: z.string().optional(),
+                  start_time: z.string().optional(),
+                })
+                .parse(args);
+
+              let target: { id: string; title: string } | null = null;
+              if (parsed.event_id) {
+                const found = (events ?? []).find((e) => e.id === parsed.event_id);
+                if (found) target = { id: found.id, title: found.title };
+              }
+              if (!target && (parsed.title || parsed.start_time)) {
+                const lcTitle = parsed.title?.toLowerCase();
+                const startMs = parsed.start_time ? new Date(parsed.start_time).getTime() : null;
+                const match = (events ?? []).find((e) => {
+                  const titleOk = lcTitle ? e.title.toLowerCase().includes(lcTitle) : true;
+                  const timeOk = startMs ? Math.abs(new Date(e.start_time).getTime() - startMs) < 30 * 60 * 1000 : true;
+                  return titleOk && timeOk;
+                });
+                if (match) target = { id: match.id, title: match.title };
+              }
+              if (!target) throw new Error("No matching upcoming event found");
+
+              const { error } = await supabase
+                .from("schedule_events")
+                .delete()
+                .eq("id", target.id)
+                .eq("user_id", userId);
+              if (error) throw error;
+              result = { ok: true, cancelled: target };
+              actions.push({ kind: "cancel_event", id: target.id, title: target.title });
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };
