@@ -16,6 +16,7 @@ import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacyRetentionRouteImport } from './routes/privacy.retention'
 import { Route as PrivacyExportRouteImport } from './routes/privacy.export'
+import { Route as PrivacyDeleteRouteImport } from './routes/privacy.delete'
 import { Route as ApprovalsHistoryRouteImport } from './routes/approvals.history'
 
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -53,6 +54,11 @@ const PrivacyExportRoute = PrivacyExportRouteImport.update({
   path: '/export',
   getParentRoute: () => PrivacyRoute,
 } as any)
+const PrivacyDeleteRoute = PrivacyDeleteRouteImport.update({
+  id: '/delete',
+  path: '/delete',
+  getParentRoute: () => PrivacyRoute,
+} as any)
 const ApprovalsHistoryRoute = ApprovalsHistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/approvals/history': typeof ApprovalsHistoryRoute
+  '/privacy/delete': typeof PrivacyDeleteRoute
   '/privacy/export': typeof PrivacyExportRoute
   '/privacy/retention': typeof PrivacyRetentionRoute
 }
@@ -76,6 +83,7 @@ export interface FileRoutesByTo {
   '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/approvals/history': typeof ApprovalsHistoryRoute
+  '/privacy/delete': typeof PrivacyDeleteRoute
   '/privacy/export': typeof PrivacyExportRoute
   '/privacy/retention': typeof PrivacyRetentionRoute
 }
@@ -87,6 +95,7 @@ export interface FileRoutesById {
   '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/approvals/history': typeof ApprovalsHistoryRoute
+  '/privacy/delete': typeof PrivacyDeleteRoute
   '/privacy/export': typeof PrivacyExportRoute
   '/privacy/retention': typeof PrivacyRetentionRoute
 }
@@ -99,6 +108,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/privacy'
     | '/approvals/history'
+    | '/privacy/delete'
     | '/privacy/export'
     | '/privacy/retention'
   fileRoutesByTo: FileRoutesByTo
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/privacy'
     | '/approvals/history'
+    | '/privacy/delete'
     | '/privacy/export'
     | '/privacy/retention'
   id:
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/privacy'
     | '/approvals/history'
+    | '/privacy/delete'
     | '/privacy/export'
     | '/privacy/retention'
   fileRoutesById: FileRoutesById
@@ -182,6 +194,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyExportRouteImport
       parentRoute: typeof PrivacyRoute
     }
+    '/privacy/delete': {
+      id: '/privacy/delete'
+      path: '/delete'
+      fullPath: '/privacy/delete'
+      preLoaderRoute: typeof PrivacyDeleteRouteImport
+      parentRoute: typeof PrivacyRoute
+    }
     '/approvals/history': {
       id: '/approvals/history'
       path: '/history'
@@ -205,11 +224,13 @@ const ApprovalsRouteWithChildren = ApprovalsRoute._addFileChildren(
 )
 
 interface PrivacyRouteChildren {
+  PrivacyDeleteRoute: typeof PrivacyDeleteRoute
   PrivacyExportRoute: typeof PrivacyExportRoute
   PrivacyRetentionRoute: typeof PrivacyRetentionRoute
 }
 
 const PrivacyRouteChildren: PrivacyRouteChildren = {
+  PrivacyDeleteRoute: PrivacyDeleteRoute,
   PrivacyExportRoute: PrivacyExportRoute,
   PrivacyRetentionRoute: PrivacyRetentionRoute,
 }
