@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage } from "@/lib/chat.functions";
 import { toast } from "sonner";
+import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoMessages, scheduleDemoEvent } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({ meta: [{ title: "Concierge — Simone" }] }),
@@ -33,6 +34,7 @@ function ChatPage() {
   const { data: messages = [] } = useQuery({
     queryKey: ["chat", user!.id],
     queryFn: async () => {
+      if (!backendAvailable) return getDemoMessages();
       const { data } = await supabase
         .from("chat_messages")
         .select("id,role,content,created_at")
@@ -53,6 +55,25 @@ function ChatPage() {
     setText("");
     setPending(true);
     try {
+      if (!backendAvailable) {
+        addDemoMessage({ role: "user", content: t });
+        const lower = t.toLowerCase();
+        if (/cancel|remove|delete|drop|skip/.test(lower)) {
+          const cancelled = cancelDemoEvent(t);
+          addDemoMessage({ role: "assistant", content: cancelled ? `Done — removed ${cancelled.title} from your schedule.` : "Which meeting should I remove?" });
+          await qc.invalidateQueries({ queryKey: ["events", user!.id] });
+        } else if (/schedule|book|add/.test(lower)) {
+          const start = new Date();
+          start.setHours(17, 30, 0, 0);
+          const event = scheduleDemoEvent("Recovery session", start.toISOString());
+          addDemoMessage({ role: "assistant", content: `Done — added ${event.title} at 5:30 PM.` });
+          await qc.invalidateQueries({ queryKey: ["events", user!.id] });
+        } else {
+          addDemoMessage({ role: "assistant", content: "Your day looks balanced. I can add or remove meetings from today’s schedule if you ask." });
+        }
+        await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+        return;
+      }
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
         ...(old ?? []),
         { id: `tmp-${Date.now()}`, role: "user", content: t, created_at: new Date().toISOString() },
