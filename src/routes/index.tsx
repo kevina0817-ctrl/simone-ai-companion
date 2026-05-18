@@ -79,7 +79,10 @@ function Home() {
   });
 
   const seedM = useMutation({
-    mutationFn: async () => seed(),
+    mutationFn: async () => {
+      if (!backendAvailable) return { ok: true };
+      return seed();
+    },
     onSuccess: () => {
       toast.success("Demo day loaded");
       qc.invalidateQueries({ queryKey: ["wellness"] });
