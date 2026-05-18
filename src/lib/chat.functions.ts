@@ -127,7 +127,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       };
     };
 
-    const actions: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    const actions: Array<{ kind: "schedule_event"; id: string; title: string; start_time: string }> = [];
     let reply = "";
 
     for (let i = 0; i < 3; i++) {
