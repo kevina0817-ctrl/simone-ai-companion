@@ -6,6 +6,7 @@ import {
   Clock,
   Download,
   Heart,
+  LogOut,
   Lock,
   MessageCircle,
   ShieldCheck,
@@ -14,10 +15,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
+import { RequireAuth } from "@/components/RequireAuth";
+import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({ meta: [{ title: "Privacy Center — Aura" }] }),
-  component: PrivacyPage,
+  component: () => <RequireAuth><PrivacyPage /></RequireAuth>,
 });
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
