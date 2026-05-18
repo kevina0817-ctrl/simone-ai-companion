@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { backendAvailable } from "@/lib/demo-mode";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -22,6 +23,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (!backendAvailable) {
+    return <>{children}</>;
   }
 
   if (!user) {
