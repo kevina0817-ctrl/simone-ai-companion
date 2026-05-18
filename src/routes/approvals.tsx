@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, ChevronRight, Filter, History, ShoppingBag } from "lucide-react";
 import { useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
+import { RequireAuth } from "@/components/RequireAuth";
 
 export const Route = createFileRoute("/approvals")({
   head: () => ({ meta: [{ title: "Approvals — Aura" }] }),
-  component: ApprovalsPage,
+  component: () => <RequireAuth><ApprovalsPage /></RequireAuth>,
 });
 
 function ApprovalsPage() {
