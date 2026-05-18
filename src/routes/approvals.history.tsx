@@ -3,6 +3,7 @@ import { ArrowLeft, Calendar, Check, DollarSign, Package, ShoppingBag, Sparkles,
 import { type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
+import { useRecentDecisions } from "@/lib/approvals-store";
 
 export const Route = createFileRoute("/approvals/history")({
   head: () => ({ meta: [{ title: "Approval history — Simone" }] }),
