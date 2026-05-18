@@ -61,6 +61,7 @@ function ActivityRow({ a }: { a: Activity }) {
 
 function ApprovalsPage() {
   const [tab, setTab] = useState<Tab>("needs");
+  const pending = usePending();
   return (
     <MobileFrame>
       <div className="px-5">
@@ -68,9 +69,11 @@ function ApprovalsPage() {
           <button className="rounded-full bg-card/70 p-2"><ArrowLeft className="h-4 w-4" /></button>
           <h1 className="flex items-center gap-2 font-display text-xl">
             Approvals
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              2
-            </span>
+            {pending.length > 0 && (
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                {pending.length}
+              </span>
+            )}
           </h1>
           <button className="rounded-full bg-card/70 p-2"><Filter className="h-4 w-4" /></button>
         </header>
@@ -108,82 +111,118 @@ function ApprovalsPage() {
   );
 }
 
+function StatusBanner({ status }: { status: "approved" | "declined" }) {
+  const approved = status === "approved";
+  return (
+    <div className={`mt-4 flex items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold ${
+      approved ? "bg-success/15 text-success" : "bg-risk-high/15 text-risk-high"
+    }`}>
+      {approved ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+      {approved ? "Approved" : "Declined"}
+    </div>
+  );
+}
+
+function ActionButtons({ id }: { id: string }) {
+  return (
+    <div className="mt-4 flex gap-2">
+      <button onClick={() => decide(id, "declined")} className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium">Decline</button>
+      <button onClick={() => decide(id, "approved")} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow">Approve</button>
+    </div>
+  );
+}
+
 function NeedsReview() {
+  const calStatus = useStatus("p-cal-1");
+  const groStatus = useStatus("p-gro-1");
+  const pending = usePending();
+
+  if (pending.length === 0 && calStatus !== "approved" && groStatus !== "approved") {
+    return (
+      <div className="mt-6 rounded-3xl bg-card/60 p-8 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-success/15">
+          <Check className="h-5 w-5 text-success" />
+        </div>
+        <div className="text-sm font-medium">You're all caught up</div>
+        <p className="mt-1 text-xs text-muted-foreground">New approvals from Simone will appear here.</p>
+        <Link to="/approvals/history" className="mt-4 inline-block text-xs text-primary">View history →</Link>
+      </div>
+    );
+  }
+
   return (
     <>
-      <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
-            <Calendar className="h-5 w-5 text-champagne" />
+      {calStatus !== "declined" && (
+        <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
+              <Calendar className="h-5 w-5 text-champagne" />
+            </div>
+            <div className="flex-1">
+              <div className="text-base font-medium leading-tight">Calendar change: move client meeting</div>
+            </div>
+            <span className="rounded-full border border-risk-high/40 bg-risk-high/10 px-2.5 py-1 text-[10px] font-medium text-risk-high">
+              High risk
+            </span>
           </div>
-          <div className="flex-1">
-            <div className="text-base font-medium leading-tight">Calendar change: move client meeting</div>
-          </div>
-          <span className="rounded-full border border-risk-high/40 bg-risk-high/10 px-2.5 py-1 text-[10px] font-medium text-risk-high">
-            High risk
-          </span>
-        </div>
 
-        <div className="mt-4 space-y-3 text-sm">
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Reason</div>
-            <div>Reschedules a meeting with 5 attendees.</div>
-          </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Affected</div>
-            <div className="mt-1.5 flex -space-x-2">
-              {["#C9C2FF", "#E9D5A6", "#9FBFA4", "#D8A6B5", "#A6BFE9"].map((c, i) => (
-                <div key={i} className="h-7 w-7 rounded-full border-2 border-card" style={{ background: c }} />
-              ))}
-              <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-secondary text-[10px] text-muted-foreground">
-                +1
+          <div className="mt-4 space-y-3 text-sm">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Reason</div>
+              <div>Reschedules a meeting with 5 attendees.</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Affected</div>
+              <div className="mt-1.5 flex -space-x-2">
+                {["#C9C2FF", "#E9D5A6", "#9FBFA4", "#D8A6B5", "#A6BFE9"].map((c, i) => (
+                  <div key={i} className="h-7 w-7 rounded-full border-2 border-card" style={{ background: c }} />
+                ))}
+                <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-card bg-secondary text-[10px] text-muted-foreground">
+                  +1
+                </div>
               </div>
             </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Details</div>
+              <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                <li>• From: Today, May 16 at 2:00 PM</li>
+                <li>• To: Tomorrow, May 17 at 10:00 AM</li>
+              </ul>
+            </div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Details</div>
-            <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
-              <li>• From: Today, May 16 at 2:00 PM</li>
-              <li>• To: Tomorrow, May 17 at 10:00 AM</li>
-            </ul>
-          </div>
-        </div>
 
-        <div className="mt-4 flex gap-2">
-          <button className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium">Decline</button>
-          <button className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow">Approve</button>
-        </div>
-      </article>
+          {calStatus === "pending" ? <ActionButtons id="p-cal-1" /> : <StatusBanner status={calStatus} />}
+        </article>
+      )}
 
-      <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
-            <ShoppingBag className="h-5 w-5 text-champagne" />
+      {groStatus !== "declined" && (
+        <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
+              <ShoppingBag className="h-5 w-5 text-champagne" />
+            </div>
+            <div className="flex-1">
+              <div className="text-base font-medium leading-tight">Grocery budget over limit</div>
+            </div>
+            <span className="rounded-full border border-risk-medium/40 bg-risk-medium/10 px-2.5 py-1 text-[10px] font-medium text-risk-medium">
+              Medium risk
+            </span>
           </div>
-          <div className="flex-1">
-            <div className="text-base font-medium leading-tight">Grocery budget over limit</div>
-          </div>
-          <span className="rounded-full border border-risk-medium/40 bg-risk-medium/10 px-2.5 py-1 text-[10px] font-medium text-risk-medium">
-            Medium risk
-          </span>
-        </div>
 
-        <div className="mt-4 space-y-3 text-sm">
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Reason</div>
-            <div>Order total exceeds monthly grocery budget.</div>
+          <div className="mt-4 space-y-3 text-sm">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Reason</div>
+              <div>Order total exceeds monthly grocery budget.</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Over by</div>
+              <div className="font-display text-xl">$24.31 <span className="text-sm text-muted-foreground">(5.4%)</span></div>
+            </div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Over by</div>
-            <div className="font-display text-xl">$24.31 <span className="text-sm text-muted-foreground">(5.4%)</span></div>
-          </div>
-        </div>
 
-        <div className="mt-4 flex gap-2">
-          <button className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium">Decline</button>
-          <button className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow">Approve</button>
-        </div>
-      </article>
+          {groStatus === "pending" ? <ActionButtons id="p-gro-1" /> : <StatusBanner status={groStatus} />}
+        </article>
+      )}
     </>
   );
 }
