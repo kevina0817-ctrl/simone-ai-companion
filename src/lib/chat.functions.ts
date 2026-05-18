@@ -101,7 +101,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       "",
       "UPCOMING SCHEDULE:",
       events && events.length
-        ? events.map((e) => `- ${new Date(e.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${e.title} (${e.level})`).join("\n")
+        ? events.map((e) => `- id=${e.id} | ${new Date(e.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} | ${e.title} (${e.level})`).join("\n")
         : "- No upcoming events",
     ].join("\n");
 
