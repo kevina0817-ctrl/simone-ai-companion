@@ -8,8 +8,9 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage } from "@/lib/chat.functions";
+import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
-import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoMessages, scheduleDemoEvent } from "@/lib/demo-mode";
+import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoEvents, getDemoMessages, scheduleDemoEvent, demoWellness } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({ meta: [{ title: "Concierge — Simone" }] }),
