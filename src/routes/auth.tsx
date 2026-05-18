@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Sign in — Aura" }] }),
+  head: () => ({ meta: [{ title: "Sign in — Simone" }] }),
   component: AuthPage,
 });
 
@@ -38,7 +38,7 @@ function AuthPage() {
           },
         });
         if (error) throw error;
-        toast.success("Welcome to Aura");
+        toast.success("Welcome to Simone");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -67,7 +67,7 @@ function AuthPage() {
             <Sparkles className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <div className="font-display text-2xl leading-none">Aura</div>
+            <div className="font-display text-2xl leading-none">Simone</div>
             <div className="text-xs text-muted-foreground">Your AI life assistant</div>
           </div>
         </div>

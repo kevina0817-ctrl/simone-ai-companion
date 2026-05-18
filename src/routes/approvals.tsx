@@ -5,7 +5,7 @@ import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 
 export const Route = createFileRoute("/approvals")({
-  head: () => ({ meta: [{ title: "Approvals — Aura" }] }),
+  head: () => ({ meta: [{ title: "Approvals — Simone" }] }),
   component: () => <RequireAuth><ApprovalsPage /></RequireAuth>,
 });
 

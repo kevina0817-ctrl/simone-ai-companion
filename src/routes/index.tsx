@@ -13,8 +13,8 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Aura — Your AI life assistant" },
-      { name: "description", content: "Aura adapts your schedule, orders, and day to your wellness data." },
+      { title: "Simone — Your AI life assistant" },
+      { name: "description", content: "Simone adapts your schedule, orders, and day to your wellness data." },
     ],
   }),
   component: () => <RequireAuth><Home /></RequireAuth>,
@@ -153,7 +153,7 @@ function Home() {
           <p className="text-sm leading-relaxed text-muted-foreground">
             {wellness
               ? "A calm start supports a focused day. Your afternoon looks busy — block a 15 min reset between 1–3 PM."
-              : "Log today's wellness to unlock personalized insights from Aura."}
+              : "Log today's wellness to unlock personalized insights from Simone."}
           </p>
         </div>
 
@@ -161,7 +161,7 @@ function Home() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-display text-xl">Today's schedule</h2>
             <Link to="/chat" className="text-xs text-primary">
-              Ask Aura →
+              Ask Simone →
             </Link>
           </div>
 
@@ -189,7 +189,7 @@ function Home() {
               </>
             ) : (
               <div className="py-6 text-center text-xs text-muted-foreground">
-                No events yet. Load a sample day above or ask Aura to plan one.
+                No events yet. Load a sample day above or ask Simone to plan one.
               </div>
             )}
           </div>
