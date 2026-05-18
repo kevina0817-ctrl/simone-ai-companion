@@ -14,9 +14,13 @@ Be concise (1-3 short sentences), warm, and proactive. Reference their wellness 
 
 You CAN take real actions using tools:
 - schedule_event: add an event to today's (or upcoming) schedule.
+- cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
 
 When the user asks to book / schedule / add something to their day, CALL the schedule_event tool immediately,
 then confirm in one short sentence (e.g. "Done — added a 5:30 PM recovery session.").
+When the user asks to cancel / remove / drop / skip a meeting or event, CALL the cancel_event tool with the best matching
+event from their UPCOMING SCHEDULE (match by title and/or time), then confirm in one short sentence
+(e.g. "Done — cancelled your 5:30 PM recovery session."). If nothing matches, ask which one to cancel.
 For other proposed actions (orders, budget changes) without a tool, say you'd add it to their Approvals queue.`;
 
 const tools = [
@@ -34,6 +38,21 @@ const tools = [
           level: { type: "string", enum: ["High", "Medium", "Low"], description: "Priority level, default Medium" },
         },
         required: ["title", "start_time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancel_event",
+      description: "Cancel/remove an event from the user's schedule. Match against the UPCOMING SCHEDULE list shown in context.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_id: { type: "string", description: "Optional exact event id if known" },
+          title: { type: "string", description: "Title of the event to cancel (fuzzy match allowed)" },
+          start_time: { type: "string", description: "Optional ISO 8601 start time to disambiguate" },
+        },
       },
     },
   },
@@ -56,7 +75,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       supabase.from("wellness_data").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
       supabase
         .from("schedule_events")
-        .select("start_time,title,subtitle,level")
+        .select("id,start_time,title,subtitle,level")
         .eq("user_id", userId)
         .gte("start_time", new Date().toISOString())
         .order("start_time", { ascending: true })
@@ -82,7 +101,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       "",
       "UPCOMING SCHEDULE:",
       events && events.length
-        ? events.map((e) => `- ${new Date(e.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${e.title} (${e.level})`).join("\n")
+        ? events.map((e) => `- id=${e.id} | ${new Date(e.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} | ${e.title} (${e.level})`).join("\n")
         : "- No upcoming events",
     ].join("\n");
 
@@ -127,7 +146,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       };
     };
 
-    const actions: Array<{ kind: "schedule_event"; id: string; title: string; start_time: string }> = [];
+    const actions: Array<
+      | { kind: "schedule_event"; id: string; title: string; start_time: string }
+      | { kind: "cancel_event"; id: string; title: string }
+    > = [];
     let reply = "";
 
     for (let i = 0; i < 3; i++) {
@@ -170,6 +192,40 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               if (error) throw error;
               result = { ok: true, event: inserted };
               actions.push({ kind: "schedule_event", id: inserted.id, title: inserted.title, start_time: inserted.start_time });
+            } else if (tc.function.name === "cancel_event") {
+              const parsed = z
+                .object({
+                  event_id: z.string().optional(),
+                  title: z.string().optional(),
+                  start_time: z.string().optional(),
+                })
+                .parse(args);
+
+              let target: { id: string; title: string } | null = null;
+              if (parsed.event_id) {
+                const found = (events ?? []).find((e) => e.id === parsed.event_id);
+                if (found) target = { id: found.id, title: found.title };
+              }
+              if (!target && (parsed.title || parsed.start_time)) {
+                const lcTitle = parsed.title?.toLowerCase();
+                const startMs = parsed.start_time ? new Date(parsed.start_time).getTime() : null;
+                const match = (events ?? []).find((e) => {
+                  const titleOk = lcTitle ? e.title.toLowerCase().includes(lcTitle) : true;
+                  const timeOk = startMs ? Math.abs(new Date(e.start_time).getTime() - startMs) < 30 * 60 * 1000 : true;
+                  return titleOk && timeOk;
+                });
+                if (match) target = { id: match.id, title: match.title };
+              }
+              if (!target) throw new Error("No matching upcoming event found");
+
+              const { error } = await supabase
+                .from("schedule_events")
+                .delete()
+                .eq("id", target.id)
+                .eq("user_id", userId);
+              if (error) throw error;
+              result = { ok: true, cancelled: target };
+              actions.push({ kind: "cancel_event", id: target.id, title: target.title });
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };

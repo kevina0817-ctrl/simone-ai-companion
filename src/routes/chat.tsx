@@ -60,9 +60,13 @@ function ChatPage() {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const result = await send({ data: { message: t, timezone: tz, nowIso: new Date().toISOString() } });
       await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
-      if (result?.actions?.some((a) => a.kind === "schedule_event")) {
+      if (result?.actions?.some((a) => a.kind === "schedule_event" || a.kind === "cancel_event")) {
         await qc.invalidateQueries({ queryKey: ["events", user!.id] });
-        toast.success("Added to today's schedule");
+        if (result.actions.some((a) => a.kind === "cancel_event")) {
+          toast.success("Removed from your schedule");
+        } else {
+          toast.success("Added to today's schedule");
+        }
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Simone couldn't respond");
