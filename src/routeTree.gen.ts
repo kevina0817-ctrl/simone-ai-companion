@@ -14,6 +14,7 @@ import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApprovalsHistoryRouteImport } from './routes/approvals.history'
 
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
@@ -40,40 +41,67 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApprovalsHistoryRoute = ApprovalsHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => ApprovalsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
+  '/approvals': typeof ApprovalsRouteWithChildren
   '/chat': typeof ChatRoute
   '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRoute
+  '/approvals/history': typeof ApprovalsHistoryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
+  '/approvals': typeof ApprovalsRouteWithChildren
   '/chat': typeof ChatRoute
   '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRoute
+  '/approvals/history': typeof ApprovalsHistoryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
+  '/approvals': typeof ApprovalsRouteWithChildren
   '/chat': typeof ChatRoute
   '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRoute
+  '/approvals/history': typeof ApprovalsHistoryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/approvals' | '/chat' | '/orders' | '/privacy'
+  fullPaths:
+    | '/'
+    | '/approvals'
+    | '/chat'
+    | '/orders'
+    | '/privacy'
+    | '/approvals/history'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/approvals' | '/chat' | '/orders' | '/privacy'
-  id: '__root__' | '/' | '/approvals' | '/chat' | '/orders' | '/privacy'
+  to:
+    | '/'
+    | '/approvals'
+    | '/chat'
+    | '/orders'
+    | '/privacy'
+    | '/approvals/history'
+  id:
+    | '__root__'
+    | '/'
+    | '/approvals'
+    | '/chat'
+    | '/orders'
+    | '/privacy'
+    | '/approvals/history'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApprovalsRoute: typeof ApprovalsRoute
+  ApprovalsRoute: typeof ApprovalsRouteWithChildren
   ChatRoute: typeof ChatRoute
   OrdersRoute: typeof OrdersRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -116,12 +144,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/approvals/history': {
+      id: '/approvals/history'
+      path: '/history'
+      fullPath: '/approvals/history'
+      preLoaderRoute: typeof ApprovalsHistoryRouteImport
+      parentRoute: typeof ApprovalsRoute
+    }
   }
 }
 
+interface ApprovalsRouteChildren {
+  ApprovalsHistoryRoute: typeof ApprovalsHistoryRoute
+}
+
+const ApprovalsRouteChildren: ApprovalsRouteChildren = {
+  ApprovalsHistoryRoute: ApprovalsHistoryRoute,
+}
+
+const ApprovalsRouteWithChildren = ApprovalsRoute._addFileChildren(
+  ApprovalsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApprovalsRoute: ApprovalsRoute,
+  ApprovalsRoute: ApprovalsRouteWithChildren,
   ChatRoute: ChatRoute,
   OrdersRoute: OrdersRoute,
   PrivacyRoute: PrivacyRoute,
