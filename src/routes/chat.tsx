@@ -59,21 +59,41 @@ function ChatPage() {
     try {
       if (!backendAvailable) {
         addDemoMessage({ role: "user", content: t });
-        const lower = t.toLowerCase();
-        if (/cancel|remove|delete|drop|skip/.test(lower)) {
-          const cancelled = cancelDemoEvent(t);
-          addDemoMessage({ role: "assistant", content: cancelled ? `Done — removed ${cancelled.title} from your schedule.` : "Which meeting should I remove?" });
-          await qc.invalidateQueries({ queryKey: ["events", user!.id] });
-        } else if (/schedule|book|add/.test(lower)) {
-          const start = new Date();
-          start.setHours(17, 30, 0, 0);
-          const event = scheduleDemoEvent("Recovery session", start.toISOString());
-          addDemoMessage({ role: "assistant", content: `Done — added ${event.title} at 5:30 PM.` });
-          await qc.invalidateQueries({ queryKey: ["events", user!.id] });
-        } else {
-          addDemoMessage({ role: "assistant", content: "Your day looks balanced. I can add or remove meetings from today’s schedule if you ask." });
-        }
         await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const history = getDemoMessages().slice(-12).map((m) => ({ role: m.role, content: m.content }));
+        const events = getDemoEvents().map((e) => ({
+          id: e.id, title: e.title, subtitle: e.subtitle, start_time: e.start_time, level: e.level,
+        }));
+        const result = await sendDemo({
+          data: { message: t, timezone: tz, nowIso: new Date().toISOString(), history, events, wellness: demoWellness },
+        });
+        let scheduled = false;
+        let cancelled = false;
+        for (const a of result.actions ?? []) {
+          if (a.kind === "schedule_event") {
+            scheduleDemoEvent(a.title, a.start_time);
+            scheduled = true;
+          } else if (a.kind === "cancel_event") {
+            const hint = a.title ?? a.event_id ?? "";
+            if (a.event_id) {
+              const all = getDemoEvents();
+              const match = all.find((e) => e.id === a.event_id);
+              if (match) {
+                cancelDemoEvent(match.title);
+                cancelled = true;
+                continue;
+              }
+            }
+            if (cancelDemoEvent(hint)) cancelled = true;
+          }
+        }
+        addDemoMessage({ role: "assistant", content: result.reply });
+        await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+        if (scheduled || cancelled) {
+          await qc.invalidateQueries({ queryKey: ["events", user!.id] });
+          toast.success(cancelled ? "Removed from your schedule" : "Added to today's schedule");
+        }
         return;
       }
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
