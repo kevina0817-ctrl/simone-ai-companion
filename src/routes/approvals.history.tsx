@@ -68,6 +68,7 @@ function Row({ e }: { e: Entry }) {
 }
 
 function HistoryPage() {
+  const decisions = useRecentDecisions();
   return (
     <MobileFrame>
       <div className="px-5">
@@ -84,6 +85,31 @@ function HistoryPage() {
         </p>
 
         <div className="mt-4 space-y-5 pb-6">
+          {decisions.length > 0 && (
+            <section>
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Just now
+              </div>
+              <ul className="space-y-2">
+                {decisions.map((d) => (
+                  <Row
+                    key={d.id}
+                    e={{
+                      id: d.id,
+                      icon: d.kind === "calendar"
+                        ? <Calendar className="h-4 w-4 text-primary" />
+                        : <ShoppingBag className="h-4 w-4 text-champagne" />,
+                      title: d.title,
+                      detail: d.detail,
+                      decidedAt: new Date(d.decidedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+                      decidedBy: "You",
+                      status: d.status,
+                    }}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
           {groups.map((g) => (
             <section key={g.label}>
               <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
