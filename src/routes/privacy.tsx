@@ -46,6 +46,7 @@ const access = [
 ];
 
 function PrivacyPage() {
+  const { signOut, user } = useAuth();
   const [toggles, setToggles] = useState([true, true, true, false]);
 
   return (
@@ -137,6 +138,14 @@ function PrivacyPage() {
             </div>
           </div>
         </section>
+
+        <button
+          onClick={signOut}
+          className="mt-6 mb-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card/70 px-4 py-3 text-sm text-muted-foreground"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign out{user?.email ? ` (${user.email})` : ""}
+        </button>
       </div>
     </MobileFrame>
   );
