@@ -16,7 +16,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen items-center justify-center bg-background bg-aurora">
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Sparkles className="h-6 w-6 animate-pulse text-primary" />
-          <div className="text-xs">Awakening Aura…</div>
+          <div className="text-xs">Awakening Simone…</div>
         </div>
       </div>
     );

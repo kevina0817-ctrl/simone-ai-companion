@@ -11,7 +11,7 @@ import { sendChatMessage } from "@/lib/chat.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/chat")({
-  head: () => ({ meta: [{ title: "Concierge — Aura" }] }),
+  head: () => ({ meta: [{ title: "Concierge — Simone" }] }),
   component: () => <RequireAuth><ChatPage /></RequireAuth>,
 });
 
@@ -61,7 +61,7 @@ function ChatPage() {
       await send({ data: { message: t } });
       await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Aura couldn't respond");
+      toast.error(e instanceof Error ? e.message : "Simone couldn't respond");
     } finally {
       setPending(false);
     }
@@ -88,7 +88,7 @@ function ChatPage() {
           {messages.length === 0 && (
             <div className="mx-auto max-w-[280px] py-10 text-center text-sm text-muted-foreground">
               <Sparkles className="mx-auto mb-3 h-6 w-6 text-primary" />
-              Hi, I'm Aura. Ask me anything about your day, your wellness, or your orders.
+              Hi, I'm Simone. Ask me anything about your day, your wellness, or your orders.
             </div>
           )}
           {messages.map((m) => (
@@ -118,7 +118,7 @@ function ChatPage() {
                 <Sparkles className="h-4 w-4 animate-pulse text-primary" />
               </div>
               <div className="rounded-2xl rounded-bl-md bg-card/80 px-4 py-2.5 text-sm text-muted-foreground shadow-card">
-                Aura is thinking…
+                Simone is thinking…
               </div>
             </div>
           )}
