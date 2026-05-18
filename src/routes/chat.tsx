@@ -53,13 +53,17 @@ function ChatPage() {
     setText("");
     setPending(true);
     try {
-      // Optimistic
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
         ...(old ?? []),
         { id: `tmp-${Date.now()}`, role: "user", content: t, created_at: new Date().toISOString() },
       ]);
-      await send({ data: { message: t } });
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const result = await send({ data: { message: t, timezone: tz, nowIso: new Date().toISOString() } });
       await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+      if (result?.actions?.some((a) => a.kind === "schedule_event")) {
+        await qc.invalidateQueries({ queryKey: ["events", user!.id] });
+        toast.success("Added to today's schedule");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Simone couldn't respond");
     } finally {
