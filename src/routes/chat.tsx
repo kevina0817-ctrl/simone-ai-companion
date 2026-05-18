@@ -28,6 +28,7 @@ function ChatPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
+  const sendDemo = useServerFn(sendDemoChatMessage);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
