@@ -99,12 +99,13 @@ function PrivacyPage() {
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
             {[
-              { Icon: Clock, title: "Retention", sub: "12 months", color: "text-muted-foreground" },
-              { Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
-              { Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
+              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: "12 months", color: "text-muted-foreground" },
+              { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
+              { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
             ].map((row, i, arr) => (
-              <button
+              <Link
                 key={row.title}
+                to={row.to}
                 className={`flex w-full items-center gap-3 px-4 py-4 text-left ${
                   i < arr.length - 1 ? "border-b border-border" : ""
                 }`}
@@ -119,7 +120,7 @@ function PrivacyPage() {
                   <div className="text-[11px] text-muted-foreground">{row.sub}</div>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
+              </Link>
             ))}
           </div>
         </section>
