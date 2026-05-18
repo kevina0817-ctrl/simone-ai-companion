@@ -76,7 +76,7 @@ function ChatPage() {
         <header className="flex items-center justify-between pb-3">
           <button className="rounded-full bg-card/70 p-2"><Menu className="h-4 w-4" /></button>
           <div className="text-center">
-            <div className="font-display text-lg">Concierge</div>
+            <div className="font-display text-lg">Simone</div>
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-success">
               <span className="h-1.5 w-1.5 rounded-full bg-success" /> Online
             </div>
