@@ -19,7 +19,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/privacy")({
-  head: () => ({ meta: [{ title: "Privacy Center — Aura" }] }),
+  head: () => ({ meta: [{ title: "Privacy Center — Simone" }] }),
   component: () => <RequireAuth><PrivacyPage /></RequireAuth>,
 });
 
