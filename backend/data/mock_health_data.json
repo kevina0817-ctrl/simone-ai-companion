@@ -1,0 +1,20 @@
+{
+  "user_id": "demo_user_001",
+  "profile": {
+    "name": "Shanshan",
+    "goal": "eat healthier and save time",
+    "diet_preference": "balanced high protein",
+    "cooking_skill": "beginner",
+    "budget_level": "medium"
+  },
+  "health_context": {
+    "sleep_hours_last_night": 6.2,
+    "steps_today": 5200,
+    "energy_level": "low",
+    "weekly_workout_goal": "3 workouts per week"
+  },
+  "fridge_status": {
+    "available_items": ["eggs", "rice", "soy sauce"],
+    "missing_items": ["vegetables", "protein", "fruit", "milk"]
+  }
+}
