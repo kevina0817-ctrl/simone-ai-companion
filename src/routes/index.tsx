@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
+import { backendAvailable, demoProfile, demoWellness, getDemoEvents } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -39,6 +40,7 @@ function Home() {
   const { data: profile } = useQuery({
     queryKey: ["profile", user!.id],
     queryFn: async () => {
+      if (!backendAvailable) return demoProfile;
       const { data } = await supabase.from("profiles").select("display_name").eq("id", user!.id).maybeSingle();
       return data;
     },
@@ -48,6 +50,7 @@ function Home() {
   const { data: wellness } = useQuery({
     queryKey: ["wellness", user!.id, today],
     queryFn: async () => {
+      if (!backendAvailable) return demoWellness;
       const { data } = await supabase
         .from("wellness_data")
         .select("*")
@@ -61,6 +64,7 @@ function Home() {
   const { data: events } = useQuery({
     queryKey: ["events", user!.id, today],
     queryFn: async () => {
+      if (!backendAvailable) return getDemoEvents();
       const start = new Date(); start.setHours(0,0,0,0);
       const end = new Date(); end.setHours(23,59,59,999);
       const { data } = await supabase
@@ -75,7 +79,10 @@ function Home() {
   });
 
   const seedM = useMutation({
-    mutationFn: async () => seed(),
+    mutationFn: async () => {
+      if (!backendAvailable) return { ok: true };
+      return seed();
+    },
     onSuccess: () => {
       toast.success("Demo day loaded");
       qc.invalidateQueries({ queryKey: ["wellness"] });
