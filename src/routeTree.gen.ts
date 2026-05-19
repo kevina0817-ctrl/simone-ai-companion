@@ -17,7 +17,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacyRetentionRouteImport } from './routes/privacy.retention'
 import { Route as PrivacyExportRouteImport } from './routes/privacy.export'
 import { Route as PrivacyDeleteRouteImport } from './routes/privacy.delete'
-import { Route as OrdersBudgetRouteImport } from './routes/orders.budget'
+import { Route as OrdersBudgetRouteImport } from './routes/orders_.budget'
 import { Route as ApprovalsHistoryRouteImport } from './routes/approvals.history'
 
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -61,9 +61,9 @@ const PrivacyDeleteRoute = PrivacyDeleteRouteImport.update({
   getParentRoute: () => PrivacyRoute,
 } as any)
 const OrdersBudgetRoute = OrdersBudgetRouteImport.update({
-  id: '/budget',
-  path: '/budget',
-  getParentRoute: () => OrdersRoute,
+  id: '/orders_/budget',
+  path: '/orders/budget',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApprovalsHistoryRoute = ApprovalsHistoryRouteImport.update({
   id: '/history',
@@ -75,7 +75,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/approvals': typeof ApprovalsRouteWithChildren
   '/chat': typeof ChatRoute
-  '/orders': typeof OrdersRouteWithChildren
+  '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/approvals/history': typeof ApprovalsHistoryRoute
   '/orders/budget': typeof OrdersBudgetRoute
@@ -87,7 +87,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/approvals': typeof ApprovalsRouteWithChildren
   '/chat': typeof ChatRoute
-  '/orders': typeof OrdersRouteWithChildren
+  '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/approvals/history': typeof ApprovalsHistoryRoute
   '/orders/budget': typeof OrdersBudgetRoute
@@ -100,10 +100,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/approvals': typeof ApprovalsRouteWithChildren
   '/chat': typeof ChatRoute
-  '/orders': typeof OrdersRouteWithChildren
+  '/orders': typeof OrdersRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/approvals/history': typeof ApprovalsHistoryRoute
-  '/orders/budget': typeof OrdersBudgetRoute
+  '/orders_/budget': typeof OrdersBudgetRoute
   '/privacy/delete': typeof PrivacyDeleteRoute
   '/privacy/export': typeof PrivacyExportRoute
   '/privacy/retention': typeof PrivacyRetentionRoute
@@ -141,7 +141,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/privacy'
     | '/approvals/history'
-    | '/orders/budget'
+    | '/orders_/budget'
     | '/privacy/delete'
     | '/privacy/export'
     | '/privacy/retention'
@@ -151,8 +151,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApprovalsRoute: typeof ApprovalsRouteWithChildren
   ChatRoute: typeof ChatRoute
-  OrdersRoute: typeof OrdersRouteWithChildren
+  OrdersRoute: typeof OrdersRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
+  OrdersBudgetRoute: typeof OrdersBudgetRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -213,12 +214,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyDeleteRouteImport
       parentRoute: typeof PrivacyRoute
     }
-    '/orders/budget': {
-      id: '/orders/budget'
-      path: '/budget'
+    '/orders_/budget': {
+      id: '/orders_/budget'
+      path: '/orders/budget'
       fullPath: '/orders/budget'
       preLoaderRoute: typeof OrdersBudgetRouteImport
-      parentRoute: typeof OrdersRoute
+      parentRoute: typeof rootRouteImport
     }
     '/approvals/history': {
       id: '/approvals/history'
@@ -242,17 +243,6 @@ const ApprovalsRouteWithChildren = ApprovalsRoute._addFileChildren(
   ApprovalsRouteChildren,
 )
 
-interface OrdersRouteChildren {
-  OrdersBudgetRoute: typeof OrdersBudgetRoute
-}
-
-const OrdersRouteChildren: OrdersRouteChildren = {
-  OrdersBudgetRoute: OrdersBudgetRoute,
-}
-
-const OrdersRouteWithChildren =
-  OrdersRoute._addFileChildren(OrdersRouteChildren)
-
 interface PrivacyRouteChildren {
   PrivacyDeleteRoute: typeof PrivacyDeleteRoute
   PrivacyExportRoute: typeof PrivacyExportRoute
@@ -272,9 +262,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApprovalsRoute: ApprovalsRouteWithChildren,
   ChatRoute: ChatRoute,
-  OrdersRoute: OrdersRouteWithChildren,
+  OrdersRoute: OrdersRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
+  OrdersBudgetRoute: OrdersBudgetRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
