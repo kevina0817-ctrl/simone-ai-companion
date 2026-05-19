@@ -150,7 +150,7 @@ function BudgetPage() {
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Category limits</div>
             <div className="text-[11px] text-muted-foreground">
-              ${total} <span className={total > amount ? "text-destructive" : ""}>/ ${amount}</span>
+              ${total} <span className={amount !== Infinity && total > amount ? "text-destructive" : ""}>/ {amount === Infinity ? "∞" : `$${amount}`}</span>
             </div>
           </div>
           <div className="mt-3 space-y-4">
@@ -167,7 +167,7 @@ function BudgetPage() {
                   className="mt-2"
                   value={[cats[c.key] ?? 0]}
                   min={0}
-                  max={Math.max(amount, 500)}
+                  max={amount === Infinity ? 5000 : Math.max(amount, 500)}
                   step={10}
                   onValueChange={(v) => setCats((s) => ({ ...s, [c.key]: v[0] }))}
                 />
