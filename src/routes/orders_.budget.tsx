@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 
-export const Route = createFileRoute("/orders/budget")({
+export const Route = createFileRoute("/orders_/budget")({
   head: () => ({ meta: [{ title: "Set your budget — Simone" }] }),
   component: () => <RequireAuth><BudgetPage /></RequireAuth>,
 });
