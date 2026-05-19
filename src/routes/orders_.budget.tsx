@@ -16,30 +16,40 @@ const PERIODS = ["Weekly", "Monthly", "Quarterly"] as const;
 type Period = (typeof PERIODS)[number];
 
 const CATEGORIES = [
-  { key: "grocery", label: "Grocery", emoji: "🥬", suggested: 400 },
-  { key: "amazon", label: "Amazon", emoji: "📦", suggested: 250 },
-  { key: "dining", label: "Dining", emoji: "🍽️", suggested: 150 },
+  { key: "grocery", label: "Grocery", emoji: "🥬" },
+  { key: "amazon", label: "Amazon", emoji: "📦" },
+  { key: "others", label: "Others", emoji: "🛍️" },
 ];
+
+const PRESETS: Record<Period, { amount: number; cats: Record<string, number> }> = {
+  Weekly:    { amount: 200,  cats: { grocery: 100, amazon: 60,  others: 40  } },
+  Monthly:   { amount: 800,  cats: { grocery: 400, amazon: 250, others: 150 } },
+  Quarterly: { amount: 2400, cats: { grocery: 1200, amazon: 750, others: 450 } },
+};
 
 function BudgetPage() {
   const navigate = useNavigate();
-  const [period, setPeriod] = useState<Period>("Monthly");
-  const [amount, setAmount] = useState<number>(800);
+  const [period, setPeriodState] = useState<Period>("Monthly");
+  const [amount, setAmount] = useState<number>(PRESETS.Monthly.amount);
   const [alertAt, setAlertAt] = useState<number>(90);
-  const [cats, setCats] = useState<Record<string, number>>({
-    grocery: 400, amazon: 250, dining: 150,
-  });
+  const [cats, setCats] = useState<Record<string, number>>(PRESETS.Monthly.cats);
   const [saved, setSaved] = useState(false);
+
+  const setPeriod = (p: Period) => {
+    setPeriodState(p);
+    setAmount(PRESETS[p].amount);
+    setCats(PRESETS[p].cats);
+  };
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem("simone:budget");
       if (raw) {
         const v = JSON.parse(raw);
-        if (v.period) setPeriod(v.period);
+        if (v.period) setPeriodState(v.period);
         if (typeof v.amount === "number") setAmount(v.amount);
         if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
-        if (v.cats) setCats({ ...{ grocery: 400, amazon: 250, dining: 150 }, ...v.cats });
+        if (v.cats) setCats({ ...PRESETS[(v.period as Period) ?? "Monthly"].cats, ...v.cats });
       }
     } catch { /* ignore */ }
   }, []);
