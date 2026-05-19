@@ -135,7 +135,7 @@ function NeedsReview() {
         </div>
         <div className="text-sm font-medium">You're all caught up</div>
         <p className="mt-1 text-xs text-muted-foreground">New approvals from Simone will appear here.</p>
-        <Link to="/approvals/history" className="mt-4 inline-block text-xs text-primary">View history →</Link>
+        
       </div>
     );
   }
