@@ -142,8 +142,8 @@ function ExportPage() {
           </button>
         ) : (
           <button
-            onClick={start}
-            disabled={status === "preparing"}
+            onClick={() => setConfirmOpen(true)}
+            disabled={status === "preparing" || Object.values(selected).every((v) => !v)}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
           >
             <Download className="h-4 w-4" />
@@ -155,6 +155,59 @@ function ExportPage() {
           Exports are encrypted and available for 7 days.
         </p>
       </div>
+
+      {confirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-background/70 px-4 pb-6 pt-10 backdrop-blur-sm sm:items-center"
+          onClick={() => setConfirmOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-3xl border border-border bg-card p-5 shadow-card"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="text-base font-medium">Confirm data export</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  We'll bundle {Object.values(selected).filter(Boolean).length} dataset(s) as{" "}
+                  <span className="font-mono uppercase">{format}</span>. Type{" "}
+                  <span className="font-mono text-foreground">CONFIRM</span> to continue.
+                </p>
+              </div>
+              <button onClick={() => setConfirmOpen(false)} className="rounded-full p-1 text-muted-foreground hover:bg-secondary/60">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <input
+              autoFocus
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="CONFIRM"
+              className="mt-4 w-full rounded-2xl border border-border bg-secondary/40 px-4 py-3 text-sm outline-none focus:border-primary"
+            />
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={start}
+                disabled={confirmText.trim().toUpperCase() !== "CONFIRM"}
+                className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-40"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MobileFrame>
   );
 }
