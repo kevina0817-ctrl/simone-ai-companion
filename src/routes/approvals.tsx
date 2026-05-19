@@ -218,25 +218,53 @@ function NeedsReview() {
 }
 
 function AllActivity() {
+  const pending = usePending();
+  const decisions = useRecentDecisions();
+
+  const iconFor = (kind: "calendar" | "grocery") =>
+    kind === "calendar"
+      ? <Calendar className="h-4 w-4 text-champagne" />
+      : <ShoppingBag className="h-4 w-4 text-champagne" />;
+
+  const justDecided: Activity[] = decisions.map((d) => ({
+    id: d.id,
+    icon: iconFor(d.kind),
+    title: d.title,
+    detail: d.detail,
+    when: new Date(d.decidedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    status: d.status,
+  }));
+
   return (
     <>
       <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-xs font-medium text-muted-foreground">Pending</div>
-          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">2 waiting</span>
+          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+            {pending.length} waiting
+          </span>
         </div>
-        <ul className="space-y-2">
-          <ActivityRow a={{ id: "p1", icon: <Calendar className="h-4 w-4 text-champagne" />, title: "Move client meeting", detail: "Today 2 PM → Tomorrow 10 AM", when: "Now", status: "auto" }} />
-          <ActivityRow a={{ id: "p2", icon: <ShoppingBag className="h-4 w-4 text-champagne" />, title: "Grocery budget over limit", detail: "+$24.31 over monthly", when: "Now", status: "auto" }} />
-        </ul>
+        {pending.length > 0 ? (
+          <ul className="space-y-2">
+            {pending.map((p) => (
+              <ActivityRow
+                key={p.id}
+                a={{ id: p.id, icon: iconFor(p.kind), title: p.title, detail: p.detail, when: "Now", status: "auto" }}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className="px-1 py-2 text-xs text-muted-foreground">Nothing waiting on you.</p>
+        )}
       </div>
 
       <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-xs font-medium text-muted-foreground">Recent</div>
-          <span className="text-[10px] text-muted-foreground">{recentActivity.length} items</span>
+          <span className="text-[10px] text-muted-foreground">{justDecided.length + recentActivity.length} items</span>
         </div>
         <ul className="space-y-2">
+          {justDecided.map((a) => <ActivityRow key={a.id} a={a} />)}
           {recentActivity.map((a) => <ActivityRow key={a.id} a={a} />)}
         </ul>
       </div>
