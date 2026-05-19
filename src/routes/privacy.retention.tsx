@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Check, Clock } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 
@@ -16,11 +16,32 @@ const options = [
   { id: "36m", label: "3 years", sub: "Maximum memory" },
 ];
 
+const STORAGE_KEY = "simone.retention";
+export function getStoredRetentionLabel() {
+  if (typeof window === "undefined") return "12 months";
+  const id = window.localStorage.getItem(STORAGE_KEY) ?? "12m";
+  return options.find((o) => o.id === id)?.label ?? "12 months";
+}
+
 function RetentionPage() {
   const [selected, setSelected] = useState("12m");
+  const [saved, setSaved] = useState(false);
+  const [autoDelete, setAutoDelete] = useState(true);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored) setSelected(stored);
+  }, []);
+
+  const save = () => {
+    window.localStorage.setItem(STORAGE_KEY, selected);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  };
+
   return (
     <MobileFrame>
-      <div className="px-5">
+      <div className="px-5 pb-8">
         <header className="flex items-center justify-between pb-3">
           <Link to="/privacy" className="rounded-full bg-card/70 p-2">
             <ArrowLeft className="h-4 w-4" />
@@ -63,7 +84,31 @@ function RetentionPage() {
           })}
         </div>
 
-        <div className="mt-6 rounded-3xl bg-card/50 p-4 text-xs leading-relaxed text-muted-foreground">
+        <div className="mt-4 flex items-center justify-between rounded-2xl bg-card/70 px-4 py-3 shadow-card">
+          <div>
+            <div className="text-sm font-medium">Auto-delete older data</div>
+            <div className="text-[11px] text-muted-foreground">Runs nightly in the background</div>
+          </div>
+          <button
+            onClick={() => setAutoDelete((v) => !v)}
+            className={`relative h-6 w-11 rounded-full transition-colors ${autoDelete ? "bg-primary" : "bg-secondary"}`}
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-foreground shadow-card transition-all ${
+                autoDelete ? "left-[22px]" : "left-0.5"
+              }`}
+            />
+          </button>
+        </div>
+
+        <button
+          onClick={save}
+          className="mt-5 w-full rounded-full bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+        >
+          {saved ? "Saved ✓" : "Save retention"}
+        </button>
+
+        <div className="mt-5 rounded-3xl bg-card/50 p-4 text-xs leading-relaxed text-muted-foreground">
           Retention applies to chat memory, calendar suggestions, and shopping history.
           Receipts and approvals required by law are kept for the legally required period.
         </div>
