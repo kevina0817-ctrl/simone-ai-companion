@@ -1,10 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   Check,
   ChevronDown,
-  ChevronRight,
   Clock,
   Download,
   Heart,
@@ -15,7 +15,7 @@ import {
   ShoppingCart,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ComponentType, useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
