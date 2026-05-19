@@ -130,20 +130,23 @@ function BudgetPage() {
               Unlimited
             </button>
           </div>
-          {amount !== Infinity && (
-            <div className="mt-4">
-              <Slider
-                value={[amount]}
-                min={50}
-                max={10000}
-                step={50}
-                onValueChange={(v) => setAmount(v[0])}
-              />
-              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-                <span>$50</span><span>$10,000+</span>
+          {amount !== Infinity && (() => {
+            const sliderMax = Math.max(PRESETS[period].amount * 2, amount + 100);
+            return (
+              <div className="mt-4">
+                <Slider
+                  value={[amount]}
+                  min={50}
+                  max={sliderMax}
+                  step={50}
+                  onValueChange={(v) => setAmount(v[0])}
+                />
+                <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+                  <span>$50</span><span>${sliderMax.toLocaleString()}+</span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Category split */}
