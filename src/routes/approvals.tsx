@@ -234,7 +234,7 @@ function AllActivity() {
       <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-xs font-medium text-muted-foreground">Recent</div>
-          <Link to="/approvals/history" className="text-[10px] text-primary">View all</Link>
+          <span className="text-[10px] text-muted-foreground">{recentActivity.length} items</span>
         </div>
         <ul className="space-y-2">
           {recentActivity.map((a) => <ActivityRow key={a.id} a={a} />)}
