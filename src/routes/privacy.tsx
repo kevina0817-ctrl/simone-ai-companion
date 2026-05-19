@@ -49,6 +49,9 @@ const access = [
 function PrivacyPage() {
   const { signOut, user } = useAuth();
   const [toggles, setToggles] = useState([true, true, true, false]);
+  const [retention, setRetention] = useState("12 months");
+  useEffect(() => { setRetention(getStoredRetentionLabel()); }, []);
+
 
   return (
     <MobileFrame>
