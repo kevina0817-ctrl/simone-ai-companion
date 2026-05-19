@@ -110,32 +110,43 @@ function GroceryTracking() {
   );
 }
 
+type AmazonItem = { name: string; qty: number; price: number };
+
+const AMAZON_ORDER = {
+  orderId: "114-7829012-3103456",
+  carrier: "Amazon Logistics",
+  etaText: "Arriving in 28 min",
+  stageIdx: 2, // 0..3 → Confirmed / Packed / On the way / Delivered
+  courier: { name: "Alex", vehicle: "Van • ABT-4821" },
+  shipTo: "Home • 221B Baker St, Apt 4",
+  items: [
+    { name: "USB-C cable, 2m", qty: 2, price: 9.99 },
+    { name: "Anker 65W charger", qty: 1, price: 39.99 },
+    { name: "Kindle Paperwhite cover", qty: 1, price: 24.5 },
+  ] as AmazonItem[],
+  shipping: 0,
+};
+
 function AmazonTracking() {
-  const stageIdx = 2;
+  const { orderId, carrier, etaText, stageIdx, courier, shipTo, items, shipping } = AMAZON_ORDER;
+  const itemCount = items.reduce((s, i) => s + i.qty, 0);
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const total = subtotal + shipping;
+
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
       <div className="flex items-start justify-between">
         <div>
           <div className="text-base font-medium">Amazon delivery</div>
-          <div className="text-xs text-muted-foreground">Order #114-7829012-3103456 • Arriving in 28 min</div>
+          <div className="text-xs text-muted-foreground">
+            Order #{orderId} • {etaText}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {carrier} • {itemCount} items • Ship to {shipTo}
+          </div>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
           <Truck className="h-5 w-5 text-primary" />
-        </div>
-      </div>
-
-      <div className="relative mt-4 h-32 overflow-hidden rounded-2xl bg-gradient-to-br from-secondary to-background">
-        <svg className="absolute inset-0 h-full w-full opacity-30" viewBox="0 0 200 100" preserveAspectRatio="none">
-          <defs>
-            <pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M 20 0 L 0 0 0 20" fill="none" stroke="currentColor" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect width="200" height="100" fill="url(#g)" />
-          <path d="M0,70 Q40,50 70,55 T130,40 T200,30" fill="none" stroke="var(--primary)" strokeWidth="1.5" strokeDasharray="2 2" />
-        </svg>
-        <div className="absolute right-6 top-6 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-glow">
-          <Truck className="h-4 w-4 text-primary-foreground" />
         </div>
       </div>
 
@@ -159,14 +170,37 @@ function AmazonTracking() {
         ))}
       </div>
 
+      <div className="mt-4 rounded-2xl border border-border/60 bg-background/40 p-3 font-mono text-[11px]">
+        <ul className="divide-y divide-border/50">
+          {items.map((it, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="flex-1 truncate">
+                {it.qty > 1 ? <span className="text-muted-foreground">{it.qty}× </span> : null}
+                {it.name}
+              </span>
+              <span className="tabular-nums">${(it.price * it.qty).toFixed(2)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 flex items-baseline justify-between text-muted-foreground">
+          <span>Shipping</span>
+          <span className="tabular-nums">{shipping === 0 ? "Free" : `$${shipping.toFixed(2)}`}</span>
+        </div>
+        <div className="mt-1 flex items-baseline justify-between border-t border-border/60 pt-2">
+          <span className="text-muted-foreground">Total</span>
+          <span className="tabular-nums font-medium">${total.toFixed(2)}</span>
+        </div>
+      </div>
+
       <div className="mt-4 flex items-center gap-2">
         <div className="h-8 w-8 rounded-full bg-gradient-to-br from-champagne to-primary" />
         <div className="text-xs">
           <div className="text-muted-foreground">Courier</div>
-          <div className="font-medium">Alex</div>
+          <div className="font-medium">{courier.name}</div>
         </div>
+        <div className="ml-3 text-[11px] text-muted-foreground">{courier.vehicle}</div>
         <button className="ml-auto flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-3 py-2 text-xs font-medium">
-          <MapPin className="h-3.5 w-3.5" /> Track on map
+          <MapPin className="h-3.5 w-3.5" /> Details
         </button>
       </div>
     </div>
