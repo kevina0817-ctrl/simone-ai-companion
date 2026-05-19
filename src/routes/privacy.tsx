@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Calendar,
+  Check,
+  ChevronDown,
   ChevronRight,
   Clock,
   Download,
@@ -17,7 +19,7 @@ import { useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
-import { getStoredRetentionLabel } from "./privacy.retention";
+import { RETENTION_OPTIONS, RETENTION_STORAGE_KEY, getStoredRetentionLabel } from "./privacy.retention";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({ meta: [{ title: "Privacy Center — Simone" }] }),
@@ -36,6 +38,59 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
         }`}
       />
     </button>
+  );
+}
+
+function RetentionRow({ current, onChange }: { current: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const select = (id: string, label: string) => {
+    if (typeof window !== "undefined") window.localStorage.setItem(RETENTION_STORAGE_KEY, id);
+    onChange(label);
+  };
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-4 text-left"
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/60">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-medium">Retention</div>
+          <div className="text-[11px] text-muted-foreground">{current}</div>
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border bg-card/40 px-2 py-2">
+          {RETENTION_OPTIONS.map((o) => {
+            const active = o.label === current;
+            return (
+              <button
+                key={o.id}
+                onClick={() => select(o.id, o.label)}
+                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors ${
+                  active ? "bg-primary/10" : "hover:bg-secondary/40"
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="text-sm font-medium">{o.label}</div>
+                  <div className="text-[11px] text-muted-foreground">{o.sub}</div>
+                </div>
+                <div
+                  className={`flex h-5 w-5 items-center justify-center rounded-full border ${
+                    active ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                  }`}
+                >
+                  {active && <Check className="h-3 w-3" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -102,16 +157,16 @@ function PrivacyPage() {
             Data you control
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
+            <RetentionRow current={retention} onChange={setRetention} />
             {[
-              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: retention, color: "text-muted-foreground" },
               { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
               { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
             ].map((row, i, arr) => (
               <Link
                 key={row.title}
                 to={row.to}
-                className={`flex w-full items-center gap-3 px-4 py-4 text-left ${
-                  i < arr.length - 1 ? "border-b border-border" : ""
+                className={`flex w-full items-center gap-3 border-t border-border px-4 py-4 text-left ${
+                  i < arr.length - 1 ? "" : ""
                 }`}
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/60">

@@ -9,14 +9,17 @@ export const Route = createFileRoute("/privacy/retention")({
   component: () => <RequireAuth><RetentionPage /></RequireAuth>,
 });
 
-const options = [
+export const RETENTION_OPTIONS = [
   { id: "6m", label: "6 months", sub: "Minimal footprint" },
   { id: "12m", label: "12 months", sub: "Recommended" },
   { id: "24m", label: "2 years", sub: "More context for Simone" },
   { id: "36m", label: "3 years", sub: "Maximum memory" },
+  { id: "forever", label: "Forever", sub: "Never auto-delete" },
 ];
+const options = RETENTION_OPTIONS;
+export const RETENTION_STORAGE_KEY = "simone.retention";
 
-const STORAGE_KEY = "simone.retention";
+const STORAGE_KEY = RETENTION_STORAGE_KEY;
 export function getStoredRetentionLabel() {
   if (typeof window === "undefined") return "12 months";
   const id = window.localStorage.getItem(STORAGE_KEY) ?? "12m";
