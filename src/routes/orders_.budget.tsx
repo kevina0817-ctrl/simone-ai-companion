@@ -47,7 +47,8 @@ function BudgetPage() {
       if (raw) {
         const v = JSON.parse(raw);
         if (v.period) setPeriodState(v.period);
-        if (typeof v.amount === "number") setAmount(v.amount);
+        if (v.amount === "unlimited") setAmount(Infinity);
+        else if (typeof v.amount === "number") setAmount(v.amount);
         if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
         if (v.cats) setCats({ ...PRESETS[(v.period as Period) ?? "Monthly"].cats, ...v.cats });
       }
@@ -59,7 +60,7 @@ function BudgetPage() {
   const save = () => {
     localStorage.setItem(
       "simone:budget",
-      JSON.stringify({ period, amount, alertAt, cats }),
+      JSON.stringify({ period, amount: amount === Infinity ? "unlimited" : amount, alertAt, cats }),
     );
     setSaved(true);
     setTimeout(() => navigate({ to: "/orders" }), 900);
@@ -105,25 +106,44 @@ function BudgetPage() {
           <div className="mt-4 flex items-center gap-2">
             <span className="text-2xl font-display">$</span>
             <Input
-              type="number"
+              type="text"
               inputMode="numeric"
-              value={amount}
-              onChange={(e) => setAmount(Math.max(0, Number(e.target.value) || 0))}
+              value={amount === Infinity ? "∞" : amount}
+              disabled={amount === Infinity}
+              onChange={(e) => {
+                const n = Number(e.target.value.replace(/[^\d]/g, ""));
+                setAmount(Math.max(0, Number.isFinite(n) ? n : 0));
+              }}
               className="h-12 text-2xl font-display"
             />
+            <button
+              type="button"
+              onClick={() =>
+                setAmount(amount === Infinity ? PRESETS[period].amount : Infinity)
+              }
+              className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-medium transition-colors ${
+                amount === Infinity
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-secondary/50 text-muted-foreground"
+              }`}
+            >
+              Unlimited
+            </button>
           </div>
-          <div className="mt-4">
-            <Slider
-              value={[amount]}
-              min={50}
-              max={3000}
-              step={50}
-              onValueChange={(v) => setAmount(v[0])}
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-              <span>$50</span><span>$3,000</span>
+          {amount !== Infinity && (
+            <div className="mt-4">
+              <Slider
+                value={[amount]}
+                min={50}
+                max={10000}
+                step={50}
+                onValueChange={(v) => setAmount(v[0])}
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+                <span>$50</span><span>$10,000+</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Category split */}
@@ -131,7 +151,7 @@ function BudgetPage() {
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Category limits</div>
             <div className="text-[11px] text-muted-foreground">
-              ${total} <span className={total > amount ? "text-destructive" : ""}>/ ${amount}</span>
+              ${total} <span className={amount !== Infinity && total > amount ? "text-destructive" : ""}>/ {amount === Infinity ? "∞" : `$${amount}`}</span>
             </div>
           </div>
           <div className="mt-3 space-y-4">
@@ -148,14 +168,14 @@ function BudgetPage() {
                   className="mt-2"
                   value={[cats[c.key] ?? 0]}
                   min={0}
-                  max={Math.max(amount, 500)}
+                  max={amount === Infinity ? 5000 : Math.max(amount, 500)}
                   step={10}
                   onValueChange={(v) => setCats((s) => ({ ...s, [c.key]: v[0] }))}
                 />
               </div>
             ))}
           </div>
-          {total > amount && (
+          {amount !== Infinity && total > amount && (
             <div className="mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
               Category total exceeds your {period.toLowerCase()} cap by ${total - amount}.
             </div>
