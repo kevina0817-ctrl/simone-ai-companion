@@ -3,7 +3,7 @@ import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, S
 import { useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
-import { decide, usePending, useStatus } from "@/lib/approvals-store";
+import { decide, usePending, useRecentDecisions, useStatus } from "@/lib/approvals-store";
 
 export const Route = createFileRoute("/approvals")({
   head: () => ({ meta: [{ title: "Approvals — Simone" }] }),
