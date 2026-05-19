@@ -18,8 +18,7 @@ export function MobileFrame({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen w-full bg-background bg-aurora">
       <div className="mx-auto flex min-h-screen max-w-[440px] flex-col">
-        <StatusBar />
-        <main className="flex-1 pb-28">{children}</main>
+        <main className="flex-1 pt-4 pb-28">{children}</main>
         <BottomNav />
       </div>
     </div>
