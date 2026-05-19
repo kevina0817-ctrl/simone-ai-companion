@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
-import { getStoredRetentionLabel } from "./privacy.retention";
+import { RETENTION_OPTIONS, RETENTION_STORAGE_KEY, getStoredRetentionLabel } from "./privacy.retention";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({ meta: [{ title: "Privacy Center — Simone" }] }),
