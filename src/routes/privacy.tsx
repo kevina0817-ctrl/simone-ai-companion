@@ -103,7 +103,7 @@ function PrivacyPage() {
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
             {[
-              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: "12 months", color: "text-muted-foreground" },
+              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: retention, color: "text-muted-foreground" },
               { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
               { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
             ].map((row, i, arr) => (
