@@ -105,25 +105,44 @@ function BudgetPage() {
           <div className="mt-4 flex items-center gap-2">
             <span className="text-2xl font-display">$</span>
             <Input
-              type="number"
+              type="text"
               inputMode="numeric"
-              value={amount}
-              onChange={(e) => setAmount(Math.max(0, Number(e.target.value) || 0))}
+              value={amount === Infinity ? "∞" : amount}
+              disabled={amount === Infinity}
+              onChange={(e) => {
+                const n = Number(e.target.value.replace(/[^\d]/g, ""));
+                setAmount(Math.max(0, Number.isFinite(n) ? n : 0));
+              }}
               className="h-12 text-2xl font-display"
             />
+            <button
+              type="button"
+              onClick={() =>
+                setAmount(amount === Infinity ? PRESETS[period].amount : Infinity)
+              }
+              className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-medium transition-colors ${
+                amount === Infinity
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-secondary/50 text-muted-foreground"
+              }`}
+            >
+              Unlimited
+            </button>
           </div>
-          <div className="mt-4">
-            <Slider
-              value={[amount]}
-              min={50}
-              max={3000}
-              step={50}
-              onValueChange={(v) => setAmount(v[0])}
-            />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-              <span>$50</span><span>$3,000</span>
+          {amount !== Infinity && (
+            <div className="mt-4">
+              <Slider
+                value={[amount]}
+                min={50}
+                max={10000}
+                step={50}
+                onValueChange={(v) => setAmount(v[0])}
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+                <span>$50</span><span>$10,000+</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Category split */}
