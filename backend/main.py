@@ -11,6 +11,9 @@ load_dotenv()
 
 app = FastAPI(title="Simone AI Companion Backend")
 
+# 配置 CORS
+# 允许任何来源访问 backend
+# Hackathon demo 阶段这样最方便
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
