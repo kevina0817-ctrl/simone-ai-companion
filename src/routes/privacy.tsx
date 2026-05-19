@@ -104,16 +104,16 @@ function PrivacyPage() {
             Data you control
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
+            <RetentionRow current={retention} onChange={setRetention} />
             {[
-              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: retention, color: "text-muted-foreground" },
               { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
               { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
             ].map((row, i, arr) => (
               <Link
                 key={row.title}
                 to={row.to}
-                className={`flex w-full items-center gap-3 px-4 py-4 text-left ${
-                  i < arr.length - 1 ? "border-b border-border" : ""
+                className={`flex w-full items-center gap-3 border-t border-border px-4 py-4 text-left ${
+                  i < arr.length - 1 ? "" : ""
                 }`}
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/60">
