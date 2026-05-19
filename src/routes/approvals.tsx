@@ -96,16 +96,6 @@ function ApprovalsPage() {
         </div>
 
         {tab === "needs" ? <NeedsReview /> : <AllActivity />}
-
-        <Link
-          to="/approvals/history"
-          className="mt-4 flex w-full items-center justify-between rounded-2xl bg-card/50 px-4 py-3 text-sm"
-        >
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <History className="h-4 w-4" /> Approval history
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </Link>
       </div>
     </MobileFrame>
   );
