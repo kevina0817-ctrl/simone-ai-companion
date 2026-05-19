@@ -59,7 +59,7 @@ function BudgetPage() {
   const save = () => {
     localStorage.setItem(
       "simone:budget",
-      JSON.stringify({ period, amount, alertAt, cats }),
+      JSON.stringify({ period, amount: amount === Infinity ? "unlimited" : amount, alertAt, cats }),
     );
     setSaved(true);
     setTimeout(() => navigate({ to: "/orders" }), 900);
