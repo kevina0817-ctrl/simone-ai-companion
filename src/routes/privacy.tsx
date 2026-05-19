@@ -1,10 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   Check,
   ChevronDown,
-  ChevronRight,
   Clock,
   Download,
   Heart,
@@ -15,7 +15,7 @@ import {
   ShoppingCart,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ComponentType, useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
@@ -94,6 +94,120 @@ function RetentionRow({ current, onChange }: { current: string; onChange: (v: st
   );
 }
 
+type ConfirmVariant = "default" | "destructive";
+
+function ConfirmRow({
+  Icon,
+  title,
+  sub,
+  confirmWord,
+  actionLabel,
+  successTitle,
+  successSub,
+  variant,
+}: {
+  Icon: ComponentType<{ className?: string }>;
+  title: string;
+  sub: string;
+  confirmWord: string;
+  actionLabel: string;
+  successTitle: string;
+  successSub: string;
+  variant: ConfirmVariant;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [done, setDone] = useState(false);
+  const isDestructive = variant === "destructive";
+  const matches = text.trim().toUpperCase() === confirmWord;
+
+  const submit = () => {
+    if (!matches) return;
+    setDone(true);
+  };
+
+  const reset = () => {
+    setOpen(false);
+    setText("");
+    setDone(false);
+  };
+
+  return (
+    <div className="border-t border-border">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-4 text-left"
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/60">
+          <Icon className={`h-4 w-4 ${isDestructive ? "text-destructive" : "text-muted-foreground"}`} />
+        </div>
+        <div className="flex-1">
+          <div className={`text-sm font-medium ${isDestructive ? "text-destructive" : ""}`}>{title}</div>
+          <div className="text-[11px] text-muted-foreground">{sub}</div>
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border bg-card/40 px-4 py-4">
+          {done ? (
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isDestructive ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"}`}>
+                  <Check className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">{successTitle}</div>
+                  <div className="text-[11px] text-muted-foreground">{successSub}</div>
+                </div>
+              </div>
+              <button
+                onClick={reset}
+                className="w-full rounded-2xl border border-border bg-card/70 px-4 py-2.5 text-xs text-muted-foreground"
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${isDestructive ? "text-destructive" : "text-primary"}`} />
+                <span>
+                  Type <span className="font-semibold text-foreground">{confirmWord}</span> below to {isDestructive ? "permanently delete your data" : "confirm the export"}.
+                </span>
+              </div>
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={confirmWord}
+                className="w-full rounded-2xl border border-border bg-background px-4 py-2.5 text-sm tracking-wider outline-none focus:border-primary"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={reset}
+                  className="flex-1 rounded-2xl border border-border bg-card/70 px-4 py-2.5 text-xs text-muted-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submit}
+                  disabled={!matches}
+                  className={`flex-1 rounded-2xl px-4 py-2.5 text-xs font-medium transition-opacity disabled:opacity-40 ${
+                    isDestructive
+                      ? "bg-destructive text-destructive-foreground"
+                      : "bg-primary text-primary-foreground"
+                  }`}
+                >
+                  {actionLabel}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const access = [
   { Icon: Calendar, title: "Calendar", sub: "View and manage events" },
   { Icon: Heart, title: "Health", sub: "Sleep, activity, and readiness" },
@@ -158,29 +272,26 @@ function PrivacyPage() {
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
             <RetentionRow current={retention} onChange={setRetention} />
-            {[
-              { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
-              { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
-            ].map((row, i, arr) => (
-              <Link
-                key={row.title}
-                to={row.to}
-                className={`flex w-full items-center gap-3 border-t border-border px-4 py-4 text-left ${
-                  i < arr.length - 1 ? "" : ""
-                }`}
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/60">
-                  <row.Icon className={`h-4 w-4 ${row.color}`} />
-                </div>
-                <div className="flex-1">
-                  <div className={`text-sm font-medium ${row.color === "text-destructive" ? "text-destructive" : ""}`}>
-                    {row.title}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">{row.sub}</div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </Link>
-            ))}
+            <ConfirmRow
+              Icon={Download}
+              title="Export your data"
+              sub="Download a copy"
+              confirmWord="CONFIRM"
+              actionLabel="Export data"
+              successTitle="Export started"
+              successSub="Check your email for the download link."
+              variant="default"
+            />
+            <ConfirmRow
+              Icon={Trash2}
+              title="Delete your data"
+              sub="Permanently delete all data"
+              confirmWord="CONFIRM"
+              actionLabel="Delete everything"
+              successTitle="Deletion scheduled"
+              successSub="Your data will be erased within 24 hours."
+              variant="destructive"
+            />
           </div>
         </section>
 
