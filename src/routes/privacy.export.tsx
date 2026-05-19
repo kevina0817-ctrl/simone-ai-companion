@@ -26,6 +26,49 @@ function ExportPage() {
     setTimeout(() => setStatus("ready"), 1500);
   };
 
+  const download = () => {
+    const picked = datasets.filter((d) => selected[d.id]);
+    const stamp = new Date().toISOString().slice(0, 10);
+    let blob: Blob;
+    let filename: string;
+
+    if (format === "json") {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        datasets: picked.map((d) => ({
+          id: d.id,
+          title: d.title,
+          size: d.size,
+          records: [
+            { id: `${d.id}-1`, summary: `Sample ${d.title} entry`, createdAt: "2026-05-10T09:14:00Z" },
+            { id: `${d.id}-2`, summary: `Sample ${d.title} entry`, createdAt: "2026-05-12T17:42:00Z" },
+          ],
+        })),
+      };
+      blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      filename = `simone-export-${stamp}.json`;
+    } else {
+      const rows = [
+        ["dataset", "record_id", "summary", "created_at"],
+        ...picked.flatMap((d) => [
+          [d.id, `${d.id}-1`, `Sample ${d.title} entry`, "2026-05-10T09:14:00Z"],
+          [d.id, `${d.id}-2`, `Sample ${d.title} entry`, "2026-05-12T17:42:00Z"],
+        ]),
+      ];
+      blob = new Blob([rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n")], { type: "text/csv" });
+      filename = `simone-export-${stamp}.csv`;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <MobileFrame>
       <div className="px-5">
