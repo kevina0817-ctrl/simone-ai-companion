@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Bell, Check, Inbox, MapPin, Menu, ShoppingBag, Truck } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Bell, Check, ChevronRight, Inbox, MapPin, Menu, ShoppingBag, SlidersHorizontal, Truck } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -152,6 +152,19 @@ function BudgetCard() {
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-gradient-to-r from-primary to-champagne" style={{ width: "92%" }} />
       </div>
+      <Link
+        to="/orders/budget"
+        className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-secondary/40 px-3 py-2.5"
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-card">
+          <SlidersHorizontal className="h-4 w-4" />
+        </div>
+        <div className="flex-1 text-left">
+          <div className="text-xs font-medium">Set your budget</div>
+          <div className="text-[10px] text-muted-foreground">Choose period, cap, and category limits</div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
     </div>
   );
 }
