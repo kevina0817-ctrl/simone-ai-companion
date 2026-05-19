@@ -130,7 +130,10 @@ function ExportPage() {
         </section>
 
         {status === "ready" ? (
-          <button className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-success py-3 text-sm font-semibold text-primary-foreground shadow-glow">
+          <button
+            onClick={download}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-success py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+          >
             <Download className="h-4 w-4" /> Download archive
           </button>
         ) : (
