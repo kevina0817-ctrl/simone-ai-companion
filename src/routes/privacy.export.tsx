@@ -20,8 +20,12 @@ function ExportPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({ chat: true, cal: true, shop: true, health: false });
   const [format, setFormat] = useState<"json" | "csv">("json");
   const [status, setStatus] = useState<"idle" | "preparing" | "ready">("idle");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   const start = () => {
+    setConfirmOpen(false);
+    setConfirmText("");
     setStatus("preparing");
     setTimeout(() => setStatus("ready"), 1500);
   };
