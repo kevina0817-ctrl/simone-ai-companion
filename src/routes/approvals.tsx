@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Calendar, Check, ChevronRight, DollarSign, Filter, History, Package, ShoppingBag, Sparkles, X } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, Sparkles, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -96,16 +96,6 @@ function ApprovalsPage() {
         </div>
 
         {tab === "needs" ? <NeedsReview /> : <AllActivity />}
-
-        <Link
-          to="/approvals/history"
-          className="mt-4 flex w-full items-center justify-between rounded-2xl bg-card/50 px-4 py-3 text-sm"
-        >
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <History className="h-4 w-4" /> Approval history
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </Link>
       </div>
     </MobileFrame>
   );
@@ -145,7 +135,7 @@ function NeedsReview() {
         </div>
         <div className="text-sm font-medium">You're all caught up</div>
         <p className="mt-1 text-xs text-muted-foreground">New approvals from Simone will appear here.</p>
-        <Link to="/approvals/history" className="mt-4 inline-block text-xs text-primary">View history →</Link>
+        
       </div>
     );
   }
@@ -244,7 +234,7 @@ function AllActivity() {
       <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
         <div className="mb-2 flex items-center justify-between">
           <div className="text-xs font-medium text-muted-foreground">Recent</div>
-          <Link to="/approvals/history" className="text-[10px] text-primary">View all</Link>
+          <span className="text-[10px] text-muted-foreground">{recentActivity.length} items</span>
         </div>
         <ul className="space-y-2">
           {recentActivity.map((a) => <ActivityRow key={a.id} a={a} />)}
