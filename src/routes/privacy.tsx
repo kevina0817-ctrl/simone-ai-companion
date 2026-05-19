@@ -158,29 +158,26 @@ function PrivacyPage() {
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
             <RetentionRow current={retention} onChange={setRetention} />
-            {[
-              { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
-              { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
-            ].map((row, i, arr) => (
-              <Link
-                key={row.title}
-                to={row.to}
-                className={`flex w-full items-center gap-3 border-t border-border px-4 py-4 text-left ${
-                  i < arr.length - 1 ? "" : ""
-                }`}
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary/60">
-                  <row.Icon className={`h-4 w-4 ${row.color}`} />
-                </div>
-                <div className="flex-1">
-                  <div className={`text-sm font-medium ${row.color === "text-destructive" ? "text-destructive" : ""}`}>
-                    {row.title}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">{row.sub}</div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </Link>
-            ))}
+            <ConfirmRow
+              Icon={Download}
+              title="Export your data"
+              sub="Download a copy"
+              confirmWord="CONFIRM"
+              actionLabel="Export data"
+              successTitle="Export started"
+              successSub="Check your email for the download link."
+              variant="default"
+            />
+            <ConfirmRow
+              Icon={Trash2}
+              title="Delete your data"
+              sub="Permanently delete all data"
+              confirmWord="CONFIRM"
+              actionLabel="Delete everything"
+              successTitle="Deletion scheduled"
+              successSub="Your data will be erased within 24 hours."
+              variant="destructive"
+            />
           </div>
         </section>
 
