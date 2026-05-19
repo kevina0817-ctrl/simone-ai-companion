@@ -19,7 +19,7 @@ export const RETENTION_OPTIONS = [
 const options = RETENTION_OPTIONS;
 export const RETENTION_STORAGE_KEY = "simone.retention";
 
-const STORAGE_KEY = "simone.retention";
+const STORAGE_KEY = RETENTION_STORAGE_KEY;
 export function getStoredRetentionLabel() {
   if (typeof window === "undefined") return "12 months";
   const id = window.localStorage.getItem(STORAGE_KEY) ?? "12m";
