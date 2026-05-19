@@ -156,6 +156,7 @@ function DeletePage() {
 
         <button
           disabled={confirm !== required}
+          onClick={() => setStage("review")}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-risk-high py-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
         >
           <Trash2 className="h-4 w-4" />
