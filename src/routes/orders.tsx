@@ -13,31 +13,68 @@ const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
 const stages = ["Confirmed", "Packed", "On the way", "Delivered"];
 
+type GroceryItem = { name: string; qty: number; price: number };
+
+const GROCERY_ORDER = {
+  orderId: "8803",
+  store: "Whole Foods",
+  eta: "Arriving tomorrow",
+  items: [
+    { name: "Bananas (organic)", qty: 1, price: 2.49 },
+    { name: "Atlantic salmon fillet", qty: 1, price: 14.99 },
+    { name: "Baby spinach", qty: 2, price: 7.0 },
+    { name: "Whole milk, 1 gal", qty: 1, price: 4.29 },
+    { name: "Sourdough loaf", qty: 1, price: 5.5 },
+    { name: "Free-range eggs, dozen", qty: 1, price: 6.49 },
+    { name: "Greek yogurt (sub)", qty: 1, price: 5.99 },
+    { name: "Avocado", qty: 3, price: 4.5 },
+  ] as GroceryItem[],
+  substitution: "Greek yogurt instead of plain yogurt",
+};
+
 function GroceryCard() {
+  const { orderId, store, eta, items, substitution } = GROCERY_ORDER;
+  const itemCount = items.reduce((s, i) => s + i.qty, 0);
+  const subtotal = items.reduce((s, i) => s + i.price, 0);
+
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm font-medium">Grocery order</div>
-          <div className="text-[11px] text-muted-foreground">Order #8803 • 8 items • 1 substitution</div>
+          <div className="text-[11px] text-muted-foreground">
+            {store} • Order #{orderId} • {itemCount} items
+            {substitution ? " • 1 substitution" : ""}
+          </div>
         </div>
         <span className="rounded-full bg-success/15 px-2.5 py-1 text-[10px] font-medium text-success">
-          Arriving tomorrow
+          {eta}
         </span>
       </div>
-      <div className="mt-3 flex gap-2">
-        {["🍌", "🐟", "🥬", "🥛"].map((e, i) => (
-          <div key={i} className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-xl">
-            {e}
-          </div>
-        ))}
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border text-xs text-muted-foreground">
-          +4
+
+      <div className="mt-3 rounded-2xl border border-border/60 bg-background/40 p-3 font-mono text-[11px]">
+        <ul className="divide-y divide-border/50">
+          {items.map((it, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="flex-1 truncate">
+                {it.qty > 1 ? <span className="text-muted-foreground">{it.qty}× </span> : null}
+                {it.name}
+              </span>
+              <span className="tabular-nums">${it.price.toFixed(2)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 flex items-baseline justify-between border-t border-border/60 pt-2">
+          <span className="text-muted-foreground">Total</span>
+          <span className="tabular-nums font-medium">${subtotal.toFixed(2)}</span>
         </div>
       </div>
-      <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-[11px] text-success">
-        Substitution: Greek yogurt instead of plain yogurt
-      </div>
+
+      {substitution && (
+        <div className="mt-3 rounded-xl bg-success/10 px-3 py-2 text-[11px] text-success">
+          Substitution: {substitution}
+        </div>
+      )}
     </div>
   );
 }
