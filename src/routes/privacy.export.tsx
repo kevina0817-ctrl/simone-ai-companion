@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Calendar, Download, Heart, MessageCircle, ShoppingCart } from "lucide-react";
+import { ArrowLeft, Calendar, Download, Heart, MessageCircle, ShieldCheck, ShoppingCart, X } from "lucide-react";
 import { useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
