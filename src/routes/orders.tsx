@@ -137,6 +137,37 @@ function AmazonTracking() {
 }
 
 function BudgetCard() {
+  const spent = 736;
+  const [monthly, setMonthly] = useState<number | "unlimited">(800);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        const raw = localStorage.getItem("simone:budget");
+        if (!raw) return;
+        const v = JSON.parse(raw);
+        // Always show monthly target. If saved period is monthly, use its amount; otherwise normalize.
+        if (v.amount === "unlimited") {
+          setMonthly("unlimited");
+        } else if (typeof v.amount === "number") {
+          const period = v.period ?? "Monthly";
+          const factor = period === "Weekly" ? 4 : period === "Quarterly" ? 1 / 3 : 1;
+          setMonthly(Math.round(v.amount * factor));
+        }
+      } catch { /* ignore */ }
+    };
+    read();
+    window.addEventListener("storage", read);
+    window.addEventListener("focus", read);
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener("focus", read);
+    };
+  }, []);
+
+  const unlimited = monthly === "unlimited";
+  const pct = unlimited ? 0 : Math.min(100, Math.round((spent / (monthly as number)) * 100));
+
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
       <div className="flex items-center gap-3">
@@ -145,12 +176,22 @@ function BudgetCard() {
         </div>
         <div className="flex-1">
           <div className="text-sm font-medium">Budget threshold</div>
-          <div className="text-[11px] text-muted-foreground">You've spent 92% of your monthly budget.</div>
+          <div className="text-[11px] text-muted-foreground">
+            {unlimited
+              ? "Unlimited monthly budget — track spending freely."
+              : `You've spent ${pct}% of your monthly budget.`}
+          </div>
         </div>
-        <div className="text-right text-xs font-medium">$736<span className="text-muted-foreground"> / $800</span></div>
+        <div className="text-right text-xs font-medium">
+          ${spent}
+          <span className="text-muted-foreground"> / {unlimited ? "∞" : `$${monthly}`}</span>
+        </div>
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
-        <div className="h-full rounded-full bg-gradient-to-r from-primary to-champagne" style={{ width: "92%" }} />
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-primary to-champagne"
+          style={{ width: unlimited ? "20%" : `${pct}%` }}
+        />
       </div>
       <Link
         to="/orders/budget"
