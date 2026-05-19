@@ -13,10 +13,11 @@ import {
   ShoppingCart,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { getStoredRetentionLabel } from "./privacy.retention";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({ meta: [{ title: "Privacy Center — Simone" }] }),
@@ -48,6 +49,9 @@ const access = [
 function PrivacyPage() {
   const { signOut, user } = useAuth();
   const [toggles, setToggles] = useState([true, true, true, false]);
+  const [retention, setRetention] = useState("12 months");
+  useEffect(() => { setRetention(getStoredRetentionLabel()); }, []);
+
 
   return (
     <MobileFrame>
@@ -99,7 +103,7 @@ function PrivacyPage() {
           </h2>
           <div className="rounded-3xl bg-card/70 shadow-card">
             {[
-              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: "12 months", color: "text-muted-foreground" },
+              { to: "/privacy/retention" as const, Icon: Clock, title: "Retention", sub: retention, color: "text-muted-foreground" },
               { to: "/privacy/export" as const, Icon: Download, title: "Export your data", sub: "Download a copy", color: "text-muted-foreground" },
               { to: "/privacy/delete" as const, Icon: Trash2, title: "Delete your data", sub: "Permanently delete all data", color: "text-destructive" },
             ].map((row, i, arr) => (

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowLeft, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -18,7 +18,82 @@ const scopes = [
 function DeletePage() {
   const [scope, setScope] = useState("chat");
   const [confirm, setConfirm] = useState("");
+  const [stage, setStage] = useState<"form" | "review" | "done">("form");
   const required = scope === "all" ? "DELETE" : "CONFIRM";
+  const scopeLabel = scopes.find((s) => s.id === scope)?.label ?? "";
+
+  if (stage === "done") {
+    return (
+      <MobileFrame>
+        <div className="px-5 pt-16 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+            <Check className="h-7 w-7 text-success" />
+          </div>
+          <h1 className="mt-5 font-display text-2xl">Deletion scheduled</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {scopeLabel} will be permanently removed from memory, backups, and analytics within 30 days.
+            We'll email you when it's complete.
+          </p>
+          <Link
+            to="/privacy"
+            className="mt-8 inline-block rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-glow"
+          >
+            Back to Privacy Center
+          </Link>
+        </div>
+      </MobileFrame>
+    );
+  }
+
+  if (stage === "review") {
+    return (
+      <MobileFrame>
+        <div className="px-5">
+          <header className="flex items-center justify-between pb-3">
+            <button onClick={() => setStage("form")} className="rounded-full bg-card/70 p-2">
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <h1 className="font-display text-xl">Final confirmation</h1>
+            <div className="w-8" />
+          </header>
+
+          <div className="mt-3 flex items-start gap-3 rounded-3xl border border-risk-high/40 bg-risk-high/10 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-risk-high" />
+            <div className="text-sm">
+              <div className="font-medium text-risk-high">You're about to delete</div>
+              <div className="mt-1 font-display text-lg">{scopeLabel}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                This action is irreversible. Simone will forget everything in this scope.
+              </div>
+            </div>
+          </div>
+
+          <ul className="mt-5 space-y-2 text-xs text-muted-foreground">
+            <li>• Memory wiped from active services immediately</li>
+            <li>• Removed from encrypted backups within 30 days</li>
+            <li>• You'll receive an email confirmation when complete</li>
+          </ul>
+
+          <div className="mt-6 flex gap-2">
+            <button
+              onClick={() => setStage("form")}
+              className="flex-1 rounded-full border border-border bg-secondary/50 py-3 text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => setStage("done")}
+              className="flex-1 rounded-full bg-risk-high py-3 text-sm font-semibold text-primary-foreground"
+            >
+              Yes, delete
+            </button>
+          </div>
+        </div>
+      </MobileFrame>
+    );
+  }
+
+
 
   return (
     <MobileFrame>
@@ -81,6 +156,7 @@ function DeletePage() {
 
         <button
           disabled={confirm !== required}
+          onClick={() => setStage("review")}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-risk-high py-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
         >
           <Trash2 className="h-4 w-4" />
