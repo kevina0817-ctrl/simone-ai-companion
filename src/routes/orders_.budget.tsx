@@ -174,7 +174,7 @@ function BudgetPage() {
               </div>
             ))}
           </div>
-          {total > amount && (
+          {amount !== Infinity && total > amount && (
             <div className="mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
               Category total exceeds your {period.toLowerCase()} cap by ${total - amount}.
             </div>
