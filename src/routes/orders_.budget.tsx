@@ -47,7 +47,8 @@ function BudgetPage() {
       if (raw) {
         const v = JSON.parse(raw);
         if (v.period) setPeriodState(v.period);
-        if (typeof v.amount === "number") setAmount(v.amount);
+        if (v.amount === "unlimited") setAmount(Infinity);
+        else if (typeof v.amount === "number") setAmount(v.amount);
         if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
         if (v.cats) setCats({ ...PRESETS[(v.period as Period) ?? "Monthly"].cats, ...v.cats });
       }
