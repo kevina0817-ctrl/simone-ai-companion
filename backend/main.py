@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-AGNIC_TOKEN = os.getenv("AGNIC_TOKEN")
+
 DATA_PATH = Path(__file__).parent / "data" / "mock_health_data.json"
 
 
