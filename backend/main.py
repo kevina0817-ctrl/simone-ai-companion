@@ -22,13 +22,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
-=======
 AGNIC_TOKEN = os.getenv("AGNIC_TOKEN")
 # ADDED: Safety check. Backend will stop clearly if token is missing.
 if not AGNIC_TOKEN:
     raise ValueError("Missing AGNIC_TOKEN. Please add it to backend/.env")
->>>>>>> d0c2f1c (Frontend and Backend Connection Achieved)
 
 DATA_PATH = Path(__file__).parent / "data" / "mock_health_data.json"
 
@@ -87,13 +84,9 @@ Keep the tone warm, practical, and concise.
     url = "https://api.agnic.ai/v1/chat/completions"
 
     headers = {
-<<<<<<< HEAD
-        "X-Agnic-Token": os.getenv("AGNIC_TOKEN", ""),
-=======
         "X-Agnic-Token": AGNIC_TOKEN, # to be changed to user's own token
         # UPDATED: Use the real token variable from .env.
         # Do NOT write "AGNIC_TOKEN" as a string.
->>>>>>> d0c2f1c (Frontend and Backend Connection Achieved)
         "Content-Type": "application/json"
     }
 
