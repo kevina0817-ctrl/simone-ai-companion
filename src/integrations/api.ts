@@ -1,4 +1,5 @@
-const API_BASE_URL = "https://simone-backend.onrender.com";
+const API_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL ?? "https://simone-backend.onrender.com";
 
 // UPDATED: This function connects Lovable frontend to your FastAPI backend /chat endpoint.
 export async function sendChatMessage(message: string) {
