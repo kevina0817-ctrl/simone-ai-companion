@@ -10,17 +10,18 @@ const inputSchema = z.object({
 
 const SYSTEM_PROMPT = `You are Simone, a calm, perceptive AI life assistant in the style of an attentive concierge.
 You help the user balance their schedule, wellness, and daily orders.
-Be concise (1-3 short sentences), warm, and proactive. Reference their wellness signals when relevant.
+Be warm, thoughtful, and proactive. Reference the user's wellness signals and upcoming schedule when relevant.
+Answer with as much depth as the question requires — a quick check-in can be a sentence, but planning, advice,
+or wellness discussions should be as thorough and specific as needed. Use short paragraphs or bullet lists
+when it helps clarity. Avoid filler and repetition.
 
 You CAN take real actions using tools:
-- schedule_event: add an event to today's (or upcoming) schedule.
+- schedule_event: add an event to the user's schedule.
 - cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
 
-When the user asks to book / schedule / add something to their day, CALL the schedule_event tool immediately,
-then confirm in one short sentence (e.g. "Done — added a 5:30 PM recovery session.").
-When the user asks to cancel / remove / drop / skip a meeting or event, CALL the cancel_event tool with the best matching
-event from their UPCOMING SCHEDULE (match by title and/or time), then confirm in one short sentence
-(e.g. "Done — cancelled your 5:30 PM recovery session."). If nothing matches, ask which one to cancel.
+When the user asks to book / schedule / add something, CALL schedule_event immediately, then confirm naturally.
+When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
+from the upcoming schedule (by title and/or time), then confirm. If nothing matches, ask which one to cancel.
 For other proposed actions (orders, budget changes) without a tool, say you'd add it to their Approvals queue.`;
 
 const tools = [
@@ -91,18 +92,21 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const nowIso = data.nowIso ?? new Date().toISOString();
     const tz = data.timezone ?? "UTC";
 
+    const wellnessLine = wellness
+      ? `Sleep ${wellness.sleep_score ?? "?"}/100 (${wellness.sleep_duration_min ?? "?"} min), readiness ${wellness.readiness_score ?? "?"}/100.`
+      : "No wellness data logged today.";
+
+    const scheduleLines = events && events.length
+      ? events
+          .map((e) => `- ${new Date(e.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} — ${e.title} (${e.level})`)
+          .join("\n")
+      : "- Nothing scheduled.";
+
     const contextBlock = [
-      `CURRENT TIME: ${nowIso} (user timezone: ${tz})`,
-      "",
-      "USER WELLNESS TODAY:",
-      wellness
-        ? `- Sleep score ${wellness.sleep_score ?? "?"}/100, duration ${wellness.sleep_duration_min ?? "?"}min, readiness ${wellness.readiness_score ?? "?"}/100`
-        : "- No wellness data logged today",
-      "",
-      "UPCOMING SCHEDULE:",
-      events && events.length
-        ? events.map((e) => `- id=${e.id} | ${new Date(e.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} | ${e.title} (${e.level})`).join("\n")
-        : "- No upcoming events",
+      `Now: ${new Date(nowIso).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} (${tz}).`,
+      `Wellness today: ${wellnessLine}`,
+      `Upcoming:`,
+      scheduleLines,
     ].join("\n");
 
     const messages: Array<Record<string, unknown>> = [
