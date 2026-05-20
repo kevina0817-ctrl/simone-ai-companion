@@ -48,15 +48,15 @@ def get_health_data():
 
 latest_grocery_order = None
 
-@app.get("/orders/grocery")
-def get_grocery_order():
-    return latest_grocery_order or {
-        "orderId": "8803",
-        "store": "Whole Foods",
-        "eta": "No grocery order yet",
-        "items": [],
-        "total": 0
-    }
+# @app.get("/orders/grocery")
+# def get_grocery_order():
+#     return latest_grocery_order or {
+#         "orderId": "8803",
+#         "store": "Whole Foods",
+#         "eta": "No grocery order yet",
+#         "items": [],
+#         "total": 0
+#     }
 
 @app.post("/chat")
 def chat(request: ChatRequest):
@@ -87,11 +87,6 @@ When creating a meal plan, choose the length naturally:
 - general suggestion = one simple recommendation
 
 Keep the tone warm, practical, and concise.
-Also return a grocery_order_json with this format:
-[
-  {"name": "eggs", "qty": 1},
-  {"name": "spinach", "qty": 2}
-]
 """
 
     url = "https://api.agnic.ai/v1/chat/completions"
