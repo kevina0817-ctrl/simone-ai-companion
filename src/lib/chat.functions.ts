@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requestChatCompletion } from "@/lib/ai-gateway";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -118,38 +119,6 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       })),
     ];
 
-    const agnicToken = process.env.AGNIC_TOKEN;
-    if (!agnicToken) throw new Error("AGNIC_TOKEN is not configured");
-
-    const callGateway = async (msgs: Array<Record<string, unknown>>) => {
-      const res = await fetch("https://api.agnic.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Agnic-Token": agnicToken,
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
-          messages: msgs,
-          tools,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 429) throw new Error("Rate limit reached — try again in a moment.");
-        if (res.status === 402) throw new Error("AI credits exhausted. Add credits in workspace settings.");
-        throw new Error(`AI error: ${text.slice(0, 200)}`);
-      }
-      return (await res.json()) as {
-        choices?: Array<{
-          message?: {
-            content?: string;
-            tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-          };
-        }>;
-      };
-    };
-
     const actions: Array<
       | { kind: "schedule_event"; id: string; title: string; start_time: string }
       | { kind: "cancel_event"; id: string; title: string }
@@ -157,7 +126,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     let reply = "";
 
     for (let i = 0; i < 3; i++) {
-      const json = await callGateway(messages);
+      const json = await requestChatCompletion({ messages, tools });
       const msg = json.choices?.[0]?.message;
       if (!msg) break;
 
