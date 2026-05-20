@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -151,7 +152,14 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     };
 
     const actions: Array<
-      | { kind: "schedule_event"; id: string; title: string; start_time: string }
+      | {
+          kind: "schedule_event";
+          id: string;
+          title: string;
+          subtitle: string | null;
+          start_time: string;
+          level: "High" | "Medium" | "Low";
+        }
       | { kind: "cancel_event"; id: string; title: string }
     > = [];
     let reply = "";
@@ -172,30 +180,29 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           try {
             const args = JSON.parse(tc.function.arguments || "{}");
             if (tc.function.name === "schedule_event") {
-              const parsed = z
-                .object({
-                  title: z.string().min(1).max(120),
-                  subtitle: z.string().max(200).optional(),
-                  start_time: z.string().min(1),
-                  level: z.enum(["High", "Medium", "Low"]).optional(),
-                })
-                .parse(args);
-              const startDate = new Date(parsed.start_time);
-              if (isNaN(startDate.getTime())) throw new Error("Invalid start_time");
+              const item = normalizeScheduleFromToolArgs(args);
+              if (!item) throw new Error("Invalid schedule fields");
               const { data: inserted, error } = await supabase
                 .from("schedule_events")
                 .insert({
                   user_id: userId,
-                  title: parsed.title,
-                  subtitle: parsed.subtitle ?? null,
-                  start_time: startDate.toISOString(),
-                  level: parsed.level ?? "Medium",
+                  title: item.title,
+                  subtitle: item.subtitle,
+                  start_time: item.start_time,
+                  level: item.level,
                 })
                 .select()
                 .single();
               if (error) throw error;
               result = { ok: true, event: inserted };
-              actions.push({ kind: "schedule_event", id: inserted.id, title: inserted.title, start_time: inserted.start_time });
+              actions.push({
+                kind: "schedule_event",
+                id: inserted.id,
+                title: inserted.title,
+                subtitle: inserted.subtitle,
+                start_time: inserted.start_time,
+                level: inserted.level as "High" | "Medium" | "Low",
+              });
             } else if (tc.function.name === "cancel_event") {
               const parsed = z
                 .object({

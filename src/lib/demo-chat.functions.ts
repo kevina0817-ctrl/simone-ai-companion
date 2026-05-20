@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -77,7 +78,13 @@ const tools = [
 ];
 
 export type DemoChatAction =
-  | { kind: "schedule_event"; title: string; subtitle?: string; start_time: string; level?: "High" | "Medium" | "Low" }
+  | {
+      kind: "schedule_event";
+      title: string;
+      subtitle?: string | null;
+      start_time: string;
+      level?: "High" | "Medium" | "Low";
+    }
   | { kind: "cancel_event"; event_id?: string; title?: string; start_time?: string };
 
 export const sendDemoChatMessage = createServerFn({ method: "POST" })
@@ -152,14 +159,17 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       for (const tc of msg.tool_calls) {
         try {
           const args = JSON.parse(tc.function.arguments || "{}");
-          if (tc.function.name === "schedule_event" && args.title && args.start_time) {
-            actions.push({
-              kind: "schedule_event",
-              title: String(args.title),
-              subtitle: args.subtitle ? String(args.subtitle) : undefined,
-              start_time: String(args.start_time),
-              level: args.level,
-            });
+          if (tc.function.name === "schedule_event") {
+            const item = normalizeScheduleFromToolArgs(args);
+            if (item) {
+              actions.push({
+                kind: "schedule_event",
+                title: item.title,
+                subtitle: item.subtitle,
+                start_time: item.start_time,
+                level: item.level,
+              });
+            }
           } else if (tc.function.name === "cancel_event") {
             actions.push({
               kind: "cancel_event",

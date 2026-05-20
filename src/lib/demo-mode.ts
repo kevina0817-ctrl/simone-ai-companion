@@ -94,17 +94,29 @@ export const addDemoMessage = (message: Omit<DemoMessage, "id" | "created_at">) 
   return next;
 };
 
-export const scheduleDemoEvent = (title: string, startTime: string) => {
+export const addScheduleItem = (item: {
+  id?: string;
+  title: string;
+  subtitle?: string | null;
+  start_time: string;
+  level?: "High" | "Medium" | "Low";
+}) => {
   const event: DemoEvent = {
-    id: `demo-event-${Date.now()}`,
-    title,
-    subtitle: "Added by Simone",
-    start_time: startTime,
-    level: "Medium",
+    id: item.id ?? `demo-event-${Date.now()}`,
+    title: item.title,
+    subtitle: item.subtitle ?? "Added by Simone",
+    start_time: item.start_time,
+    level: item.level ?? "Medium",
   };
-  setDemoEvents([...getDemoEvents(), event].sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time)));
+  setDemoEvents(
+    [...getDemoEvents(), event].sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time)),
+  );
   return event;
 };
+
+/** @deprecated Use addScheduleItem */
+export const scheduleDemoEvent = (title: string, startTime: string) =>
+  addScheduleItem({ title, start_time: startTime });
 
 export const cancelDemoEvent = (message: string) => {
   const events = getDemoEvents();

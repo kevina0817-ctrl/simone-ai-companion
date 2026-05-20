@@ -10,7 +10,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage } from "@/lib/chat.functions";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
-import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoEvents, getDemoMessages, scheduleDemoEvent, demoWellness } from "@/lib/demo-mode";
+import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
+import {
+  addDemoMessage,
+  backendAvailable,
+  getDemoEvents,
+  getDemoMessages,
+  demoWellness,
+} from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({ meta: [{ title: "Concierge — Simone" }] }),
@@ -72,13 +79,40 @@ function ChatPage() {
     ]);
     
     try {
-      const result = await send({
-        data: {
-          message: t,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          nowIso: new Date().toISOString(),
-        },
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const nowIso = new Date().toISOString();
+
+      const result = backendAvailable
+        ? await send({ data: { message: t, timezone, nowIso } })
+        : await sendDemo({
+            data: {
+              message: t,
+              timezone,
+              nowIso,
+              history: getDemoMessages().map((m) => ({ role: m.role, content: m.content })),
+              events: getDemoEvents(),
+              wellness: demoWellness,
+            },
+          });
+
+      if (!backendAvailable) {
+        addDemoMessage({ role: "user", content: t });
+      }
+
+      const { scheduled } = await applyChatScheduleResult(qc, {
+        actions: result.actions,
+        userMessage: t,
+        assistantReply: result.reply,
+        userId: user!.id,
       });
+
+      if (scheduled.length > 0) {
+        toast.success(
+          scheduled.length === 1
+            ? `Added “${scheduled[0].title}” to today's schedule`
+            : `Added ${scheduled.length} events to today's schedule`,
+        );
+      }
 
       const aiMessage = {
         id: `ai-${Date.now()}`,
@@ -86,6 +120,10 @@ function ChatPage() {
         content: result.reply,
         created_at: new Date().toISOString(),
       };
+
+      if (!backendAvailable) {
+        addDemoMessage({ role: "assistant", content: result.reply });
+      }
 
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
         ...(old ?? []),
