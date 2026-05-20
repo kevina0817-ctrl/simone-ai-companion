@@ -1,5 +1,10 @@
-const API_BASE_URL =
-  import.meta.env.VITE_BACKEND_URL ?? "https://simone-backend.onrender.com";
+const LOCAL_BACKEND_URL = "http://127.0.0.1:8000";
+const PRODUCTION_BACKEND_URL = "https://simone-backend.onrender.com";
+
+/** Local dev (`npm run dev`) → 127.0.0.1:8000; production build → Render. Override with VITE_BACKEND_URL. */
+export const API_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL ??
+  (import.meta.env.PROD ? PRODUCTION_BACKEND_URL : LOCAL_BACKEND_URL);
 
 // UPDATED: This function connects Lovable frontend to your FastAPI backend /chat endpoint.
 export async function sendChatMessage(message: string) {
