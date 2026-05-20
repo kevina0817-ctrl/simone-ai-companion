@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requestChatCompletion } from "@/lib/ai-gateway";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -83,9 +84,6 @@ export type DemoChatAction =
 export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
-
     const nowIso = data.nowIso ?? new Date().toISOString();
     const tz = data.timezone ?? "UTC";
     const w = data.wellness;
@@ -116,34 +114,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       { role: "user", content: data.message },
     ];
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages,
-        tools,
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      if (res.status === 429) throw new Error("Rate limit reached — try again soon.");
-      if (res.status === 402) throw new Error("AI credits exhausted.");
-      throw new Error(`AI error: ${text.slice(0, 200)}`);
-    }
-
-    const json = (await res.json()) as {
-      choices?: Array<{
-        message?: {
-          content?: string;
-          tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-        };
-      }>;
-    };
+    const json = await requestChatCompletion({ messages, tools });
 
     const msg = json.choices?.[0]?.message;
     const actions: DemoChatAction[] = [];
