@@ -37,8 +37,9 @@ Answer ANY question intelligently — small talk, advice, planning, recommendati
 You CAN take real actions via tools when (and only when) the user clearly asks:
 - schedule_event: add an event to their schedule.
 - cancel_event: remove an event from their schedule. Match against UPCOMING SCHEDULE by id/title/time.
+- create_grocery_list: build a grocery list (items with name, qty, optional price). Use for groceries, meal-plan shopping, or what to buy.
 
-For other proposed actions (orders, budget changes) without a tool, say you'd add it to their Approvals queue.
+For other proposed actions (budget changes) without a tool, say you'd add it to their Approvals queue.
 Do NOT call a tool for general questions or chit-chat.`;
 
 const tools = [
@@ -62,6 +63,34 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "create_grocery_list",
+      description: "Create a grocery shopping list for the Orders page.",
+      parameters: {
+        type: "object",
+        properties: {
+          store: { type: "string" },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                qty: { type: "number" },
+                price: { type: "number" },
+              },
+              required: ["name"],
+            },
+          },
+          note: { type: "string" },
+          substitution: { type: "string" },
+        },
+        required: ["items"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "cancel_event",
       description: "Cancel/remove an event from the UPCOMING SCHEDULE.",
       parameters: {
@@ -78,7 +107,15 @@ const tools = [
 
 export type DemoChatAction =
   | { kind: "schedule_event"; title: string; subtitle?: string; start_time: string; level?: "High" | "Medium" | "Low" }
-  | { kind: "cancel_event"; event_id?: string; title?: string; start_time?: string };
+  | { kind: "cancel_event"; event_id?: string; title?: string; start_time?: string }
+  | { kind: "create_grocery_list"; itemCount: number };
+
+export type DemoGroceryList = {
+  store: string;
+  items: Array<{ name: string; qty?: number; price?: number }>;
+  note?: string;
+  substitution?: string;
+};
 
 export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
@@ -147,6 +184,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
 
     const msg = json.choices?.[0]?.message;
     const actions: DemoChatAction[] = [];
+    let groceryList: DemoGroceryList | undefined;
 
     if (msg?.tool_calls?.length) {
       for (const tc of msg.tool_calls) {
@@ -167,6 +205,22 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
               title: args.title,
               start_time: args.start_time,
             });
+          } else if (tc.function.name === "create_grocery_list" && Array.isArray(args.items) && args.items.length) {
+            groceryList = {
+              store: args.store ? String(args.store) : "Whole Foods",
+              items: args.items.map((it: { name?: string; qty?: number; price?: number }) => ({
+                name: String(it.name ?? "").trim(),
+                qty: typeof it.qty === "number" ? it.qty : 1,
+                price: typeof it.price === "number" ? it.price : undefined,
+              })).filter((it: { name: string }) => it.name),
+              note: args.note ? String(args.note) : undefined,
+              substitution: args.substitution ? String(args.substitution) : undefined,
+            };
+            if (groceryList.items.length) {
+              actions.push({ kind: "create_grocery_list", itemCount: groceryList.items.length });
+            } else {
+              groceryList = undefined;
+            }
           }
         } catch {
           // ignore malformed args
@@ -176,10 +230,12 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
 
     let reply = msg?.content?.trim() ?? "";
     if (!reply) {
-      if (actions.some((a) => a.kind === "schedule_event")) reply = "Done — added to your schedule.";
+      if (actions.some((a) => a.kind === "create_grocery_list")) {
+        reply = "I've put together your grocery list — open Orders to review it.";
+      } else if (actions.some((a) => a.kind === "schedule_event")) reply = "Done — added to your schedule.";
       else if (actions.some((a) => a.kind === "cancel_event")) reply = "Done — removed from your schedule.";
       else reply = "Got it.";
     }
 
-    return { reply, actions };
+    return { reply, actions, groceryList };
   });
