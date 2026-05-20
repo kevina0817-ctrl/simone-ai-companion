@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-AGNIC_TOKEN = os.getenv("AGNIC_TOKEN")
+
 DATA_PATH = Path(__file__).parent / "data" / "mock_health_data.json"
 
 
@@ -87,7 +87,7 @@ Do not suggest extreme dieting.
     url = "https://api.agnic.ai/v1/chat/completions"
 
     headers = {
-        "X-Agnic-Token": "AGNIC_TOKEN", # to be changed to user's own token
+        "X-Agnic-Token": os.getenv("AGNIC_TOKEN", ""),
         "Content-Type": "application/json"
     }
 
