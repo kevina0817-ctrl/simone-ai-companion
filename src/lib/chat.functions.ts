@@ -114,18 +114,18 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       })),
     ];
 
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
+    const agnicToken = process.env.AGNIC_TOKEN;
+    if (!agnicToken) throw new Error("AGNIC_TOKEN is not configured");
 
     const callGateway = async (msgs: Array<Record<string, unknown>>) => {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const res = await fetch("https://api.agnic.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Lovable-API-Key": apiKey,
+          "X-Agnic-Token": agnicToken,
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "openai/gpt-4o-mini",
           messages: msgs,
           tools,
         }),
