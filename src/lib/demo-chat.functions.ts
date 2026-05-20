@@ -173,9 +173,10 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
           } else if (tc.function.name === "cancel_event") {
             actions.push({
               kind: "cancel_event",
+              id: args.event_id ? String(args.event_id) : undefined,
               event_id: args.event_id,
-              title: args.title,
-              start_time: args.start_time,
+              title: args.title ? String(args.title) : undefined,
+              start_time: args.start_time ? String(args.start_time) : undefined,
             });
           }
         } catch {

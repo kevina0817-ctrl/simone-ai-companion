@@ -131,3 +131,59 @@ export function isSameCalendarDay(iso: string, day = new Date()): boolean {
     d.getDate() === day.getDate()
   );
 }
+
+export type CancelMatchCriteria = {
+  id?: string;
+  event_id?: string;
+  title?: string;
+  start_time?: string;
+};
+
+/** Match an event on the Homepage timeline (id, title, and/or time). */
+export function findScheduleEventForCancel<T extends { id: string; title: string; start_time: string }>(
+  events: T[],
+  criteria: CancelMatchCriteria,
+  hintText?: string,
+): T | null {
+  const eventId = criteria.id ?? criteria.event_id;
+  if (eventId) {
+    const byId = events.find((e) => e.id === eventId);
+    if (byId) return byId;
+  }
+
+  if (criteria.title || criteria.start_time) {
+    const lcTitle = criteria.title?.toLowerCase();
+    const startMs = criteria.start_time ? new Date(criteria.start_time).getTime() : null;
+    const match = events.find((e) => {
+      const titleOk = lcTitle ? e.title.toLowerCase().includes(lcTitle) : true;
+      const timeOk = startMs
+        ? Math.abs(new Date(e.start_time).getTime() - startMs) < 30 * 60 * 1000
+        : true;
+      return titleOk && timeOk;
+    });
+    if (match) return match;
+  }
+
+  if (hintText) {
+    const normalized = hintText.toLowerCase();
+    const byHint = events.find((e) => {
+      const words = e.title.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+      return words.some((w) => normalized.includes(w));
+    });
+    if (byHint) return byHint;
+  }
+
+  return null;
+}
+
+/** Fallback when the model does not call cancel_event. */
+export function parseCancelFromText(text: string): CancelMatchCriteria | null {
+  const trimmed = text.trim();
+  if (!/\b(cancel|remove|delete|drop|skip)\b/i.test(trimmed)) return null;
+
+  const titleMatch = trimmed.match(
+    /(?:cancel|remove|delete|drop|skip)\s+(?:my\s+)?(?:the\s+)?(.+?)(?:\s+(?:meeting|event|appointment|call|session)|\s+at\s+|\s+on\s+|$)/i,
+  );
+
+  return { title: titleMatch?.[1]?.trim().slice(0, 120) };
+}

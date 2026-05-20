@@ -1,4 +1,6 @@
 import type { User } from "@supabase/supabase-js";
+import type { CancelMatchCriteria } from "@/lib/schedule-item";
+import { findScheduleEventForCancel, isSameCalendarDay } from "@/lib/schedule-item";
 
 export const backendAvailable = Boolean(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
@@ -118,15 +120,13 @@ export const addScheduleItem = (item: {
 export const scheduleDemoEvent = (title: string, startTime: string) =>
   addScheduleItem({ title, start_time: startTime });
 
-export const cancelDemoEvent = (message: string) => {
-  const events = getDemoEvents();
-  const normalized = message.toLowerCase();
-  const match = events.find((event) => {
-    const titleWords = event.title.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
-    return titleWords.some((word) => normalized.includes(word));
-  }) ?? events.find((event) => new Date(event.start_time).getTime() >= Date.now());
-
+export function removeScheduleItem(criteria: CancelMatchCriteria, hintText?: string) {
+  const events = getDemoEvents().filter((e) => isSameCalendarDay(e.start_time));
+  const match = findScheduleEventForCancel(events, criteria, hintText);
   if (!match) return null;
-  setDemoEvents(events.filter((event) => event.id !== match.id));
+  setDemoEvents(getDemoEvents().filter((event) => event.id !== match.id));
   return match;
-};
+}
+
+/** @deprecated Use removeScheduleItem */
+export const cancelDemoEvent = (message: string) => removeScheduleItem({}, message);

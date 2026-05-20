@@ -99,7 +99,7 @@ function ChatPage() {
         addDemoMessage({ role: "user", content: t });
       }
 
-      const { scheduled } = await applyChatScheduleResult(qc, {
+      const { scheduled, cancelled } = await applyChatScheduleResult(qc, {
         actions: result.actions,
         userMessage: t,
         assistantReply: result.reply,
@@ -111,6 +111,14 @@ function ChatPage() {
           scheduled.length === 1
             ? `Added “${scheduled[0].title}” to today's schedule`
             : `Added ${scheduled.length} events to today's schedule`,
+        );
+      }
+
+      if (cancelled.length > 0) {
+        toast.success(
+          cancelled.length === 1
+            ? `Removed “${cancelled[0].title}” from today's schedule`
+            : `Removed ${cancelled.length} events from today's schedule`,
         );
       }
 
