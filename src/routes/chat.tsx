@@ -10,7 +10,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage } from "@/lib/chat.functions";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
-import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoEvents, getDemoMessages, scheduleDemoEvent, demoWellness } from "@/lib/demo-mode";
+import { saveSimoneGroceryList } from "@/lib/grocery-store";
+import {
+  addDemoMessage,
+  backendAvailable,
+  cancelDemoEvent,
+  getDemoEvents,
+  getDemoMessages,
+  scheduleDemoEvent,
+  demoWellness,
+} from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({ meta: [{ title: "Concierge — Simone" }] }),
@@ -72,13 +81,39 @@ function ChatPage() {
     ]);
     
     try {
-      const result = await send({
-        data: {
-          message: t,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          nowIso: new Date().toISOString(),
-        },
-      });
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const nowIso = new Date().toISOString();
+
+      const result = backendAvailable
+        ? await send({ data: { message: t, timezone, nowIso } })
+        : await sendDemo({
+            data: {
+              message: t,
+              timezone,
+              nowIso,
+              history: getDemoMessages().map((m) => ({ role: m.role, content: m.content })),
+              events: getDemoEvents(),
+              wellness: demoWellness,
+            },
+          });
+
+      if (!backendAvailable) {
+        addDemoMessage({ role: "user", content: t });
+        for (const action of result.actions ?? []) {
+          if (action.kind === "schedule_event") {
+            scheduleDemoEvent(action.title, action.start_time);
+            void qc.invalidateQueries({ queryKey: ["events", user!.id] });
+          } else if (action.kind === "cancel_event") {
+            cancelDemoEvent(action.title ?? t);
+            void qc.invalidateQueries({ queryKey: ["events", user!.id] });
+          }
+        }
+      }
+
+      if (result.groceryList?.items?.length) {
+        saveSimoneGroceryList(result.groceryList);
+        toast.success("Grocery list saved — see Orders");
+      }
 
       const aiMessage = {
         id: `ai-${Date.now()}`,
@@ -86,6 +121,10 @@ function ChatPage() {
         content: result.reply,
         created_at: new Date().toISOString(),
       };
+
+      if (!backendAvailable) {
+        addDemoMessage({ role: "assistant", content: result.reply });
+      }
 
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
         ...(old ?? []),

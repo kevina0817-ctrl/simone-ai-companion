@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, Check, ChevronRight, Inbox, MapPin, Menu, ShoppingBag, SlidersHorizontal, Truck } from "lucide-react";
+import { Bell, Check, ChevronRight, Inbox, MapPin, Menu, ShoppingBag, SlidersHorizontal, Sparkles, Truck } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
+import { useGroceryOrder, type GroceryOrder } from "@/lib/grocery-store";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -13,44 +14,42 @@ const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
 const stages = ["Confirmed", "Packed", "On the way", "Delivered"];
 
-type GroceryItem = { name: string; qty: number; price: number };
-
-const GROCERY_ORDER = {
-  orderId: "8803",
-  store: "Whole Foods",
-  eta: "Arriving tomorrow",
-  items: [
-    { name: "Bananas (organic)", qty: 1, price: 2.49 },
-    { name: "Atlantic salmon fillet", qty: 1, price: 14.99 },
-    { name: "Baby spinach", qty: 2, price: 7.0 },
-    { name: "Whole milk, 1 gal", qty: 1, price: 4.29 },
-    { name: "Sourdough loaf", qty: 1, price: 5.5 },
-    { name: "Free-range eggs, dozen", qty: 1, price: 6.49 },
-    { name: "Greek yogurt (sub)", qty: 1, price: 5.99 },
-    { name: "Avocado", qty: 3, price: 4.5 },
-  ] as GroceryItem[],
-  substitution: "Greek yogurt instead of plain yogurt",
-};
-
-function GroceryCard() {
-  const { orderId, store, eta, items, substitution } = GROCERY_ORDER;
+function GroceryCard({ order }: { order: GroceryOrder }) {
+  const { orderId, store, eta, items, substitution, note, source } = order;
   const itemCount = items.reduce((s, i) => s + i.qty, 0);
-  const subtotal = items.reduce((s, i) => s + i.price, 0);
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const hasPrices = items.some((i) => i.price > 0);
+  const fromSimone = source === "simone";
 
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-sm font-medium">Grocery order</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">{fromSimone ? "Grocery list" : "Grocery order"}</div>
+            {fromSimone && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                <Sparkles className="h-3 w-3" /> From Simone
+              </span>
+            )}
+          </div>
           <div className="text-[11px] text-muted-foreground">
             {store} • Order #{orderId} • {itemCount} items
             {substitution ? " • 1 substitution" : ""}
           </div>
         </div>
-        <span className="rounded-full bg-success/15 px-2.5 py-1 text-[10px] font-medium text-success">
+        <span
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium ${
+            fromSimone ? "bg-champagne/15 text-champagne" : "bg-success/15 text-success"
+          }`}
+        >
           {eta}
         </span>
       </div>
+
+      {note && (
+        <p className="mt-2 text-[11px] text-muted-foreground">{note}</p>
+      )}
 
       <div className="mt-3 rounded-2xl border border-border/60 bg-background/40 p-3 font-mono text-[11px]">
         <ul className="divide-y divide-border/50">
@@ -60,14 +59,18 @@ function GroceryCard() {
                 {it.qty > 1 ? <span className="text-muted-foreground">{it.qty}× </span> : null}
                 {it.name}
               </span>
-              <span className="tabular-nums">${it.price.toFixed(2)}</span>
+              <span className="tabular-nums">
+                {it.price > 0 ? `$${(it.price * it.qty).toFixed(2)}` : "—"}
+              </span>
             </li>
           ))}
         </ul>
-        <div className="mt-2 flex items-baseline justify-between border-t border-border/60 pt-2">
-          <span className="text-muted-foreground">Total</span>
-          <span className="tabular-nums font-medium">${subtotal.toFixed(2)}</span>
-        </div>
+        {hasPrices && (
+          <div className="mt-2 flex items-baseline justify-between border-t border-border/60 pt-2">
+            <span className="text-muted-foreground">Est. total</span>
+            <span className="tabular-nums font-medium">${subtotal.toFixed(2)}</span>
+          </div>
+        )}
       </div>
 
       {substitution && (
@@ -79,15 +82,24 @@ function GroceryCard() {
   );
 }
 
-function GroceryTracking() {
-  const grocerySteps = ["Ordered", "Picking", "Out for delivery", "Delivered"];
-  const idx = 1;
+function GroceryTracking({ order }: { order: GroceryOrder }) {
+  const fromSimone = order.source === "simone";
+  const grocerySteps = fromSimone
+    ? ["List ready", "Review", "Place order", "Delivered"]
+    : ["Ordered", "Picking", "Out for delivery", "Delivered"];
+  const idx = fromSimone ? 0 : 1;
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-base font-medium">Whole Foods • Order #8803</div>
-          <div className="text-xs text-muted-foreground">Shopper picking now • ETA tomorrow 9:30 AM</div>
+          <div className="text-base font-medium">
+            {order.store} • Order #{order.orderId}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {fromSimone
+              ? "Generated by Simone — review items below"
+              : "Shopper picking now • ETA tomorrow 9:30 AM"}
+          </div>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/20">
           <ShoppingBag className="h-5 w-5 text-success" />
@@ -295,19 +307,21 @@ function EmptyState({ title, hint }: { title: string; hint: string }) {
 
 function OrdersPage() {
   const [tab, setTab] = useState<Tab>("All");
+  const groceryOrder = useGroceryOrder();
 
   const content: Record<Tab, ReactNode> = {
     All: (
       <>
         <AmazonTracking />
-        <GroceryCard />
+        <GroceryTracking order={groceryOrder} />
+        <GroceryCard order={groceryOrder} />
         <BudgetCard />
       </>
     ),
     Grocery: (
       <>
-        <GroceryTracking />
-        <GroceryCard />
+        <GroceryTracking order={groceryOrder} />
+        <GroceryCard order={groceryOrder} />
       </>
     ),
     Amazon: <AmazonTracking />,

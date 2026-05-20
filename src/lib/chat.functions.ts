@@ -22,7 +22,9 @@ You CAN take real actions using tools:
 When the user asks to book / schedule / add something, CALL schedule_event immediately, then confirm naturally.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from the upcoming schedule (by title and/or time), then confirm. If nothing matches, ask which one to cancel.
-For other proposed actions (orders, budget changes) without a tool, say you'd add it to their Approvals queue.`;
+When the user asks for groceries, a grocery list, meal-plan shopping, or what to buy — CALL create_grocery_list with
+specific items (name, qty, optional estimated price in USD). Then confirm briefly; the list appears on their Orders page.
+For other proposed actions (budget changes) without a tool, say you'd add it to their Approvals queue.`;
 
 const tools = [
   {
@@ -39,6 +41,36 @@ const tools = [
           level: { type: "string", enum: ["High", "Medium", "Low"], description: "Priority level, default Medium" },
         },
         required: ["title", "start_time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_grocery_list",
+      description:
+        "Create a grocery shopping list for the user. Use when they ask for groceries, a grocery list, meal-plan ingredients, or what to buy.",
+      parameters: {
+        type: "object",
+        properties: {
+          store: { type: "string", description: "Store name, e.g. Whole Foods" },
+          items: {
+            type: "array",
+            description: "Grocery line items",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                qty: { type: "number", description: "Quantity, default 1" },
+                price: { type: "number", description: "Estimated unit price in USD" },
+              },
+              required: ["name"],
+            },
+          },
+          note: { type: "string", description: "Optional note, e.g. meal plan context" },
+          substitution: { type: "string", description: "Optional substitution note" },
+        },
+        required: ["items"],
       },
     },
   },
@@ -153,7 +185,16 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const actions: Array<
       | { kind: "schedule_event"; id: string; title: string; start_time: string }
       | { kind: "cancel_event"; id: string; title: string }
+      | { kind: "create_grocery_list"; orderId: string; itemCount: number }
     > = [];
+    let groceryList:
+      | {
+          store: string;
+          items: Array<{ name: string; qty: number; price?: number }>;
+          note?: string;
+          substitution?: string;
+        }
+      | undefined;
     let reply = "";
 
     for (let i = 0; i < 3; i++) {
@@ -230,6 +271,36 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               if (error) throw error;
               result = { ok: true, cancelled: target };
               actions.push({ kind: "cancel_event", id: target.id, title: target.title });
+            } else if (tc.function.name === "create_grocery_list") {
+              const parsed = z
+                .object({
+                  store: z.string().max(80).optional(),
+                  items: z
+                    .array(
+                      z.object({
+                        name: z.string().min(1).max(120),
+                        qty: z.number().positive().optional(),
+                        price: z.number().nonnegative().optional(),
+                      }),
+                    )
+                    .min(1)
+                    .max(40),
+                  note: z.string().max(300).optional(),
+                  substitution: z.string().max(200).optional(),
+                })
+                .parse(args);
+              groceryList = {
+                store: parsed.store ?? "Whole Foods",
+                items: parsed.items,
+                note: parsed.note,
+                substitution: parsed.substitution,
+              };
+              result = { ok: true, itemCount: parsed.items.length };
+              actions.push({
+                kind: "create_grocery_list",
+                orderId: String(Date.now()).slice(-6),
+                itemCount: parsed.items.length,
+              });
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };
@@ -255,5 +326,5 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       content: reply,
     });
 
-    return { reply, actions };
+    return { reply, actions, groceryList };
   });
