@@ -22,6 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+<<<<<<< HEAD
+=======
+AGNIC_TOKEN = os.getenv("AGNIC_TOKEN")
+# ADDED: Safety check. Backend will stop clearly if token is missing.
+if not AGNIC_TOKEN:
+    raise ValueError("Missing AGNIC_TOKEN. Please add it to backend/.env")
+>>>>>>> d0c2f1c (Frontend and Backend Connection Achieved)
 
 DATA_PATH = Path(__file__).parent / "data" / "mock_health_data.json"
 
@@ -61,36 +68,32 @@ Here is the user's current mock health and fridge context:
 
 {json.dumps(health_data, indent=2)}
 
-The user likely needs help because they ran out of groceries.
+Your job:
+1. Understand what the user is actually asking for.
+2. If the user asks about groceries, food, meals, or fridge, provide a practical meal plan and grocery list.
+3. If the user asks about energy, wellness, or health, provide health-based suggestions including adding/removing activities in calendar.
+4. If the user asks something general, respond naturally as a helpful companion.
+5. Do not force a meal plan unless the user clearly needs grocery or food help.
+6. Keep the response concise, practical, and personalized.
 
-Return your answer in this exact structure:
-
-1. Short understanding:
-Briefly explain what the user needs.
-
-2. 3-day meal plan:
-Create a simple 3-day meal plan with breakfast, lunch, dinner, and one snack.
-
-3. Recommendations:
-Give 3 practical recommendations based on the user's low energy, beginner cooking skill, and goal to eat healthier.
-
-4. Grocery list:
-Group the grocery list by category:
-- Protein
-- Vegetables
-- Fruits
-- Carbs
-- Dairy / Alternatives
-- Pantry
+When creating a meal plan, choose the length naturally:
+- urgent grocery refill = 1 to 3 days
+- weekly planning = 7 days
+- general suggestion = one simple recommendation
 
 Keep the tone warm, practical, and concise.
-Do not suggest extreme dieting.
 """
 
     url = "https://api.agnic.ai/v1/chat/completions"
 
     headers = {
+<<<<<<< HEAD
         "X-Agnic-Token": os.getenv("AGNIC_TOKEN", ""),
+=======
+        "X-Agnic-Token": AGNIC_TOKEN, # to be changed to user's own token
+        # UPDATED: Use the real token variable from .env.
+        # Do NOT write "AGNIC_TOKEN" as a string.
+>>>>>>> d0c2f1c (Frontend and Backend Connection Achieved)
         "Content-Type": "application/json"
     }
 
@@ -109,9 +112,11 @@ Do not suggest extreme dieting.
     ai_result = response.json()
     clean_reply = ai_result["choices"][0]["message"]["content"]
 
-    print("CLEAN AI RESPONSE:")
+    # ADDED: Print clean response in terminal for debugging.
+    print("\n===== CLEAN AI RESPONSE =====\n")
     print(clean_reply)
-
+    print("\n=============================\n")
+    
     return {
         "status": "success",
         "user_message": request.message,

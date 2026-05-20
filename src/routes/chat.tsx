@@ -7,7 +7,11 @@ import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { sendChatMessage } from "@/lib/chat.functions";
+// import { sendChatMessage } from "@/lib/chat.functions";
+// ADDED: Import your FastAPI frontend helper.
+import { sendChatMessage } from "@/integrations/api";
+// REMOVE or comment this old import to avoid name conflict:
+// import { sendChatMessage } from "@/lib/chat.functions";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
 import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoEvents, getDemoMessages, scheduleDemoEvent, demoWellness } from "@/lib/demo-mode";
@@ -54,70 +58,46 @@ function ChatPage() {
   const submit = async (msg?: string) => {
     const t = (msg ?? text).trim();
     if (!t || pending) return;
+
     setText("");
     setPending(true);
+
+    // ADDED: Immediately show user's message in UI.
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: t,
+      created_at: new Date().toISOString(),
+    };
+
+    qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
+      ...(old ?? []),
+      userMessage,
+    ]);
+    
     try {
-      if (!backendAvailable) {
-        addDemoMessage({ role: "user", content: t });
-        await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const history = getDemoMessages().slice(-12).map((m) => ({ role: m.role, content: m.content }));
-        const events = getDemoEvents().map((e) => ({
-          id: e.id, title: e.title, subtitle: e.subtitle, start_time: e.start_time, level: e.level,
-        }));
-        const result = await sendDemo({
-          data: { message: t, timezone: tz, nowIso: new Date().toISOString(), history, events, wellness: demoWellness },
-        });
-        let scheduled = false;
-        let cancelled = false;
-        for (const a of result.actions ?? []) {
-          if (a.kind === "schedule_event") {
-            scheduleDemoEvent(a.title, a.start_time);
-            scheduled = true;
-          } else if (a.kind === "cancel_event") {
-            const hint = a.title ?? a.event_id ?? "";
-            if (a.event_id) {
-              const all = getDemoEvents();
-              const match = all.find((e) => e.id === a.event_id);
-              if (match) {
-                cancelDemoEvent(match.title);
-                cancelled = true;
-                continue;
-              }
-            }
-            if (cancelDemoEvent(hint)) cancelled = true;
-          }
-        }
-        addDemoMessage({ role: "assistant", content: result.reply });
-        await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
-        if (scheduled || cancelled) {
-          await qc.invalidateQueries({ queryKey: ["events", user!.id] });
-          toast.success(cancelled ? "Removed from your schedule" : "Added to today's schedule");
-        }
-        return;
-      }
+    // UPDATED: This now calls your Python FastAPI backend.
+      const result = await sendChatMessage(t);
+
+    // ADDED: Show backend AI response in Lovable chatbot UI.
+      const aiMessage = {
+        id: `ai-${Date.now()}`,
+        role: "assistant",
+        content: result.ai_response,
+        created_at: new Date().toISOString(),
+      };
+
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
         ...(old ?? []),
-        { id: `tmp-${Date.now()}`, role: "user", content: t, created_at: new Date().toISOString() },
+        aiMessage,
       ]);
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const result = await send({ data: { message: t, timezone: tz, nowIso: new Date().toISOString() } });
-      await qc.invalidateQueries({ queryKey: ["chat", user!.id] });
-      if (result?.actions?.some((a) => a.kind === "schedule_event" || a.kind === "cancel_event")) {
-        await qc.invalidateQueries({ queryKey: ["events", user!.id] });
-        if (result.actions.some((a) => a.kind === "cancel_event")) {
-          toast.success("Removed from your schedule");
-        } else {
-          toast.success("Added to today's schedule");
-        }
-      }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Simone couldn't respond");
+      // ADDED: Frontend error handling.
+      toast.error(e instanceof Error ? e.message : "Simone couldn't connect to backend");
     } finally {
       setPending(false);
     }
   };
-
   const fmtTime = (iso: string) =>
     new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
