@@ -7,11 +7,7 @@ import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-// import { sendChatMessage } from "@/lib/chat.functions";
-// ADDED: Import your FastAPI frontend helper.
-import { sendChatMessage } from "@/integrations/api";
-// REMOVE or comment this old import to avoid name conflict:
-// import { sendChatMessage } from "@/lib/chat.functions";
+import { sendChatMessage } from "@/lib/chat.functions";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
 import { addDemoMessage, backendAvailable, cancelDemoEvent, getDemoEvents, getDemoMessages, scheduleDemoEvent, demoWellness } from "@/lib/demo-mode";
@@ -76,14 +72,18 @@ function ChatPage() {
     ]);
     
     try {
-    // UPDATED: This now calls your Python FastAPI backend.
-      const result = await sendChatMessage(t);
+      const result = await send({
+        data: {
+          message: t,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          nowIso: new Date().toISOString(),
+        },
+      });
 
-    // ADDED: Show backend AI response in Lovable chatbot UI.
       const aiMessage = {
         id: `ai-${Date.now()}`,
         role: "assistant",
-        content: result.ai_response,
+        content: result.reply,
         created_at: new Date().toISOString(),
       };
 
@@ -91,8 +91,8 @@ function ChatPage() {
         ...(old ?? []),
         aiMessage,
       ]);
+      void qc.invalidateQueries({ queryKey: ["chat", user!.id] });
     } catch (e) {
-      // ADDED: Frontend error handling.
       toast.error(e instanceof Error ? e.message : "Simone couldn't connect to backend");
     } finally {
       setPending(false);
