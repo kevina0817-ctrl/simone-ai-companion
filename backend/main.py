@@ -87,7 +87,7 @@ Do not suggest extreme dieting.
     url = "https://api.agnic.ai/v1/chat/completions"
 
     headers = {
-        "X-Agnic-Token": "AGNIC_TOKEN", # to be changed to user's own token
+        "X-Agnic-Token": os.getenv("AGNIC_TOKEN", ""),
         "Content-Type": "application/json"
     }
 
