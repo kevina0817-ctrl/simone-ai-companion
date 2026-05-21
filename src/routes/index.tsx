@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { useEffect } from "react";
+import { ScheduleEventActions } from "@/components/ScheduleEventActions";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
 import { backendAvailable, clearTodayDemoEvents, DEMO_EVENTS_CHANGED, demoProfile, demoWellness } from "@/lib/demo-mode";
 
@@ -225,9 +226,12 @@ function Home() {
                         <div className="text-sm font-medium leading-tight">{item.title}</div>
                         <div className="text-xs text-muted-foreground">{item.subtitle}</div>
                       </div>
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${levelChip[item.level]}`}>
-                        {item.level}
-                      </span>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${levelChip[item.level]}`}>
+                          {item.level}
+                        </span>
+                        <ScheduleEventActions event={item} userId={user!.id} />
+                      </div>
                     </li>
                   ))}
                 </ul>

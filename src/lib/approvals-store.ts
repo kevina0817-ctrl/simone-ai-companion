@@ -4,7 +4,6 @@ import type { PendingOrder } from "@/lib/pending-order";
 import { formatOrderDetail } from "@/lib/pending-order";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
-import { prepareScheduleForToday } from "@/lib/schedule-timeline-cache";
 import { addPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
 
 export type PendingItemKind = "calendar" | "grocery" | "order";
@@ -152,14 +151,13 @@ export function addPendingOrderApproval(order: PendingOrder) {
 
 /** Schedule event → Approvals first; Homepage timeline only after approve. */
 export function addPendingScheduleApproval(item: ScheduleItem) {
-  const forToday = prepareScheduleForToday(item);
-  const approvalId = `schedule-approval-${forToday.id}`;
+  const approvalId = `schedule-approval-${item.id}`;
   const pendingItem: PendingItem = {
     id: approvalId,
     kind: "calendar",
-    title: forToday.title,
-    detail: formatScheduleDetail(forToday),
-    scheduleEvent: forToday,
+    title: item.title,
+    detail: formatScheduleDetail(item),
+    scheduleEvent: item,
   };
   if (state.items[approvalId]) {
     state = {

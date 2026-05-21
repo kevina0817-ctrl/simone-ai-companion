@@ -130,6 +130,32 @@ export const addScheduleItem = (item: {
 export const scheduleDemoEvent = (title: string, startTime: string) =>
   addScheduleItem({ title, start_time: startTime });
 
+export function updateScheduleItem(
+  id: string,
+  patch: {
+    title?: string;
+    subtitle?: string | null;
+    start_time?: string;
+    level?: DemoEvent["level"];
+  },
+) {
+  const events = getDemoEvents();
+  const idx = events.findIndex((e) => e.id === id);
+  if (idx < 0) return null;
+  const updated: DemoEvent = { ...events[idx], ...patch };
+  setDemoEvents(
+    events.map((e) => (e.id === id ? updated : e)).sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time)),
+  );
+  return updated;
+}
+
+export function removeScheduleItemById(id: string) {
+  const match = getDemoEvents().find((e) => e.id === id);
+  if (!match) return null;
+  setDemoEvents(getDemoEvents().filter((e) => e.id !== id));
+  return match;
+}
+
 export function removeScheduleItem(criteria: CancelMatchCriteria, hintText?: string) {
   const events = getDemoEvents().filter((e) => isSameCalendarDay(e.start_time));
   const match = findScheduleEventForCancel(events, criteria, hintText);

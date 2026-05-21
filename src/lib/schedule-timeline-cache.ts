@@ -1,6 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { backendAvailable, demoUser, getDemoEvents } from "@/lib/demo-mode";
+import {
+  backendAvailable,
+  demoUser,
+  getDemoEvents,
+  removeScheduleItemById,
+  updateScheduleItem,
+} from "@/lib/demo-mode";
+import type { ScheduleLevel } from "@/lib/schedule-item";
 import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import { coerceEventToToday, isSameCalendarDay, type ScheduleItem } from "@/lib/schedule-item";
 
@@ -87,4 +94,78 @@ export function prepareScheduleForToday(item: ScheduleItem): ScheduleItem {
     ...item,
     start_time: coerceEventToToday(item.start_time),
   };
+}
+
+export async function removeTimelineEventById(
+  qc: QueryClient,
+  userId: string,
+  eventId: string,
+): Promise<void> {
+  const timelineUserId = resolveTimelineUserId(userId);
+
+  if (backendAvailable) {
+    const { error } = await supabase
+      .from("schedule_events")
+      .delete()
+      .eq("id", eventId)
+      .eq("user_id", timelineUserId);
+    if (error) throw error;
+  } else {
+    removeScheduleItemById(eventId);
+  }
+
+  await refreshTodayEventsCache(qc, timelineUserId);
+}
+
+export async function updateTimelineEvent(
+  qc: QueryClient,
+  userId: string,
+  event: TimelineEventRow,
+): Promise<TimelineEventRow> {
+  const timelineUserId = resolveTimelineUserId(userId);
+  const level = event.level as ScheduleLevel;
+
+  if (backendAvailable) {
+    const { data, error } = await supabase
+      .from("schedule_events")
+      .update({
+        title: event.title,
+        subtitle: event.subtitle,
+        start_time: event.start_time,
+        level,
+      })
+      .eq("id", event.id)
+      .eq("user_id", timelineUserId)
+      .select("id,title,subtitle,start_time,level")
+      .single();
+    if (error) throw error;
+    const row: TimelineEventRow = {
+      id: data.id,
+      title: data.title,
+      subtitle: data.subtitle,
+      start_time: data.start_time,
+      level: data.level,
+    };
+    upsertTodayEventInCache(qc, timelineUserId, row);
+    await refreshTodayEventsCache(qc, timelineUserId);
+    return row;
+  }
+
+  const saved = updateScheduleItem(event.id, {
+    title: event.title,
+    subtitle: event.subtitle,
+    start_time: event.start_time,
+    level,
+  });
+  if (!saved) throw new Error("Event not found");
+  const row: TimelineEventRow = {
+    id: saved.id,
+    title: saved.title,
+    subtitle: saved.subtitle ?? null,
+    start_time: saved.start_time,
+    level: saved.level,
+  };
+  upsertTodayEventInCache(qc, timelineUserId, row);
+  await refreshTodayEventsCache(qc, timelineUserId);
+  return row;
 }

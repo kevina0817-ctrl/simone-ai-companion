@@ -28,6 +28,8 @@ You CAN take real actions using tools:
 - create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
 When the user asks to book / schedule / add something, CALL schedule_event (it goes to their Approvals queue; after they approve it appears on today's schedule).
+For weekend plans, itineraries, or multiple activities: call schedule_event once per activity with a specific title and start_time — never one event named "these events" or "all events".
+When the user asks to add all events to Approvals, call schedule_event for each listed activity.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
@@ -39,7 +41,8 @@ const tools = [
     type: "function",
     function: {
       name: "schedule_event",
-      description: "Add a new event to the user's schedule. Use whenever the user agrees to book or schedule something.",
+      description:
+        "Add one event to Approvals. Call separately for each activity in a plan. Title must name the activity (e.g. 'Farmers market'), not 'these events'.",
       parameters: {
         type: "object",
         properties: {
