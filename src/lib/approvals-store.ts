@@ -1,10 +1,15 @@
 import { useSyncExternalStore } from "react";
+import type { PendingOrder } from "@/lib/pending-order";
+import { formatOrderDetail } from "@/lib/pending-order";
+import { addPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
 
 export type PendingItem = {
   id: string;
-  kind: "calendar" | "grocery";
+  kind: "calendar" | "grocery" | "order";
   title: string;
   detail: string;
+  /** Links to structured order in pending-orders-store */
+  orderId?: string;
 };
 
 export type DecidedItem = PendingItem & {
@@ -38,6 +43,36 @@ export function decide(id: string, status: "approved" | "declined") {
     ...state,
     items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
   };
+  if (entry.item.orderId) {
+    setPendingOrderStatus(entry.item.orderId, status === "approved" ? "approved" : "declined");
+  }
+  emit();
+}
+
+/** Register a shopping order for Approvals + Orders pages. */
+export function addPendingOrderApproval(order: PendingOrder) {
+  const item: PendingItem = {
+    id: order.id,
+    kind: "order",
+    title: order.title,
+    detail: formatOrderDetail(order),
+    orderId: order.id,
+  };
+  addPendingOrder(order);
+  if (state.items[order.id]) {
+    state = {
+      ...state,
+      items: {
+        ...state.items,
+        [order.id]: { item, status: "pending" as const },
+      },
+    };
+  } else {
+    state = {
+      items: { ...state.items, [order.id]: { item, status: "pending" as const } },
+      order: [order.id, ...state.order.filter((id) => id !== order.id)],
+    };
+  }
   emit();
 }
 

@@ -3,6 +3,8 @@ import { Bell, Check, ChevronRight, Inbox, MapPin, Menu, ShoppingBag, SlidersHor
 import { useEffect, useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
+import { PendingOrderCard } from "@/components/PendingOrderCard";
+import { usePendingApprovalOrders } from "@/lib/pending-orders-store";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -293,12 +295,25 @@ function EmptyState({ title, hint }: { title: string; hint: string }) {
   );
 }
 
+function PendingOrdersBlock() {
+  const pendingOrders = usePendingApprovalOrders();
+  if (pendingOrders.length === 0) return null;
+  return (
+    <>
+      {pendingOrders.map((order) => (
+        <PendingOrderCard key={order.id} order={order} />
+      ))}
+    </>
+  );
+}
+
 function OrdersPage() {
   const [tab, setTab] = useState<Tab>("All");
 
   const content: Record<Tab, ReactNode> = {
     All: (
       <>
+        <PendingOrdersBlock />
         <AmazonTracking />
         <GroceryCard />
         <BudgetCard />
@@ -306,6 +321,7 @@ function OrdersPage() {
     ),
     Grocery: (
       <>
+        <PendingOrdersBlock />
         <GroceryTracking />
         <GroceryCard />
       </>

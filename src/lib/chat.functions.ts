@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
+import { normalizeOrderFromToolArgs, type PendingOrder } from "@/lib/pending-order";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -19,11 +20,14 @@ when it helps clarity. Avoid filler and repetition.
 You CAN take real actions using tools:
 - schedule_event: add an event to the user's schedule.
 - cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
+- create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
 When the user asks to book / schedule / add something, CALL schedule_event immediately, then confirm naturally.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from the upcoming schedule (by title and/or time), then confirm. If nothing matches, ask which one to cancel.
-For other proposed actions (orders, budget changes) without a tool, say you'd add it to their Approvals queue.`;
+When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
+(name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
+For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
 const tools = [
   {
@@ -40,6 +44,34 @@ const tools = [
           level: { type: "string", enum: ["High", "Medium", "Low"], description: "Priority level, default Medium" },
         },
         required: ["title", "start_time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_pending_order",
+      description:
+        "Create a pending shopping order for user approval. Use when they want to buy groceries or order products.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Order title, e.g. Weekly grocery run" },
+          store: { type: "string", description: "Store name, e.g. Whole Foods or Amazon" },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                qty: { type: "number" },
+                estimated_price: { type: "number", description: "Unit price USD" },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        required: ["title", "items"],
       },
     },
   },
@@ -161,7 +193,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           level: "High" | "Medium" | "Low";
         }
       | { kind: "cancel_event"; id: string; title: string }
+      | { kind: "create_pending_order"; orderId: string; title: string }
     > = [];
+    const pendingOrders: PendingOrder[] = [];
     let reply = "";
 
     for (let i = 0; i < 3; i++) {
@@ -237,6 +271,16 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               if (error) throw error;
               result = { ok: true, cancelled: target };
               actions.push({ kind: "cancel_event", id: target.id, title: target.title });
+            } else if (tc.function.name === "create_pending_order") {
+              const order = normalizeOrderFromToolArgs(args);
+              if (!order) throw new Error("Invalid order fields");
+              result = { ok: true, orderId: order.id, itemCount: order.items.length };
+              pendingOrders.push(order);
+              actions.push({
+                kind: "create_pending_order",
+                orderId: order.id,
+                title: order.title,
+              });
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };
@@ -262,5 +306,5 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       content: reply,
     });
 
-    return { reply, actions };
+    return { reply, actions, pendingOrders };
   });

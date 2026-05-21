@@ -11,6 +11,7 @@ import { sendChatMessage } from "@/lib/chat.functions";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
+import { applyChatOrderResult } from "@/lib/apply-chat-orders";
 import {
   addDemoMessage,
   backendAvailable,
@@ -119,6 +120,21 @@ function ChatPage() {
           cancelled.length === 1
             ? `Removed “${cancelled[0].title}” from today's schedule`
             : `Removed ${cancelled.length} events from today's schedule`,
+        );
+      }
+
+      const orders = applyChatOrderResult({
+        pendingOrders: result.pendingOrders,
+        actions: result.actions,
+        userMessage: t,
+        assistantReply: result.reply,
+      });
+
+      if (orders.length > 0) {
+        toast.success(
+          orders.length === 1
+            ? `Order “${orders[0].title}” sent for approval`
+            : `${orders.length} orders sent for approval`,
         );
       }
 

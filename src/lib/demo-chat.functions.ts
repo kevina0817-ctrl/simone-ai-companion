@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
+import { normalizeOrderFromToolArgs, type PendingOrder } from "@/lib/pending-order";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -38,8 +39,9 @@ Answer ANY question intelligently — small talk, advice, planning, recommendati
 You CAN take real actions via tools when (and only when) the user clearly asks:
 - schedule_event: add an event to their schedule.
 - cancel_event: remove an event from their schedule. Match against UPCOMING SCHEDULE by id/title/time.
+- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price).
 
-For other proposed actions (orders, budget changes) without a tool, say you'd add it to their Approvals queue.
+When the user asks to buy groceries or order products, CALL create_pending_order.
 Do NOT call a tool for general questions or chit-chat.`;
 
 const tools = [
@@ -57,6 +59,33 @@ const tools = [
           level: { type: "string", enum: ["High", "Medium", "Low"] },
         },
         required: ["title", "start_time"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_pending_order",
+      description: "Create a pending shopping order for approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          store: { type: "string" },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                qty: { type: "number" },
+                estimated_price: { type: "number" },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        required: ["title", "items"],
       },
     },
   },
@@ -85,7 +114,8 @@ export type DemoChatAction =
       start_time: string;
       level?: "High" | "Medium" | "Low";
     }
-  | { kind: "cancel_event"; event_id?: string; title?: string; start_time?: string };
+  | { kind: "cancel_event"; event_id?: string; title?: string; start_time?: string }
+  | { kind: "create_pending_order"; order: PendingOrder };
 
 export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
@@ -154,6 +184,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
 
     const msg = json.choices?.[0]?.message;
     const actions: DemoChatAction[] = [];
+    const pendingOrders: PendingOrder[] = [];
 
     if (msg?.tool_calls?.length) {
       for (const tc of msg.tool_calls) {
@@ -169,6 +200,12 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
                 start_time: item.start_time,
                 level: item.level,
               });
+            }
+          } else if (tc.function.name === "create_pending_order") {
+            const order = normalizeOrderFromToolArgs(args);
+            if (order) {
+              actions.push({ kind: "create_pending_order", order });
+              pendingOrders.push(order);
             }
           } else if (tc.function.name === "cancel_event") {
             actions.push({
@@ -187,10 +224,12 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
 
     let reply = msg?.content?.trim() ?? "";
     if (!reply) {
-      if (actions.some((a) => a.kind === "schedule_event")) reply = "Done — added to your schedule.";
+      if (actions.some((a) => a.kind === "create_pending_order")) {
+        reply = "I've drafted your order — review it under Approvals or Orders.";
+      } else if (actions.some((a) => a.kind === "schedule_event")) reply = "Done — added to your schedule.";
       else if (actions.some((a) => a.kind === "cancel_event")) reply = "Done — removed from your schedule.";
       else reply = "Got it.";
     }
 
-    return { reply, actions };
+    return { reply, actions, pendingOrders };
   });

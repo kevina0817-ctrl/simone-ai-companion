@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { decide, usePending, useRecentDecisions, useStatus } from "@/lib/approvals-store";
+import { usePendingOrders } from "@/lib/pending-orders-store";
+import { PendingOrderCard } from "@/components/PendingOrderCard";
 
 export const Route = createFileRoute("/approvals")({
   head: () => ({ meta: [{ title: "Approvals — Simone" }] }),
@@ -122,10 +124,36 @@ function ActionButtons({ id }: { id: string }) {
   );
 }
 
+function OrderApprovalCard({ id }: { id: string }) {
+  const status = useStatus(id);
+  const order = usePendingOrders().find((o) => o.id === id);
+  if (!order) return null;
+
+  return (
+    <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
+          <ShoppingBag className="h-5 w-5 text-champagne" />
+        </div>
+        <div className="flex-1">
+          <div className="text-base font-medium leading-tight">{order.title}</div>
+          <div className="text-[11px] text-muted-foreground">{order.store} • Pending approval</div>
+        </div>
+      </div>
+      <div className="mt-3">
+        <PendingOrderCard order={order} compact />
+      </div>
+      {status === "pending" ? <ActionButtons id={id} /> : <StatusBanner status={status} />}
+    </article>
+  );
+}
+
 function NeedsReview() {
   const calStatus = useStatus("p-cal-1");
   const groStatus = useStatus("p-gro-1");
   const pending = usePending();
+  const orderPending = pending.filter((p) => p.orderId);
+  const legacyPending = pending.filter((p) => !p.orderId);
 
   if (pending.length === 0 && calStatus !== "approved" && groStatus !== "approved") {
     return (
@@ -142,7 +170,11 @@ function NeedsReview() {
 
   return (
     <>
-      {calStatus !== "declined" && (
+      {orderPending.map((p) => (
+        <OrderApprovalCard key={p.id} id={p.id} />
+      ))}
+
+      {calStatus !== "declined" && legacyPending.some((p) => p.id === "p-cal-1") && (
         <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
@@ -185,7 +217,7 @@ function NeedsReview() {
         </article>
       )}
 
-      {groStatus !== "declined" && (
+      {groStatus !== "declined" && legacyPending.some((p) => p.id === "p-gro-1") && (
         <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-champagne/15">
@@ -221,7 +253,7 @@ function AllActivity() {
   const pending = usePending();
   const decisions = useRecentDecisions();
 
-  const iconFor = (kind: "calendar" | "grocery") =>
+  const iconFor = (kind: "calendar" | "grocery" | "order") =>
     kind === "calendar"
       ? <Calendar className="h-4 w-4 text-champagne" />
       : <ShoppingBag className="h-4 w-4 text-champagne" />;
