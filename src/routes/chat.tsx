@@ -292,7 +292,7 @@ function ChatPage() {
             value={text}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="Message your AI concierge…"
+            placeholder="Message Simone…"
             className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
             disabled={pending || clearing}
           />
