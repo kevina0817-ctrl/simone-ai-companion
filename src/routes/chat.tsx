@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, DollarSign, History, Menu, Mic, Moon, Package, Send, Sparkles } from "lucide-react";
+import { Calendar, DollarSign, Menu, Mic, Moon, Package, Send, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -7,7 +7,8 @@ import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { sendChatMessage } from "@/lib/chat.functions";
+import { clearChatHistory, sendChatMessage } from "@/lib/chat.functions";
+import { isClearChatCommand } from "@/lib/chat-clear";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
 import { toScheduleActions } from "@/lib/chat-actions";
@@ -17,6 +18,7 @@ import { filterEventsForToday, getLocalCalendarDayBounds } from "@/lib/schedule-
 import {
   addDemoMessage,
   backendAvailable,
+  clearDemoMessages,
   getDemoEvents,
   getDemoMessages,
   demoWellness,
@@ -39,8 +41,10 @@ function ChatPage() {
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const sendDemo = useServerFn(sendDemoChatMessage);
+  const clearChat = useServerFn(clearChatHistory);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: messages = [] } = useQuery({
@@ -61,9 +65,34 @@ function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages.length, pending]);
 
+  const clearConversation = async () => {
+    if (pending || clearing) return;
+    setClearing(true);
+    try {
+      if (backendAvailable) {
+        await clearChat();
+      } else {
+        clearDemoMessages();
+      }
+      qc.setQueryData(["chat", user!.id], []);
+      void qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+      toast.success("Chat cleared");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not clear chat");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const submit = async (msg?: string) => {
     const t = (msg ?? text).trim();
-    if (!t || pending) return;
+    if (!t || pending || clearing) return;
+
+    if (isClearChatCommand(t)) {
+      setText("");
+      await clearConversation();
+      return;
+    }
 
     setText("");
     setPending(true);
@@ -177,7 +206,16 @@ function ChatPage() {
               <span className="h-1.5 w-1.5 rounded-full bg-success" /> Online
             </div>
           </div>
-          <button className="rounded-full bg-card/70 p-2"><History className="h-4 w-4" /></button>
+          <button
+            type="button"
+            onClick={() => void clearConversation()}
+            disabled={pending || clearing || messages.length === 0}
+            title="Clear all messages"
+            className="inline-flex items-center gap-1 rounded-full bg-card/70 px-2.5 py-1.5 text-[11px] text-muted-foreground disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear all
+          </button>
         </header>
 
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto py-2">
@@ -241,12 +279,12 @@ function ChatPage() {
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="Message your AI concierge…"
             className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
-            disabled={pending}
+            disabled={pending || clearing}
           />
           <button className="p-2 text-muted-foreground"><Mic className="h-4 w-4" /></button>
           <button
             onClick={() => submit()}
-            disabled={pending}
+            disabled={pending || clearing}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow disabled:opacity-50"
           >
             <Send className="h-4 w-4" />

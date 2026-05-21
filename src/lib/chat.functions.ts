@@ -288,3 +288,12 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     return { reply, actions, pendingOrders } satisfies ChatResponse;
   });
+
+export const clearChatHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const { error } = await supabase.from("chat_messages").delete().eq("user_id", userId);
+    if (error) throw error;
+    return { ok: true as const };
+  });

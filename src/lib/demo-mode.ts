@@ -86,6 +86,8 @@ export const setDemoEvents = (events: DemoEvent[]) => safeWrite(eventsKey, event
 
 export const getDemoMessages = () => safeRead<DemoMessage[]>(messagesKey, []);
 
+export const clearDemoMessages = () => safeWrite(messagesKey, []);
+
 export const addDemoMessage = (message: Omit<DemoMessage, "id" | "created_at">) => {
   const next: DemoMessage = {
     ...message,
