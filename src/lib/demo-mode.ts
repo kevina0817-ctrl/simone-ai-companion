@@ -130,3 +130,8 @@ export function removeScheduleItem(criteria: CancelMatchCriteria, hintText?: str
 
 /** @deprecated Use removeScheduleItem */
 export const cancelDemoEvent = (message: string) => removeScheduleItem({}, message);
+
+/** Remove all events on today's calendar from demo storage. */
+export function clearTodayDemoEvents() {
+  setDemoEvents(getDemoEvents().filter((e) => !isSameCalendarDay(e.start_time)));
+}

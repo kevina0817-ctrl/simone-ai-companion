@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { isSameCalendarDay } from "@/lib/schedule-item";
-import { backendAvailable, demoProfile, demoWellness, getDemoEvents } from "@/lib/demo-mode";
+import { backendAvailable, clearTodayDemoEvents, demoProfile, demoWellness, getDemoEvents } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -93,6 +93,31 @@ function Home() {
     },
   });
 
+  const clearTodayM = useMutation({
+    mutationFn: async () => {
+      if (!backendAvailable) {
+        clearTodayDemoEvents();
+        return;
+      }
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+      const { error } = await supabase
+        .from("schedule_events")
+        .delete()
+        .eq("user_id", user!.id)
+        .gte("start_time", start.toISOString())
+        .lte("start_time", end.toISOString());
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Today's schedule cleared");
+      void qc.invalidateQueries({ queryKey: ["events", user!.id, today] });
+    },
+    onError: () => toast.error("Could not clear today's schedule"),
+  });
+
   const greeting = (() => {
     const h = new Date().getHours();
     if (h < 12) return "Good morning";
@@ -168,11 +193,23 @@ function Home() {
         </div>
 
         <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className="font-display text-xl">Today's schedule</h2>
-            <Link to="/chat" className="text-xs text-primary">
-              Ask Simone →
-            </Link>
+            <div className="flex items-center gap-3">
+              {events && events.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => clearTodayM.mutate()}
+                  disabled={clearTodayM.isPending}
+                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  {clearTodayM.isPending ? "Clearing…" : "Clear"}
+                </button>
+              )}
+              <Link to="/chat" className="text-xs text-primary">
+                Ask Simone →
+              </Link>
+            </div>
           </div>
 
           <div className="relative rounded-3xl bg-card/60 p-4">
