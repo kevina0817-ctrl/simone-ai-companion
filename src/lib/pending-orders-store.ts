@@ -3,8 +3,8 @@ import { inferOrderCategory, isShoppingOrderCategory } from "@/lib/order-categor
 import type { PendingOrder, PendingOrderStatus } from "@/lib/pending-order";
 
 const STORAGE_KEY = "simone-pending-orders";
+const SESSION_FLAG = "simone-orders-session";
 
-let orders: PendingOrder[] = loadFromStorage();
 const listeners = new Set<() => void>();
 
 function loadFromStorage(): PendingOrder[] {
@@ -21,6 +21,18 @@ function loadFromStorage(): PendingOrder[] {
     return [];
   }
 }
+
+function loadOrdersForSession(): PendingOrder[] {
+  if (typeof window === "undefined") return [];
+  if (!sessionStorage.getItem(SESSION_FLAG)) {
+    sessionStorage.setItem(SESSION_FLAG, "1");
+    localStorage.removeItem(STORAGE_KEY);
+    return [];
+  }
+  return loadFromStorage();
+}
+
+let orders: PendingOrder[] = loadOrdersForSession();
 
 function persist() {
   if (typeof window === "undefined") return;
@@ -75,4 +87,18 @@ export function useApprovedOrders() {
   return all.filter(
     (o) => o.status === "approved" && isShoppingOrderCategory(o.category),
   );
+}
+
+export function clearAllOrders() {
+  orders = [];
+  persist();
+  emit();
+}
+
+/** Re-run session reset (e.g. after tests). Budget localStorage is not touched. */
+export function initOrdersForSession() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(SESSION_FLAG);
+  orders = loadOrdersForSession();
+  emit();
 }
