@@ -4,6 +4,11 @@ import { backendAvailable, getDemoEvents, addScheduleItem, removeScheduleItem } 
 import { addPendingScheduleApproval } from "@/lib/approvals-store";
 import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
+  refreshTodayEventsCache,
+  resolveTimelineUserId,
+  upsertTodayEventInCache,
+} from "@/lib/schedule-timeline-cache";
+import {
   parseScheduleFromText,
   parseCancelFromText,
   findScheduleEventForCancel,
@@ -87,17 +92,19 @@ async function insertScheduleClient(item: ScheduleItem, userId: string) {
   if (error) throw error;
 }
 
-/** Write an approved event to the Homepage timeline (demo or Supabase). */
+/** Write an approved event to the Homepage "Today's schedule" (demo or Supabase). */
 export async function commitScheduleToTimeline(
   qc: QueryClient,
   item: ScheduleItem,
   userId: string,
 ): Promise<ScheduleItem> {
+  const timelineUserId = resolveTimelineUserId(userId);
+
   if (backendAvailable) {
     const { data, error } = await supabase
       .from("schedule_events")
       .insert({
-        user_id: userId,
+        user_id: timelineUserId,
         title: item.title,
         subtitle: item.subtitle,
         start_time: item.start_time,
@@ -113,17 +120,28 @@ export async function commitScheduleToTimeline(
       start_time: data.start_time,
       level: data.level as ScheduleItem["level"],
     };
-    const today = new Date().toISOString().slice(0, 10);
-    await qc.invalidateQueries({ queryKey: ["events", userId] });
-    await qc.invalidateQueries({ queryKey: ["events", userId, today] });
+    upsertTodayEventInCache(qc, timelineUserId, committed);
+    await refreshTodayEventsCache(qc, timelineUserId);
     return committed;
   }
 
-  addScheduleItem(item);
-  const today = new Date().toISOString().slice(0, 10);
-  await qc.invalidateQueries({ queryKey: ["events", userId] });
-  await qc.invalidateQueries({ queryKey: ["events", userId, today] });
-  return item;
+  const saved = addScheduleItem({
+    id: item.id,
+    title: item.title,
+    subtitle: item.subtitle,
+    start_time: item.start_time,
+    level: item.level,
+  });
+  const committed: ScheduleItem = {
+    id: saved.id,
+    title: saved.title,
+    subtitle: saved.subtitle,
+    start_time: saved.start_time,
+    level: saved.level,
+  };
+  upsertTodayEventInCache(qc, timelineUserId, committed);
+  await refreshTodayEventsCache(qc, timelineUserId);
+  return committed;
 }
 
 /** Remove from timeline store (no cancelled status in schema/UI). */

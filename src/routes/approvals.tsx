@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, Sparkles, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
-import { useAuth } from "@/hooks/useAuth";
 import {
   decide,
   isScheduleApproval,
   isShoppingApproval,
-  setApprovalsDecideContext,
   usePending,
   useRecentDecisions,
   useStatus,
@@ -73,16 +70,8 @@ function ActivityRow({ a }: { a: Activity }) {
 }
 
 function ApprovalsPage() {
-  const { user } = useAuth();
-  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("needs");
   const pending = usePending();
-
-  useEffect(() => {
-    if (!user) return;
-    setApprovalsDecideContext({ userId: user.id, queryClient: qc });
-    return () => setApprovalsDecideContext(null);
-  }, [user, qc]);
 
   return (
     <MobileFrame>

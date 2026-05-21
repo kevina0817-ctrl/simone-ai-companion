@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import type { PendingOrder } from "@/lib/pending-order";
 import { formatOrderDetail } from "@/lib/pending-order";
 import type { ScheduleItem } from "@/lib/schedule-item";
+import { toast } from "sonner";
 import { addPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
 
 export type PendingItemKind = "calendar" | "grocery" | "order";
@@ -84,19 +85,29 @@ export async function decide(id: string, status: "approved" | "declined") {
   const entry = state.items[id];
   if (!entry || entry.status !== "pending") return;
 
+  if (status === "approved" && entry.item.scheduleEvent) {
+    if (!decideContext) {
+      toast.error("Could not update today's schedule — try again");
+      return;
+    }
+    try {
+      const { commitScheduleToTimeline } = await import("@/lib/apply-chat-schedule");
+      const committed = await commitScheduleToTimeline(
+        decideContext.queryClient,
+        entry.item.scheduleEvent,
+        decideContext.userId,
+      );
+      toast.success(`Added “${committed.title}” to today's schedule`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add event to today's schedule");
+      return;
+    }
+  }
+
   state = {
     ...state,
     items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
   };
-
-  if (status === "approved" && entry.item.scheduleEvent && decideContext) {
-    const { commitScheduleToTimeline } = await import("@/lib/apply-chat-schedule");
-    await commitScheduleToTimeline(
-      decideContext.queryClient,
-      entry.item.scheduleEvent,
-      decideContext.userId,
-    );
-  }
 
   if (entry.item.orderId) {
     setPendingOrderStatus(entry.item.orderId, status === "approved" ? "approved" : "declined");

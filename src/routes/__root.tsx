@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { Toaster } from "sonner";
+import { ApprovalsDecideBridge } from "@/components/ApprovalsDecideBridge";
 import { AuthProvider } from "@/hooks/useAuth";
 
 import appCss from "../styles.css?url";
@@ -122,6 +123,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
+        <ApprovalsDecideBridge />
         <Toaster theme="dark" position="top-center" />
         <Outlet />
       </AuthProvider>
