@@ -8,6 +8,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { clearChatHistory, sendChatMessage } from "@/lib/chat.functions";
+import { clearChatDraft, readChatDraft, writeChatDraft } from "@/lib/chat-draft";
 import { isClearChatCommand } from "@/lib/chat-clear";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
@@ -42,8 +43,14 @@ function ChatPage() {
   const send = useServerFn(sendChatMessage);
   const sendDemo = useServerFn(sendDemoChatMessage);
   const clearChat = useServerFn(clearChatHistory);
-  const [text, setText] = useState("");
+  const userId = user!.id;
+  const [text, setText] = useState(() => readChatDraft(userId));
   const [pending, setPending] = useState(false);
+
+  const setDraft = (value: string) => {
+    setText(value);
+    writeChatDraft(userId, value);
+  };
   const [clearing, setClearing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -89,12 +96,12 @@ function ChatPage() {
     if (!t || pending || clearing) return;
 
     if (isClearChatCommand(t)) {
-      setText("");
+      setDraft("");
       await clearConversation();
       return;
     }
 
-    setText("");
+    setDraft("");
     setPending(true);
 
     // ADDED: Immediately show user's message in UI.
@@ -275,7 +282,7 @@ function ChatPage() {
         <div className="flex items-center gap-2 rounded-full bg-card/70 px-2 py-2 shadow-card">
           <input
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="Message your AI concierge…"
             className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
