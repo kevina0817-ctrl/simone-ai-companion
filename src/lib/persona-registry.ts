@@ -48,7 +48,56 @@ export function getInsightForEmail(email: string | undefined | null): string | n
 }
 
 export function getWellnessForEmail(email: string | undefined | null): PersonaWellness | null {
-  return resolvePersonaByEmail(email)?.wellness ?? null;
+  const stored = readStoredPersonaLifestyle();
+  const persona = resolvePersonaByEmail(email);
+  if (stored && persona && stored.personaId === persona.id) {
+    return stored.wellness;
+  }
+  return persona?.wellness ?? null;
+}
+
+type WellnessDbRow = {
+  sleep_score?: number | null;
+  readiness_score?: number | null;
+  sleep_duration_min?: number | null;
+} | null;
+
+/** Home ring scores: persona mock data, merged with Supabase row when present. */
+export function resolveHomeWellness(
+  email: string | undefined | null,
+  dbRow: WellnessDbRow,
+): PersonaWellness | null {
+  const persona = getWellnessForEmail(email);
+  if (!persona) return dbRow as PersonaWellness | null;
+
+  if (!dbRow) return persona;
+
+  return {
+    ...persona,
+    sleep_score: dbRow.sleep_score ?? persona.sleep_score,
+    readiness_score: dbRow.readiness_score ?? persona.readiness_score,
+    sleep_duration_min: dbRow.sleep_duration_min ?? persona.sleep_duration_min,
+  };
+}
+
+export function getSleepRingMeta(wellness: PersonaWellness | null | undefined) {
+  const score = wellness?.sleep_score ?? 0;
+  const min = wellness?.sleep_duration_min;
+  return {
+    value: score,
+    status: score >= 75 ? "Good" : score >= 60 ? "Fair" : score > 0 ? "Low" : "—",
+    detail: min != null ? `${Math.floor(min / 60)}h ${min % 60}m` : "No data",
+  };
+}
+
+export function getReadinessRingMeta(wellness: PersonaWellness | null | undefined) {
+  const score = wellness?.readiness_score ?? 0;
+  return {
+    value: score,
+    status: score >= 88 ? "High" : score >= 70 ? "Steady" : score > 0 ? "Moderate" : "—",
+    detail:
+      score >= 88 ? "Peak form" : score >= 70 ? "Aligned" : score > 0 ? "Recovery needed" : "No data",
+  };
 }
 
 export function readStoredPersonaLifestyle(): StoredPersonaLifestyle | null {
@@ -92,6 +141,7 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   void import("@/lib/approvals-store").then((m) => m.resetApprovalsPending(persona.approvals(orders)));
 
   window.dispatchEvent(new Event("simone-demo-events-changed"));
+  window.dispatchEvent(new Event("simone-persona-wellness-changed"));
 }
 
 export function applyPersonaForUser(user: User | null | undefined, opts?: { force?: boolean }) {

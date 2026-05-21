@@ -10,6 +10,10 @@ import {
   jordanRossInsight,
   jordanRossProfile,
   jordanRossWellness,
+  resolvePersonaByEmail,
+  resolveHomeWellness,
+  getSleepRingMeta,
+  getReadinessRingMeta,
 } from "@/lib/persona-registry";
 
 export const backendAvailable = Boolean(
@@ -40,10 +44,21 @@ export const demoProfile = jordanRossProfile;
 
 export const demoWellness = jordanRossWellness;
 
-export { jordanRossInsight, getInsightForEmail, getWellnessForEmail };
+export {
+  jordanRossInsight,
+  getInsightForEmail,
+  getWellnessForEmail,
+  resolveHomeWellness,
+  getSleepRingMeta,
+  getReadinessRingMeta,
+};
 
 export function getDemoWellnessForUser(email?: string | null) {
   return getWellnessForEmail(email ?? demoUser.email) ?? jordanRossWellness;
+}
+
+export function getDemoProfileForUser(email?: string | null) {
+  return resolvePersonaByEmail(email ?? demoUser.email)?.profile ?? jordanRossProfile;
 }
 
 export function getDemoInsightForUser(email?: string | null) {

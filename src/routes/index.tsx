@@ -16,13 +16,17 @@ import {
   backendAvailable,
   clearTodayDemoEvents,
   DEMO_EVENTS_CHANGED,
-  demoProfile,
   getDemoInsightForUser,
-  getDemoWellnessForUser,
+  getDemoProfileForUser,
 } from "@/lib/demo-mode";
 import { PersonaLifestyleCard } from "@/components/PersonaLifestyleCard";
-import { readStoredPersonaLifestyle } from "@/lib/persona-registry";
-import { resolvePersonaByEmail } from "@/lib/persona-registry";
+import {
+  getReadinessRingMeta,
+  getSleepRingMeta,
+  readStoredPersonaLifestyle,
+  resolveHomeWellness,
+  resolvePersonaByEmail,
+} from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,36 +55,46 @@ function Home() {
   const seed = useServerFn(seedDemoData);
 
   const { data: profile } = useQuery({
-    queryKey: ["profile", user!.id],
+    queryKey: ["profile", user!.id, user?.email],
     queryFn: async () => {
-      if (!backendAvailable) return demoProfile;
+      const personaProfile = getDemoProfileForUser(user?.email);
+      if (!backendAvailable) return personaProfile;
       const { data } = await supabase.from("profiles").select("display_name").eq("id", user!.id).maybeSingle();
-      return data;
+      return data?.display_name ? data : personaProfile;
     },
   });
 
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    if (backendAvailable) return;
-    const refresh = () => {
+    const refreshTimeline = () => {
       void qc.invalidateQueries({ queryKey: todayQueryKey(user!.id) });
     };
-    window.addEventListener(DEMO_EVENTS_CHANGED, refresh);
-    return () => window.removeEventListener(DEMO_EVENTS_CHANGED, refresh);
-  }, [qc, user]);
+    const refreshWellness = () => {
+      void qc.invalidateQueries({ queryKey: ["wellness", user!.id, today] });
+    };
+    window.addEventListener(DEMO_EVENTS_CHANGED, refreshTimeline);
+    window.addEventListener("simone-persona-wellness-changed", refreshWellness);
+    return () => {
+      window.removeEventListener(DEMO_EVENTS_CHANGED, refreshTimeline);
+      window.removeEventListener("simone-persona-wellness-changed", refreshWellness);
+    };
+  }, [qc, user, today]);
 
   const { data: wellness } = useQuery({
-    queryKey: ["wellness", user!.id, today],
+    queryKey: ["wellness", user!.id, today, user?.email],
+    placeholderData: () => resolveHomeWellness(user?.email, null) ?? undefined,
     queryFn: async () => {
-      if (!backendAvailable) return getDemoWellnessForUser(user?.email);
+      if (!backendAvailable) {
+        return resolveHomeWellness(user?.email, null);
+      }
       const { data } = await supabase
         .from("wellness_data")
-        .select("*")
+        .select("sleep_score, readiness_score, sleep_duration_min")
         .eq("user_id", user!.id)
         .eq("date", today)
         .maybeSingle();
-      return data;
+      return resolveHomeWellness(user?.email, data);
     },
   });
 
@@ -139,6 +153,9 @@ function Home() {
   const insight = getDemoInsightForUser(user?.email);
   const lifestyle = readStoredPersonaLifestyle();
   const showLifestyle = lifestyle && lifestyle.personaId === persona?.id;
+  const sleepRing = getSleepRingMeta(wellness);
+  const readinessRing = getReadinessRingMeta(wellness);
+  const showWellnessRings = Boolean(wellness?.sleep_score != null || wellness?.readiness_score != null);
 
   return (
     <MobileFrame>
@@ -166,7 +183,7 @@ function Home() {
           </span>
         </div>
 
-        {!wellness && (
+        {!showWellnessRings && (
           <button
             onClick={() => seedM.mutate()}
             disabled={seedM.isPending}
@@ -177,45 +194,23 @@ function Home() {
           </button>
         )}
 
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <RingScore
-            value={wellness?.sleep_score ?? 0}
-            label="Sleep"
-            status={
-              wellness
-                ? (wellness.sleep_score ?? 0) >= 75
-                  ? "Good"
-                  : (wellness.sleep_score ?? 0) >= 60
-                    ? "Fair"
-                    : "Low"
-                : "—"
-            }
-            detail={wellness?.sleep_duration_min ? `${Math.floor(wellness.sleep_duration_min/60)}h ${wellness.sleep_duration_min%60}m` : "No data"}
-          />
-          <RingScore
-            value={wellness?.readiness_score ?? 0}
-            label="Readiness"
-            status={
-              wellness
-                ? (wellness.readiness_score ?? 0) >= 88
-                  ? "High"
-                  : (wellness.readiness_score ?? 0) >= 70
-                    ? "Steady"
-                    : "Moderate"
-                : "—"
-            }
-            detail={
-              wellness
-                ? (wellness.readiness_score ?? 0) >= 88
-                  ? "Peak form"
-                  : (wellness.readiness_score ?? 0) >= 70
-                    ? "Aligned"
-                    : "Recovery needed"
-                : "No data"
-            }
-            color="champagne"
-          />
-        </div>
+        {showWellnessRings && (
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <RingScore
+              value={sleepRing.value}
+              label="Sleep"
+              status={sleepRing.status}
+              detail={sleepRing.detail}
+            />
+            <RingScore
+              value={readinessRing.value}
+              label="Readiness"
+              status={readinessRing.status}
+              detail={readinessRing.detail}
+              color="champagne"
+            />
+          </div>
+        )}
 
         <div className="mt-5 rounded-3xl bg-card/70 p-5 shadow-card">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -223,7 +218,9 @@ function Home() {
             Insight for today
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {wellness ? insight : "Log today's wellness to unlock personalized insights from Simone."}
+            {showWellnessRings && insight
+              ? insight
+              : "Log today's wellness to unlock personalized insights from Simone."}
           </p>
         </div>
 
