@@ -54,8 +54,9 @@ function BudgetExceededWarning() {
 function BudgetCard() {
   const { spent, cap } = useBudgetSnapshot();
   const unlimited = cap === "unlimited";
-  const monthly = unlimited ? 0 : cap;
-  const pct = unlimited ? 0 : Math.min(100, Math.round((spent / monthly) * 100));
+  const monthly = unlimited ? 0 : Math.max(0, cap);
+  const pct =
+    unlimited || monthly <= 0 ? 0 : Math.min(100, Math.round((spent / monthly) * 100));
 
   useEffect(() => {
     const read = () => {

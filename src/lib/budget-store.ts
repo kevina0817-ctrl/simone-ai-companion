@@ -102,7 +102,35 @@ function loadOrdersFromStorage(): PendingOrder[] {
 
 export function getApprovedSpendTotal(): number {
   const approved = loadOrdersFromStorage().filter((o) => o.status === "approved");
-  return Math.round(approved.reduce((s, o) => s + o.totalEstimatedPrice, 0) * 100) / 100;
+  const sum = approved.reduce((s, o) => s + (Number(o.totalEstimatedPrice) || 0), 0);
+  return Math.round(sum * 100) / 100;
+}
+
+export type BudgetSnapshotView = {
+  spent: number;
+  cap: number | "unlimited";
+  showWarning: boolean;
+  monthOnlyCap: number | null;
+};
+
+let cachedBudgetKey = "";
+let cachedBudgetView: BudgetSnapshotView = {
+  spent: 0,
+  cap: 800,
+  showWarning: false,
+  monthOnlyCap: null,
+};
+
+function getBudgetSnapshotView(): BudgetSnapshotView {
+  const spent = getApprovedSpendTotal();
+  const cap = getEffectiveMonthlyCap();
+  const showWarning = getBudgetExceededWarning();
+  const monthOnlyCap = readTracking().monthOnlyCap;
+  const key = `${spent}|${cap}|${showWarning}|${monthOnlyCap ?? ""}`;
+  if (key === cachedBudgetKey) return cachedBudgetView;
+  cachedBudgetKey = key;
+  cachedBudgetView = { spent, cap, showWarning, monthOnlyCap };
+  return cachedBudgetView;
 }
 
 export function notifyBudgetChanged() {
@@ -173,22 +201,8 @@ export function dismissBudgetExceededWarning() {
   writeTracking({ ...t, showExceededWarning: false });
 }
 
-export function useBudgetSnapshot() {
-  return useSyncExternalStore(
-    subscribeBudget,
-    () => ({
-      spent: getApprovedSpendTotal(),
-      cap: getEffectiveMonthlyCap(),
-      showWarning: getBudgetExceededWarning(),
-      monthOnlyCap: readTracking().monthOnlyCap,
-    }),
-    () => ({
-      spent: 0,
-      cap: 800 as number | "unlimited",
-      showWarning: false,
-      monthOnlyCap: null,
-    }),
-  );
+export function useBudgetSnapshot(): BudgetSnapshotView {
+  return useSyncExternalStore(subscribeBudget, getBudgetSnapshotView, () => cachedBudgetView);
 }
 
 function subscribeBudget(listener: () => void) {
