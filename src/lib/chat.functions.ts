@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
-import { normalizeOrderFromToolArgs, type PendingOrder } from "@/lib/pending-order";
+import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
+import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -183,19 +184,8 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       };
     };
 
-    const actions: Array<
-      | {
-          kind: "schedule_event";
-          id: string;
-          title: string;
-          subtitle: string | null;
-          start_time: string;
-          level: "High" | "Medium" | "Low";
-        }
-      | { kind: "cancel_event"; id: string; title: string }
-      | { kind: "create_pending_order"; orderId: string; title: string }
-    > = [];
-    const pendingOrders: PendingOrder[] = [];
+    const actions: ChatAction[] = [];
+    const pendingOrders: ChatResponse["pendingOrders"] = [];
     let reply = "";
 
     for (let i = 0; i < 3; i++) {
@@ -306,5 +296,5 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       content: reply,
     });
 
-    return { reply, actions, pendingOrders };
+    return { reply, actions, pendingOrders } satisfies ChatResponse;
   });

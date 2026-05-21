@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
+import { isSameCalendarDay } from "@/lib/schedule-item";
 import { backendAvailable, demoProfile, demoWellness, getDemoEvents } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/")({
@@ -64,7 +65,9 @@ function Home() {
   const { data: events } = useQuery({
     queryKey: ["events", user!.id, today],
     queryFn: async () => {
-      if (!backendAvailable) return getDemoEvents();
+      if (!backendAvailable) {
+        return getDemoEvents().filter((e) => isSameCalendarDay(e.start_time));
+      }
       const start = new Date(); start.setHours(0,0,0,0);
       const end = new Date(); end.setHours(23,59,59,999);
       const { data } = await supabase

@@ -10,22 +10,9 @@ import {
   type CancelMatchCriteria,
 } from "@/lib/schedule-item";
 
-export type ChatScheduleAction =
-  | {
-      kind: "schedule_event";
-      id?: string;
-      title: string;
-      subtitle?: string | null;
-      start_time: string;
-      level?: "High" | "Medium" | "Low";
-    }
-  | {
-      kind: "cancel_event";
-      id?: string;
-      event_id?: string;
-      title?: string;
-      start_time?: string;
-    };
+import type { ChatScheduleAction } from "@/lib/chat-actions";
+
+export type { ChatScheduleAction } from "@/lib/chat-actions";
 
 type ApplyInput = {
   actions?: ChatScheduleAction[];
@@ -177,7 +164,8 @@ export async function applyChatScheduleResult(
 
   if (scheduled.length === 0 && cancelled.length === 0) {
     const parsed = parseScheduleFromText(combinedText);
-    if (parsed) {
+    const orderIntent = /\b(buy|order|shop for|purchase|groceries|grocery)\b/i.test(combinedText);
+    if (parsed && !orderIntent) {
       if (backendAvailable) {
         await insertScheduleClient(parsed, userId);
       } else {

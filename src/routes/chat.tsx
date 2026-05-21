@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sendChatMessage } from "@/lib/chat.functions";
 import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
+import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
 import {
@@ -101,7 +102,7 @@ function ChatPage() {
       }
 
       const { scheduled, cancelled } = await applyChatScheduleResult(qc, {
-        actions: result.actions,
+        actions: toScheduleActions(result.actions),
         userMessage: t,
         assistantReply: result.reply,
         userId: user!.id,

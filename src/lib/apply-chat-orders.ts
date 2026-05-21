@@ -1,16 +1,12 @@
+import type { ChatAction } from "@/lib/chat-actions";
 import type { PendingOrder } from "@/lib/pending-order";
 import { normalizeOrderFromToolArgs, parseOrderFromText } from "@/lib/pending-order";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
 
-export type ChatOrderAction = {
-  kind: "create_pending_order";
-  order: PendingOrder;
-};
-
 export function applyChatOrderResult(
   input: {
     pendingOrders?: PendingOrder[];
-    actions?: Array<{ kind: string; order?: PendingOrder }>;
+    actions?: ChatAction[];
     userMessage: string;
     assistantReply?: string;
   },
@@ -30,14 +26,16 @@ export function applyChatOrderResult(
   }
 
   for (const action of input.actions ?? []) {
-    if (action.kind === "create_pending_order" && action.order) {
+    if (action.kind === "create_pending_order" && "order" in action && action.order) {
       push(action.order);
     }
   }
 
   if (created.length === 0) {
-    const parsed = parseOrderFromText(`${input.userMessage}\n${input.assistantReply ?? ""}`);
-    if (parsed) {
+    const combined = `${input.userMessage}\n${input.assistantReply ?? ""}`;
+    const parsed = parseOrderFromText(combined);
+    const scheduleIntent = /\b(schedule|book|add|cancel|remove|delete)\b/i.test(combined);
+    if (parsed && !scheduleIntent) {
       addPendingOrderApproval(parsed);
       created.push(parsed);
     }
@@ -46,8 +44,3 @@ export function applyChatOrderResult(
   return created;
 }
 
-export function orderActionFromToolArgs(args: unknown): ChatOrderAction | null {
-  const order = normalizeOrderFromToolArgs(args);
-  if (!order) return null;
-  return { kind: "create_pending_order", order };
-}

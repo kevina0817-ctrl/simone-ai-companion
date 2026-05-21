@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
-import { normalizeOrderFromToolArgs, type PendingOrder } from "@/lib/pending-order";
+import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
+import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -106,17 +107,6 @@ const tools = [
   },
 ];
 
-export type DemoChatAction =
-  | {
-      kind: "schedule_event";
-      title: string;
-      subtitle?: string | null;
-      start_time: string;
-      level?: "High" | "Medium" | "Low";
-    }
-  | { kind: "cancel_event"; event_id?: string; title?: string; start_time?: string }
-  | { kind: "create_pending_order"; order: PendingOrder };
-
 export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
@@ -183,8 +173,8 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     };
 
     const msg = json.choices?.[0]?.message;
-    const actions: DemoChatAction[] = [];
-    const pendingOrders: PendingOrder[] = [];
+    const actions: ChatAction[] = [];
+    const pendingOrders: ChatResponse["pendingOrders"] = [];
 
     if (msg?.tool_calls?.length) {
       for (const tc of msg.tool_calls) {
@@ -210,8 +200,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
           } else if (tc.function.name === "cancel_event") {
             actions.push({
               kind: "cancel_event",
-              id: args.event_id ? String(args.event_id) : undefined,
-              event_id: args.event_id,
+              event_id: args.event_id ? String(args.event_id) : undefined,
               title: args.title ? String(args.title) : undefined,
               start_time: args.start_time ? String(args.start_time) : undefined,
             });
@@ -231,5 +220,5 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       else reply = "Got it.";
     }
 
-    return { reply, actions, pendingOrders };
+    return { reply, actions, pendingOrders } satisfies ChatResponse;
   });
