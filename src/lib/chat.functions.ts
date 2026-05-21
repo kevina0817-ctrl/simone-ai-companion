@@ -27,7 +27,7 @@ You CAN take real actions using tools:
 - cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
 - create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
-When the user asks to book / schedule / add something, CALL schedule_event immediately, then confirm naturally.
+When the user asks to book / schedule / add something, CALL schedule_event (it goes to their Approvals queue; after they approve it appears on today's schedule).
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
@@ -202,30 +202,14 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             if (tc.function.name === "schedule_event") {
               const item = normalizeScheduleFromToolArgs(args);
               if (!item) throw new Error("Invalid schedule fields");
-              const { data: inserted, error } = await supabase
-                .from("schedule_events")
-                .insert({
-                  user_id: userId,
-                  title: item.title,
-                  subtitle: item.subtitle,
-                  start_time: item.start_time,
-                  level: item.level,
-                })
-                .select()
-                .single();
-              if (error) throw error;
-              result = { ok: true, event: inserted };
+              result = { ok: true, pending_approval: true, event: item };
               actions.push({
                 kind: "schedule_event",
-                id: inserted.id,
-                title: inserted.title,
-                subtitle: inserted.subtitle,
-                start_time: inserted.start_time,
-                level: inserted.level as "High" | "Medium" | "Low",
+                title: item.title,
+                subtitle: item.subtitle,
+                start_time: item.start_time,
+                level: item.level,
               });
-              todayEvents = [...todayEvents, inserted].sort(
-                (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
-              );
             } else if (tc.function.name === "cancel_event") {
               const parsed = z
                 .object({

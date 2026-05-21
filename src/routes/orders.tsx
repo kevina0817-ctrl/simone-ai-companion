@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
+import type { OrderCategory } from "@/lib/pending-order";
 import { useApprovedOrders } from "@/lib/pending-orders-store";
 
 export const Route = createFileRoute("/orders")({
@@ -295,8 +296,10 @@ function EmptyState({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-function ApprovedOrdersBlock() {
-  const approvedOrders = useApprovedOrders();
+function ApprovedOrdersBlock({ category }: { category?: OrderCategory }) {
+  const approvedOrders = useApprovedOrders().filter(
+    (o) => !category || o.category === category,
+  );
   if (approvedOrders.length === 0) return null;
   return (
     <>
@@ -321,7 +324,7 @@ function OrdersPage() {
     ),
     Grocery: (
       <>
-        <ApprovedOrdersBlock />
+        <ApprovedOrdersBlock category="grocery" />
         <GroceryTracking />
         <GroceryCard />
       </>

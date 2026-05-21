@@ -1,9 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, Sparkles, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
-import { decide, usePending, useRecentDecisions, useStatus } from "@/lib/approvals-store";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  decide,
+  isScheduleApproval,
+  isShoppingApproval,
+  setApprovalsDecideContext,
+  usePending,
+  useRecentDecisions,
+  useStatus,
+  type PendingItem,
+} from "@/lib/approvals-store";
 import { usePendingOrders } from "@/lib/pending-orders-store";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
 
@@ -62,8 +73,17 @@ function ActivityRow({ a }: { a: Activity }) {
 }
 
 function ApprovalsPage() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("needs");
   const pending = usePending();
+
+  useEffect(() => {
+    if (!user) return;
+    setApprovalsDecideContext({ userId: user.id, queryClient: qc });
+    return () => setApprovalsDecideContext(null);
+  }, [user, qc]);
+
   return (
     <MobileFrame>
       <div className="px-5">
@@ -115,12 +135,74 @@ function StatusBanner({ status }: { status: "approved" | "declined" }) {
   );
 }
 
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-5 mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
 function ActionButtons({ id }: { id: string }) {
   return (
     <div className="mt-4 flex gap-2">
-      <button onClick={() => decide(id, "declined")} className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium">Decline</button>
-      <button onClick={() => decide(id, "approved")} className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow">Approve</button>
+      <button
+        type="button"
+        onClick={() => void decide(id, "declined")}
+        className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium"
+      >
+        Decline
+      </button>
+      <button
+        type="button"
+        onClick={() => void decide(id, "approved")}
+        className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow"
+      >
+        Approve
+      </button>
     </div>
+  );
+}
+
+function ScheduleApprovalCard({ id, item }: { id: string; item: PendingItem }) {
+  const status = useStatus(id);
+  const ev = item.scheduleEvent;
+  if (!ev) return null;
+
+  const when = new Date(ev.start_time).toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return (
+    <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15">
+          <Calendar className="h-5 w-5 text-primary" />
+        </div>
+        <div className="flex-1">
+          <div className="text-base font-medium leading-tight">{ev.title}</div>
+          <div className="text-[11px] text-muted-foreground">Schedule • Adds to today&apos;s timeline when approved</div>
+        </div>
+        <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-medium text-primary">
+          {ev.level}
+        </span>
+      </div>
+      <div className="mt-3 rounded-2xl border border-border/60 bg-background/40 p-3 text-sm">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">When</div>
+        <div className="mt-0.5 font-medium">{when}</div>
+        {ev.subtitle && (
+          <>
+            <div className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">Details</div>
+            <div className="mt-0.5 text-muted-foreground">{ev.subtitle}</div>
+          </>
+        )}
+      </div>
+      {status === "pending" ? <ActionButtons id={id} /> : <StatusBanner status={status} />}
+    </article>
   );
 }
 
@@ -137,7 +219,9 @@ function OrderApprovalCard({ id }: { id: string }) {
         </div>
         <div className="flex-1">
           <div className="text-base font-medium leading-tight">{order.title}</div>
-          <div className="text-[11px] text-muted-foreground">{order.store} • Pending approval</div>
+          <div className="text-[11px] text-muted-foreground">
+            {order.store} • {order.category === "amazon" ? "Amazon" : order.category === "grocery" ? "Grocery" : "Online"} • Pending approval
+          </div>
         </div>
       </div>
       <div className="mt-3">
@@ -152,8 +236,9 @@ function NeedsReview() {
   const calStatus = useStatus("p-cal-1");
   const groStatus = useStatus("p-gro-1");
   const pending = usePending();
-  const orderPending = pending.filter((p) => p.orderId);
-  const legacyPending = pending.filter((p) => !p.orderId);
+  const schedulePending = pending.filter(isScheduleApproval);
+  const orderPending = pending.filter(isShoppingApproval);
+  const legacyPending = pending.filter((p) => !p.orderId && !p.scheduleEvent);
 
   if (pending.length === 0 && calStatus !== "approved" && groStatus !== "approved") {
     return (
@@ -170,10 +255,17 @@ function NeedsReview() {
 
   return (
     <>
+      {schedulePending.length > 0 && <SectionLabel>Schedule & events</SectionLabel>}
+      {schedulePending.map((p) => (
+        <ScheduleApprovalCard key={p.id} id={p.id} item={p} />
+      ))}
+
+      {orderPending.length > 0 && <SectionLabel>Shopping & orders</SectionLabel>}
       {orderPending.map((p) => (
         <OrderApprovalCard key={p.id} id={p.id} />
       ))}
 
+      {legacyPending.length > 0 && <SectionLabel>Other</SectionLabel>}
       {calStatus !== "declined" && legacyPending.some((p) => p.id === "p-cal-1") && (
         <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
           <div className="flex items-start gap-3">
@@ -253,14 +345,18 @@ function AllActivity() {
   const pending = usePending();
   const decisions = useRecentDecisions();
 
-  const iconFor = (kind: "calendar" | "grocery" | "order") =>
-    kind === "calendar"
-      ? <Calendar className="h-4 w-4 text-champagne" />
-      : <ShoppingBag className="h-4 w-4 text-champagne" />;
+  const iconFor = (item: PendingItem) =>
+    isScheduleApproval(item) ? (
+      <Calendar className="h-4 w-4 text-primary" />
+    ) : item.kind === "order" || isShoppingApproval(item) ? (
+      <Package className="h-4 w-4 text-champagne" />
+    ) : (
+      <ShoppingBag className="h-4 w-4 text-champagne" />
+    );
 
   const justDecided: Activity[] = decisions.map((d) => ({
     id: d.id,
-    icon: iconFor(d.kind),
+    icon: iconFor(d),
     title: d.title,
     detail: d.detail,
     when: new Date(d.decidedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
@@ -281,7 +377,7 @@ function AllActivity() {
             {pending.map((p) => (
               <ActivityRow
                 key={p.id}
-                a={{ id: p.id, icon: iconFor(p.kind), title: p.title, detail: p.detail, when: "Now", status: "auto" }}
+                a={{ id: p.id, icon: iconFor(p), title: p.title, detail: p.detail, when: "Now", status: "auto" }}
               />
             ))}
           </ul>

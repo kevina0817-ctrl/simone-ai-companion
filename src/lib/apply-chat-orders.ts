@@ -34,7 +34,10 @@ export function applyChatOrderResult(
   if (created.length === 0) {
     const combined = `${input.userMessage}\n${input.assistantReply ?? ""}`;
     const parsed = parseOrderFromText(combined);
-    const scheduleIntent = /\b(schedule|book|add|cancel|remove|delete)\b/i.test(combined);
+    const scheduleIntent =
+      /\b(schedule|book|add|cancel|remove|delete|meeting|appointment|event|session)\b/i.test(
+        combined,
+      );
     if (parsed && !scheduleIntent) {
       addPendingOrderApproval(parsed);
       created.push(parsed);

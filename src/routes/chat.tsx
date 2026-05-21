@@ -142,8 +142,8 @@ function ChatPage() {
       if (scheduled.length > 0) {
         toast.success(
           scheduled.length === 1
-            ? `Added “${scheduled[0].title}” to today's schedule`
-            : `Added ${scheduled.length} events to today's schedule`,
+            ? `“${scheduled[0].title}” sent for approval — add to today's schedule from Approvals`
+            : `${scheduled.length} events sent for approval`,
         );
       }
 

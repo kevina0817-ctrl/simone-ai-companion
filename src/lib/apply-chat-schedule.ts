@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { backendAvailable, getDemoEvents, addScheduleItem, removeScheduleItem } from "@/lib/demo-mode";
+import { addPendingScheduleApproval } from "@/lib/approvals-store";
 import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   parseScheduleFromText,
@@ -86,6 +87,45 @@ async function insertScheduleClient(item: ScheduleItem, userId: string) {
   if (error) throw error;
 }
 
+/** Write an approved event to the Homepage timeline (demo or Supabase). */
+export async function commitScheduleToTimeline(
+  qc: QueryClient,
+  item: ScheduleItem,
+  userId: string,
+): Promise<ScheduleItem> {
+  if (backendAvailable) {
+    const { data, error } = await supabase
+      .from("schedule_events")
+      .insert({
+        user_id: userId,
+        title: item.title,
+        subtitle: item.subtitle,
+        start_time: item.start_time,
+        level: item.level,
+      })
+      .select("id,title,subtitle,start_time,level")
+      .single();
+    if (error) throw error;
+    const committed: ScheduleItem = {
+      id: data.id,
+      title: data.title,
+      subtitle: data.subtitle,
+      start_time: data.start_time,
+      level: data.level as ScheduleItem["level"],
+    };
+    const today = new Date().toISOString().slice(0, 10);
+    await qc.invalidateQueries({ queryKey: ["events", userId] });
+    await qc.invalidateQueries({ queryKey: ["events", userId, today] });
+    return committed;
+  }
+
+  addScheduleItem(item);
+  const today = new Date().toISOString().slice(0, 10);
+  await qc.invalidateQueries({ queryKey: ["events", userId] });
+  await qc.invalidateQueries({ queryKey: ["events", userId, today] });
+  return item;
+}
+
 /** Remove from timeline store (no cancelled status in schema/UI). */
 async function removeFromTimeline(
   criteria: CancelMatchCriteria,
@@ -111,7 +151,7 @@ async function removeFromTimeline(
 }
 
 /**
- * Applies schedule/cancel actions from chat to the same store the Homepage reads.
+ * Queues new events for Approvals; applies cancels immediately on the timeline.
  */
 export async function applyChatScheduleResult(
   qc: QueryClient,
@@ -125,13 +165,8 @@ export async function applyChatScheduleResult(
   for (const action of actions) {
     if (action.kind === "schedule_event") {
       const item = toScheduleItem(action);
-      if (backendAvailable) {
-        if (!action.id) await insertScheduleClient(item, userId);
-      } else {
-        addScheduleItem(item);
-      }
+      addPendingScheduleApproval(item);
       scheduled.push(item);
-      todayEvents = await fetchTodayTimelineEvents(userId);
     } else if (action.kind === "cancel_event") {
       const alreadyHandled = Boolean(action.id && backendAvailable);
       let removed = alreadyHandled
@@ -157,9 +192,9 @@ export async function applyChatScheduleResult(
   const combinedText = `${userMessage}\n${assistantReply ?? ""}`;
 
   if (cancelled.length === 0) {
-    const cancelCriteria = parseCancelFromText(combinedText);
-    if (cancelCriteria) {
-      const removed = await removeFromTimeline(cancelCriteria, userId, userMessage, todayEvents);
+    const cancelCriteriaParsed = parseCancelFromText(combinedText);
+    if (cancelCriteriaParsed) {
+      const removed = await removeFromTimeline(cancelCriteriaParsed, userId, userMessage, todayEvents);
       if (removed) cancelled.push(removed);
     }
   }
@@ -168,17 +203,15 @@ export async function applyChatScheduleResult(
     const parsed = parseScheduleFromText(combinedText);
     const orderIntent = /\b(buy|order|shop for|purchase|groceries|grocery)\b/i.test(combinedText);
     if (parsed && !orderIntent) {
-      if (backendAvailable) {
-        await insertScheduleClient(parsed, userId);
-      } else {
-        addScheduleItem(parsed);
-      }
+      addPendingScheduleApproval(parsed);
       scheduled.push(parsed);
     }
   }
 
-  await qc.invalidateQueries({ queryKey: ["events", userId] });
-  await qc.invalidateQueries({ queryKey: ["events", userId, today] });
+  if (cancelled.length > 0) {
+    await qc.invalidateQueries({ queryKey: ["events", userId] });
+    await qc.invalidateQueries({ queryKey: ["events", userId, today] });
+  }
 
   return { scheduled, cancelled };
 }

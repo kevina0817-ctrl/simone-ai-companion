@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { inferOrderCategory, isShoppingOrderCategory } from "@/lib/order-category";
 import type { PendingOrder, PendingOrderStatus } from "@/lib/pending-order";
 
 const STORAGE_KEY = "simone-pending-orders";
@@ -12,7 +13,10 @@ function loadFromStorage(): PendingOrder[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as PendingOrder[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((o) =>
+      o.category ? o : { ...o, category: inferOrderCategory(o.store, o.title) },
+    );
   } catch {
     return [];
   }
@@ -65,8 +69,10 @@ export function usePendingApprovalOrders() {
   return all.filter((o) => o.status === "pending_approval");
 }
 
-/** Orders the user approved — shown on the Orders page. */
+/** Approved grocery / Amazon / online orders — Orders page only (never calendar events). */
 export function useApprovedOrders() {
   const all = usePendingOrders();
-  return all.filter((o) => o.status === "approved");
+  return all.filter(
+    (o) => o.status === "approved" && isShoppingOrderCategory(o.category),
+  );
 }

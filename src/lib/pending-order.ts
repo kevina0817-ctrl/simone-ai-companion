@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
+
+export type { OrderCategory } from "@/lib/order-category";
 
 export type OrderLineItem = {
   name: string;
@@ -12,6 +15,7 @@ export type PendingOrder = {
   id: string;
   title: string;
   store: string;
+  category: OrderCategory;
   items: OrderLineItem[];
   totalEstimatedPrice: number;
   status: PendingOrderStatus;
@@ -49,10 +53,13 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
     };
   });
 
+  const title = parsed.data.title.trim();
+  const store = parsed.data.store?.trim() || "Whole Foods";
   return {
     id: `order-${Date.now()}`,
-    title: parsed.data.title.trim(),
-    store: parsed.data.store?.trim() || "Whole Foods",
+    title,
+    store,
+    category: inferOrderCategory(store, title),
     items,
     totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
@@ -86,10 +93,12 @@ export function parseOrderFromText(text: string): PendingOrder | null {
     { name: "Free-range eggs", qty: 1, estimatedPrice: 6.49 },
   ];
 
+  const normalizedTitle = title.charAt(0).toUpperCase() + title.slice(1);
   return {
     id: `order-${Date.now()}`,
-    title: title.charAt(0).toUpperCase() + title.slice(1),
+    title: normalizedTitle,
     store,
+    category: inferOrderCategory(store, normalizedTitle),
     items: defaults,
     totalEstimatedPrice: computeOrderTotal(defaults),
     status: "pending_approval",

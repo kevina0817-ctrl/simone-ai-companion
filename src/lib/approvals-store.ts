@@ -1,15 +1,21 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import type { PendingOrder } from "@/lib/pending-order";
 import { formatOrderDetail } from "@/lib/pending-order";
+import type { ScheduleItem } from "@/lib/schedule-item";
 import { addPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
+
+export type PendingItemKind = "calendar" | "grocery" | "order";
 
 export type PendingItem = {
   id: string;
-  kind: "calendar" | "grocery" | "order";
+  kind: PendingItemKind;
   title: string;
   detail: string;
-  /** Links to structured order in pending-orders-store */
+  /** Shopping order payload — Approvals → Orders after approve */
   orderId?: string;
+  /** Schedule event payload — Approvals → Homepage after approve (never Orders) */
+  scheduleEvent?: ScheduleItem;
 };
 
 export type DecidedItem = PendingItem & {
@@ -17,39 +23,89 @@ export type DecidedItem = PendingItem & {
   decidedAt: number;
 };
 
-type State = {
-  pending: Record<string, PendingItem["id"] extends string ? "approved" | "declined" | "pending" : never>;
-  decisions: DecidedItem[];
+export type ApprovalsDecideContext = {
+  userId: string;
+  queryClient: QueryClient;
 };
 
 const initialPending: PendingItem[] = [
-  { id: "p-cal-1", kind: "calendar", title: "Calendar change: move client meeting", detail: "Today 2 PM → Tomorrow 10 AM" },
-  { id: "p-gro-1", kind: "grocery", title: "Grocery budget over limit", detail: "+$24.31 over monthly" },
+  {
+    id: "p-cal-1",
+    kind: "calendar",
+    title: "Calendar change: move client meeting",
+    detail: "Today 2 PM → Tomorrow 10 AM",
+  },
+  {
+    id: "p-gro-1",
+    kind: "grocery",
+    title: "Grocery budget over limit",
+    detail: "+$24.31 over monthly",
+  },
 ];
 
-let state: { items: Record<string, { item: PendingItem; status: "pending" | "approved" | "declined"; decidedAt?: number }>; order: string[] } = {
+let state: {
+  items: Record<
+    string,
+    { item: PendingItem; status: "pending" | "approved" | "declined"; decidedAt?: number }
+  >;
+  order: string[];
+} = {
   items: Object.fromEntries(initialPending.map((i) => [i.id, { item: i, status: "pending" as const }])),
   order: initialPending.map((i) => i.id),
 };
 
-const listeners = new Set<() => void>();
-function emit() { listeners.forEach((l) => l()); }
-function subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; }
+let decideContext: ApprovalsDecideContext | null = null;
 
-export function decide(id: string, status: "approved" | "declined") {
+const listeners = new Set<() => void>();
+function emit() {
+  listeners.forEach((l) => l());
+}
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+export function setApprovalsDecideContext(ctx: ApprovalsDecideContext | null) {
+  decideContext = ctx;
+}
+
+function formatScheduleDetail(item: ScheduleItem): string {
+  const when = new Date(item.start_time).toLocaleString([], {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const parts = [when, item.level];
+  if (item.subtitle) parts.push(item.subtitle);
+  return parts.join(" • ");
+}
+
+export async function decide(id: string, status: "approved" | "declined") {
   const entry = state.items[id];
   if (!entry || entry.status !== "pending") return;
+
   state = {
     ...state,
     items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
   };
+
+  if (status === "approved" && entry.item.scheduleEvent && decideContext) {
+    const { commitScheduleToTimeline } = await import("@/lib/apply-chat-schedule");
+    await commitScheduleToTimeline(
+      decideContext.queryClient,
+      entry.item.scheduleEvent,
+      decideContext.userId,
+    );
+  }
+
   if (entry.item.orderId) {
     setPendingOrderStatus(entry.item.orderId, status === "approved" ? "approved" : "declined");
   }
+
   emit();
 }
 
-/** Register a shopping order for Approvals (Orders page shows it after approval). */
+/** Shopping order → Approvals only until approved, then Orders page. */
 export function addPendingOrderApproval(order: PendingOrder) {
   const item: PendingItem = {
     id: order.id,
@@ -70,7 +126,34 @@ export function addPendingOrderApproval(order: PendingOrder) {
   } else {
     state = {
       items: { ...state.items, [order.id]: { item, status: "pending" as const } },
-      order: [order.id, ...state.order.filter((id) => id !== order.id)],
+      order: [order.id, ...state.order.filter((oid) => oid !== order.id)],
+    };
+  }
+  emit();
+}
+
+/** Schedule event → Approvals first; Homepage timeline only after approve. */
+export function addPendingScheduleApproval(item: ScheduleItem) {
+  const approvalId = `schedule-approval-${item.id}`;
+  const pendingItem: PendingItem = {
+    id: approvalId,
+    kind: "calendar",
+    title: item.title,
+    detail: formatScheduleDetail(item),
+    scheduleEvent: item,
+  };
+  if (state.items[approvalId]) {
+    state = {
+      ...state,
+      items: {
+        ...state.items,
+        [approvalId]: { item: pendingItem, status: "pending" as const },
+      },
+    };
+  } else {
+    state = {
+      items: { ...state.items, [approvalId]: { item: pendingItem, status: "pending" as const } },
+      order: [approvalId, ...state.order.filter((oid) => oid !== approvalId)],
     };
   }
   emit();
@@ -101,4 +184,12 @@ export function useRecentDecisions() {
     .filter((e) => e.status !== "pending")
     .sort((a, b) => (b.decidedAt ?? 0) - (a.decidedAt ?? 0))
     .map((e) => ({ ...e.item, status: e.status as "approved" | "declined", decidedAt: e.decidedAt! }));
+}
+
+export function isScheduleApproval(item: PendingItem): boolean {
+  return item.kind === "calendar" && Boolean(item.scheduleEvent);
+}
+
+export function isShoppingApproval(item: PendingItem): boolean {
+  return Boolean(item.orderId);
 }
