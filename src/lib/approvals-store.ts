@@ -4,6 +4,7 @@ import type { PendingOrder } from "@/lib/pending-order";
 import { formatOrderDetail } from "@/lib/pending-order";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
+import { prepareScheduleForToday } from "@/lib/schedule-timeline-cache";
 import { addPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
 
 export type PendingItemKind = "calendar" | "grocery" | "order";
@@ -81,21 +82,27 @@ function formatScheduleDetail(item: ScheduleItem): string {
   return parts.join(" • ");
 }
 
-export async function decide(id: string, status: "approved" | "declined") {
+export async function decide(
+  id: string,
+  status: "approved" | "declined",
+  ctx?: ApprovalsDecideContext,
+) {
   const entry = state.items[id];
   if (!entry || entry.status !== "pending") return;
 
+  const activeCtx = ctx ?? decideContext;
+
   if (status === "approved" && entry.item.scheduleEvent) {
-    if (!decideContext) {
+    if (!activeCtx) {
       toast.error("Could not update today's schedule — try again");
       return;
     }
     try {
       const { commitScheduleToTimeline } = await import("@/lib/apply-chat-schedule");
       const committed = await commitScheduleToTimeline(
-        decideContext.queryClient,
+        activeCtx.queryClient,
         entry.item.scheduleEvent,
-        decideContext.userId,
+        activeCtx.userId,
       );
       toast.success(`Added “${committed.title}” to today's schedule`);
     } catch (e) {
@@ -145,13 +152,14 @@ export function addPendingOrderApproval(order: PendingOrder) {
 
 /** Schedule event → Approvals first; Homepage timeline only after approve. */
 export function addPendingScheduleApproval(item: ScheduleItem) {
-  const approvalId = `schedule-approval-${item.id}`;
+  const forToday = prepareScheduleForToday(item);
+  const approvalId = `schedule-approval-${forToday.id}`;
   const pendingItem: PendingItem = {
     id: approvalId,
     kind: "calendar",
-    title: item.title,
-    detail: formatScheduleDetail(item),
-    scheduleEvent: item,
+    title: forToday.title,
+    detail: formatScheduleDetail(forToday),
+    scheduleEvent: forToday,
   };
   if (state.items[approvalId]) {
     state = {

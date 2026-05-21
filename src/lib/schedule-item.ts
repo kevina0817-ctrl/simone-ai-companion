@@ -132,6 +132,21 @@ export function isSameCalendarDay(iso: string, day = new Date()): boolean {
   );
 }
 
+/** Approved chat events target Today's schedule — keep clock time, move to local today if needed. */
+export function coerceEventToToday(iso: string, ref = new Date()): string {
+  const proposed = new Date(iso);
+  if (Number.isNaN(proposed.getTime())) {
+    const fallback = new Date(ref);
+    fallback.setHours(9, 0, 0, 0);
+    return fallback.toISOString();
+  }
+  if (isSameCalendarDay(iso, ref)) return proposed.toISOString();
+
+  const today = new Date(ref);
+  today.setHours(proposed.getHours(), proposed.getMinutes(), 0, 0);
+  return today.toISOString();
+}
+
 export type CancelMatchCriteria = {
   id?: string;
   event_id?: string;

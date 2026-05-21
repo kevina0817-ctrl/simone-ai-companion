@@ -9,8 +9,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
-import { isSameCalendarDay } from "@/lib/schedule-item";
-import { backendAvailable, clearTodayDemoEvents, demoProfile, demoWellness, getDemoEvents } from "@/lib/demo-mode";
+import { useEffect } from "react";
+import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
+import { backendAvailable, clearTodayDemoEvents, DEMO_EVENTS_CHANGED, demoProfile, demoWellness } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -48,6 +49,16 @@ function Home() {
   });
 
   const today = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    if (backendAvailable) return;
+    const refresh = () => {
+      void qc.invalidateQueries({ queryKey: todayQueryKey(user!.id) });
+    };
+    window.addEventListener(DEMO_EVENTS_CHANGED, refresh);
+    return () => window.removeEventListener(DEMO_EVENTS_CHANGED, refresh);
+  }, [qc, user]);
+
   const { data: wellness } = useQuery({
     queryKey: ["wellness", user!.id, today],
     queryFn: async () => {
@@ -63,22 +74,9 @@ function Home() {
   });
 
   const { data: events } = useQuery({
-    queryKey: ["events", user!.id, today],
-    queryFn: async () => {
-      if (!backendAvailable) {
-        return getDemoEvents().filter((e) => isSameCalendarDay(e.start_time));
-      }
-      const start = new Date(); start.setHours(0,0,0,0);
-      const end = new Date(); end.setHours(23,59,59,999);
-      const { data } = await supabase
-        .from("schedule_events")
-        .select("*")
-        .eq("user_id", user!.id)
-        .gte("start_time", start.toISOString())
-        .lte("start_time", end.toISOString())
-        .order("start_time", { ascending: true });
-      return data ?? [];
-    },
+    queryKey: todayQueryKey(user!.id),
+    queryFn: () => loadTodayTimelineEvents(user!.id),
+    refetchOnMount: "always",
   });
 
   const seedM = useMutation({

@@ -75,9 +75,17 @@ const safeRead = <T,>(key: string, fallback: T): T => {
   }
 };
 
+export const DEMO_EVENTS_CHANGED = "simone-demo-events-changed";
+
+const notifyDemoEventsChanged = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(DEMO_EVENTS_CHANGED));
+};
+
 const safeWrite = <T,>(key: string, value: T) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(key, JSON.stringify(value));
+  if (key === eventsKey) notifyDemoEventsChanged();
 };
 
 export const getDemoEvents = () => safeRead<DemoEvent[]>(eventsKey, defaultEvents());

@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, Sparkles, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
+import { useAuth } from "@/hooks/useAuth";
 import {
   decide,
   isScheduleApproval,
@@ -10,8 +12,10 @@ import {
   usePending,
   useRecentDecisions,
   useStatus,
+  type ApprovalsDecideContext,
   type PendingItem,
 } from "@/lib/approvals-store";
+import { backendAvailable, demoUser } from "@/lib/demo-mode";
 import { usePendingOrders } from "@/lib/pending-orders-store";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
 
@@ -132,20 +136,29 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+function useDecideContext(): ApprovalsDecideContext | null {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  if (!user) return null;
+  return { userId: backendAvailable ? user.id : demoUser.id, queryClient: qc };
+}
+
 function ActionButtons({ id }: { id: string }) {
+  const ctx = useDecideContext();
   return (
     <div className="mt-4 flex gap-2">
       <button
         type="button"
-        onClick={() => void decide(id, "declined")}
+        onClick={() => void decide(id, "declined", ctx ?? undefined)}
         className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium"
       >
         Decline
       </button>
       <button
         type="button"
-        onClick={() => void decide(id, "approved")}
-        className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow"
+        onClick={() => void decide(id, "approved", ctx ?? undefined)}
+        disabled={!ctx}
+        className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
       >
         Approve
       </button>

@@ -4,8 +4,10 @@ import { backendAvailable, getDemoEvents, addScheduleItem, removeScheduleItem } 
 import { addPendingScheduleApproval } from "@/lib/approvals-store";
 import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
+  prepareScheduleForToday,
   refreshTodayEventsCache,
   resolveTimelineUserId,
+  todayQueryKey,
   upsertTodayEventInCache,
 } from "@/lib/schedule-timeline-cache";
 import {
@@ -99,16 +101,17 @@ export async function commitScheduleToTimeline(
   userId: string,
 ): Promise<ScheduleItem> {
   const timelineUserId = resolveTimelineUserId(userId);
+  const itemToday = prepareScheduleForToday(item);
 
   if (backendAvailable) {
     const { data, error } = await supabase
       .from("schedule_events")
       .insert({
         user_id: timelineUserId,
-        title: item.title,
-        subtitle: item.subtitle,
-        start_time: item.start_time,
-        level: item.level,
+        title: itemToday.title,
+        subtitle: itemToday.subtitle,
+        start_time: itemToday.start_time,
+        level: itemToday.level,
       })
       .select("id,title,subtitle,start_time,level")
       .single();
@@ -126,11 +129,11 @@ export async function commitScheduleToTimeline(
   }
 
   const saved = addScheduleItem({
-    id: item.id,
-    title: item.title,
-    subtitle: item.subtitle,
-    start_time: item.start_time,
-    level: item.level,
+    id: itemToday.id,
+    title: itemToday.title,
+    subtitle: itemToday.subtitle,
+    start_time: itemToday.start_time,
+    level: itemToday.level,
   });
   const committed: ScheduleItem = {
     id: saved.id,
