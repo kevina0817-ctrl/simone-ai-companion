@@ -70,6 +70,18 @@ export function readBudgetSettings(): BudgetSettings {
   }
 }
 
+/** Persist budget settings and refresh Orders threshold (drops stale month-only bump). */
+export function writeBudgetSettings(settings: BudgetSettings) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(BUDGET_KEY, JSON.stringify(settings));
+  const t = readTracking();
+  if (t.monthOnlyCap != null) {
+    writeTracking({ ...t, monthKey: currentMonthKey(), monthOnlyCap: null });
+  }
+  cachedBudgetKey = "";
+  emitBudget();
+}
+
 /** Normalize saved budget to a monthly spending cap. */
 export function getMonthlyBudgetCap(settings = readBudgetSettings()): number | "unlimited" {
   if (settings.amount === "unlimited") return "unlimited";
@@ -134,6 +146,7 @@ function getBudgetSnapshotView(): BudgetSnapshotView {
 }
 
 export function notifyBudgetChanged() {
+  cachedBudgetKey = "";
   emitBudget();
 }
 

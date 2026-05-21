@@ -6,6 +6,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { readBudgetSettings, writeBudgetSettings, type BudgetPeriod } from "@/lib/budget-store";
 
 export const Route = createFileRoute("/orders_/budget")({
   head: () => ({ meta: [{ title: "Set your budget — Simone" }] }),
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/orders_/budget")({
 });
 
 const PERIODS = ["Weekly", "Monthly", "Quarterly"] as const;
-type Period = (typeof PERIODS)[number];
+type Period = BudgetPeriod;
 
 const CATEGORIES = [
   { key: "grocery", label: "Grocery", emoji: "🥬" },
@@ -42,26 +43,23 @@ function BudgetPage() {
   };
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("simone:budget");
-      if (raw) {
-        const v = JSON.parse(raw);
-        if (v.period) setPeriodState(v.period);
-        if (v.amount === "unlimited") setAmount(Infinity);
-        else if (typeof v.amount === "number") setAmount(v.amount);
-        if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
-        if (v.cats) setCats({ ...PRESETS[(v.period as Period) ?? "Monthly"].cats, ...v.cats });
-      }
-    } catch { /* ignore */ }
+    const v = readBudgetSettings();
+    if (v.period) setPeriodState(v.period);
+    if (v.amount === "unlimited") setAmount(Infinity);
+    else if (typeof v.amount === "number") setAmount(v.amount);
+    if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
+    if (v.cats) setCats({ ...PRESETS[v.period ?? "Monthly"].cats, ...v.cats });
   }, []);
 
   const total = Object.values(cats).reduce((a, b) => a + b, 0);
 
   const save = () => {
-    localStorage.setItem(
-      "simone:budget",
-      JSON.stringify({ period, amount: amount === Infinity ? "unlimited" : amount, alertAt, cats }),
-    );
+    writeBudgetSettings({
+      period,
+      amount: amount === Infinity ? "unlimited" : amount,
+      alertAt,
+      cats,
+    });
     setSaved(true);
     setTimeout(() => navigate({ to: "/orders" }), 900);
   };
