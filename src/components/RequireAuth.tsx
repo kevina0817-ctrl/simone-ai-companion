@@ -2,6 +2,10 @@ import { ReactNode, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles } from "lucide-react";
+
+const SIMONE_LOGO = "/simone-logo.png";
+const EMPATHY_LINE =
+  "I listen with care — here to understand your day, not just manage it.";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -44,9 +48,18 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background bg-aurora p-6">
         <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-2xl border border-border bg-card/60 p-6 backdrop-blur">
-          <div className="flex items-center gap-2 text-primary">
-            <Sparkles className="h-5 w-5" />
-            <h1 className="text-lg font-medium">Welcome to Simone</h1>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <img
+              src={SIMONE_LOGO}
+              alt="Simone"
+              width={112}
+              height={112}
+              className="h-28 w-28 object-contain"
+            />
+            <div>
+              <h1 className="font-display text-xl text-foreground">Welcome to Simone</h1>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{EMPATHY_LINE}</p>
+            </div>
           </div>
           <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
