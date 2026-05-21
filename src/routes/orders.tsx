@@ -16,7 +16,7 @@ const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
 
 function BudgetCard() {
-  const spent = 736;
+  const spent = 0;
   const [monthly, setMonthly] = useState<number | "unlimited">(800);
 
   useEffect(() => {
