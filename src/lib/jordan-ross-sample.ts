@@ -1,10 +1,10 @@
 import type { User } from "@supabase/supabase-js";
 import type { BudgetSettings } from "@/lib/budget-store";
-import { writeBudgetSettings } from "@/lib/budget-store";
 import type { PendingItem } from "@/lib/approvals-store";
 import type { DemoEvent } from "@/lib/demo-mode";
 import type { PendingOrder } from "@/lib/pending-order";
 import { computeOrderTotal } from "@/lib/pending-order";
+import type { PersonaBundle } from "@/lib/persona-types";
 
 export const JORDAN_ROSS_EMAIL = "jordanross@wolfcapital.ai";
 export const JORDAN_ROSS_ID = "demo-jordan-ross";
@@ -142,23 +142,27 @@ export function isJordanRossEmail(email: string | undefined | null): boolean {
   return email?.trim().toLowerCase() === JORDAN_ROSS_EMAIL;
 }
 
-export function applyJordanRossSampleData(opts?: { force?: boolean }): void {
-  if (typeof window === "undefined") return;
-  if (!opts?.force && localStorage.getItem(SEEDED_FLAG)) return;
+export const jordanRossPersona: PersonaBundle = {
+  id: JORDAN_ROSS_ID,
+  user: jordanRossUser,
+  profile: jordanRossProfile,
+  wellness: jordanRossWellness,
+  insight: jordanRossInsight,
+  recommendations: [],
+  notifications: [],
+  preferences: {
+    meal_style: ["High-protein", "Organic", "Meal prep"],
+    caffeine: "Single espresso · 7:15 AM",
+    fitness_focus: ["Strength", "Cold plunge", "Zone 2"],
+    gaming: "Minimal weekday screen time",
+    groceries: "Whole Foods · ~$300 per trip",
+  },
+  budget: jordanRossBudget,
+  scheduleToday: buildJordanRossSchedule,
+  weekOverview: [],
+  orders: buildJordanRossOrders,
+  approvals: buildJordanRossApprovals,
+  chatMessages: () => [],
+  seededFlagKey: SEEDED_FLAG,
+};
 
-  const events = buildJordanRossSchedule();
-  const orders = buildJordanRossOrders();
-
-  localStorage.setItem("simone-demo-events", JSON.stringify(events));
-  localStorage.setItem("simone-jordan-ross-seeded", new Date().toISOString());
-  writeBudgetSettings(jordanRossBudget);
-
-  void import("@/lib/pending-orders-store").then((m) => {
-    m.replacePendingOrders(orders);
-  });
-  void import("@/lib/approvals-store").then((m) => {
-    m.resetApprovalsPending(buildJordanRossApprovals(orders));
-  });
-
-  window.dispatchEvent(new Event("simone-demo-events-changed"));
-}

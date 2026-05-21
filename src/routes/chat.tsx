@@ -22,7 +22,7 @@ import {
   clearDemoMessages,
   getDemoEvents,
   getDemoMessages,
-  demoWellness,
+  getDemoWellnessForUser,
 } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/chat")({
@@ -131,7 +131,7 @@ function ChatPage() {
               nowIso,
               history: getDemoMessages().map((m) => ({ role: m.role, content: m.content })),
               events: filterEventsForToday(getDemoEvents()),
-              wellness: demoWellness,
+              wellness: getDemoWellnessForUser(user?.email),
             },
           });
 

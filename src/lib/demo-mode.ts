@@ -1,20 +1,25 @@
 import type { User } from "@supabase/supabase-js";
 import type { CancelMatchCriteria } from "@/lib/schedule-item";
 import { findScheduleEventForCancel, isSameCalendarDay } from "@/lib/schedule-item";
+import { buildJordanRossSchedule, jordanRossUser } from "@/lib/jordan-ross-sample";
+import { buildKevinZhangSchedule, kevinZhangUser } from "@/lib/kevin-zhang-sample";
 import {
   applyJordanRossSampleData,
-  buildJordanRossSchedule,
+  getInsightForEmail,
+  getWellnessForEmail,
   jordanRossInsight,
   jordanRossProfile,
-  jordanRossUser,
   jordanRossWellness,
-} from "@/lib/jordan-ross-sample";
+} from "@/lib/persona-registry";
 
 export const backendAvailable = Boolean(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
 );
 
-export const demoUser = jordanRossUser;
+const demoPersonaEnv = import.meta.env.VITE_DEMO_PERSONA?.toLowerCase();
+
+export const demoUser =
+  demoPersonaEnv === "kevin" || demoPersonaEnv === "kzhang" ? kevinZhangUser : jordanRossUser;
 
 export type DemoEvent = {
   id: string;
@@ -35,12 +40,21 @@ export const demoProfile = jordanRossProfile;
 
 export const demoWellness = jordanRossWellness;
 
-export { jordanRossInsight };
+export { jordanRossInsight, getInsightForEmail, getWellnessForEmail };
+
+export function getDemoWellnessForUser(email?: string | null) {
+  return getWellnessForEmail(email ?? demoUser.email) ?? jordanRossWellness;
+}
+
+export function getDemoInsightForUser(email?: string | null) {
+  return getInsightForEmail(email ?? demoUser.email) ?? jordanRossInsight;
+}
 
 const eventsKey = "simone-demo-events";
 const messagesKey = "simone-demo-messages";
 
-const defaultEvents = (): DemoEvent[] => buildJordanRossSchedule();
+const defaultEvents = (): DemoEvent[] =>
+  demoUser.id === kevinZhangUser.id ? buildKevinZhangSchedule() : buildJordanRossSchedule();
 
 export { applyJordanRossSampleData };
 

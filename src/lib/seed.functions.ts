@@ -1,22 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { buildJordanRossSchedule, jordanRossWellness } from "@/lib/jordan-ross-sample";
+import { jordanRossPersona } from "@/lib/jordan-ross-sample";
+import { kevinZhangPersona } from "@/lib/kevin-zhang-sample";
+import { resolvePersonaByEmail } from "@/lib/persona-registry";
 
-// Seeds today's wellness + Jordan Ross schedule (dense day) for Supabase users.
+function emailFromClaims(claims: unknown): string | null {
+  if (!claims || typeof claims !== "object") return null;
+  const e = (claims as { email?: string }).email;
+  return typeof e === "string" ? e : null;
+}
+
+// Seeds today's wellness + persona schedule for Supabase users.
 export const seedDemoData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
+    const { supabase, userId, claims } = context;
+    const email = emailFromClaims(claims);
+    const persona = resolvePersonaByEmail(email) ?? jordanRossPersona;
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
+    const w = persona.wellness;
 
     await supabase.from("wellness_data").upsert(
       {
         user_id: userId,
         date: todayStr,
-        sleep_score: jordanRossWellness.sleep_score,
-        sleep_duration_min: jordanRossWellness.sleep_duration_min,
-        readiness_score: jordanRossWellness.readiness_score,
+        sleep_score: w.sleep_score,
+        sleep_duration_min: w.sleep_duration_min,
+        readiness_score: w.readiness_score,
       },
       { onConflict: "user_id,date" },
     );
@@ -32,7 +43,7 @@ export const seedDemoData = createServerFn({ method: "POST" })
       .gte("start_time", startOfDay.toISOString())
       .lte("start_time", endOfDay.toISOString());
 
-    const schedule = buildJordanRossSchedule();
+    const schedule = persona.scheduleToday();
     await supabase.from("schedule_events").insert(
       schedule.map((e) => ({
         user_id: userId,
@@ -43,5 +54,7 @@ export const seedDemoData = createServerFn({ method: "POST" })
       })),
     );
 
-    return { ok: true };
+    return { ok: true, persona: persona.id };
   });
+
+export { kevinZhangPersona, jordanRossPersona };

@@ -17,10 +17,12 @@ import {
   clearTodayDemoEvents,
   DEMO_EVENTS_CHANGED,
   demoProfile,
-  demoWellness,
-  jordanRossInsight,
+  getDemoInsightForUser,
+  getDemoWellnessForUser,
 } from "@/lib/demo-mode";
-import { isJordanRossEmail } from "@/lib/jordan-ross-sample";
+import { PersonaLifestyleCard } from "@/components/PersonaLifestyleCard";
+import { readStoredPersonaLifestyle } from "@/lib/persona-registry";
+import { resolvePersonaByEmail } from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,7 +73,7 @@ function Home() {
   const { data: wellness } = useQuery({
     queryKey: ["wellness", user!.id, today],
     queryFn: async () => {
-      if (!backendAvailable) return demoWellness;
+      if (!backendAvailable) return getDemoWellnessForUser(user?.email);
       const { data } = await supabase
         .from("wellness_data")
         .select("*")
@@ -133,7 +135,10 @@ function Home() {
   })();
 
   const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
-  const jordanView = !backendAvailable || isJordanRossEmail(user?.email);
+  const persona = resolvePersonaByEmail(user?.email);
+  const insight = getDemoInsightForUser(user?.email);
+  const lifestyle = readStoredPersonaLifestyle();
+  const showLifestyle = lifestyle && lifestyle.personaId === persona?.id;
 
   return (
     <MobileFrame>
@@ -176,7 +181,15 @@ function Home() {
           <RingScore
             value={wellness?.sleep_score ?? 0}
             label="Sleep"
-            status={wellness ? "Good" : "—"}
+            status={
+              wellness
+                ? (wellness.sleep_score ?? 0) >= 75
+                  ? "Good"
+                  : (wellness.sleep_score ?? 0) >= 60
+                    ? "Fair"
+                    : "Low"
+                : "—"
+            }
             detail={wellness?.sleep_duration_min ? `${Math.floor(wellness.sleep_duration_min/60)}h ${wellness.sleep_duration_min%60}m` : "No data"}
           />
           <RingScore
@@ -186,10 +199,20 @@ function Home() {
               wellness
                 ? (wellness.readiness_score ?? 0) >= 88
                   ? "High"
-                  : "Steady"
+                  : (wellness.readiness_score ?? 0) >= 70
+                    ? "Steady"
+                    : "Moderate"
                 : "—"
             }
-            detail={wellness ? ((wellness.readiness_score ?? 0) >= 88 ? "Peak form" : "Aligned") : "No data"}
+            detail={
+              wellness
+                ? (wellness.readiness_score ?? 0) >= 88
+                  ? "Peak form"
+                  : (wellness.readiness_score ?? 0) >= 70
+                    ? "Aligned"
+                    : "Recovery needed"
+                : "No data"
+            }
             color="champagne"
           />
         </div>
@@ -200,13 +223,11 @@ function Home() {
             Insight for today
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {wellness
-              ? jordanView
-                ? jordanRossInsight
-                : "A calm start supports a focused day. Your afternoon looks busy — block a 15 min reset between 1–3 PM."
-              : "Log today's wellness to unlock personalized insights from Simone."}
+            {wellness ? insight : "Log today's wellness to unlock personalized insights from Simone."}
           </p>
         </div>
+
+        {showLifestyle && lifestyle && <PersonaLifestyleCard lifestyle={lifestyle} />}
 
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between gap-2">
