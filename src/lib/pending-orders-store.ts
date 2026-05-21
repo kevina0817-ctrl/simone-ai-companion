@@ -59,7 +59,14 @@ export function usePendingOrders() {
   return useSyncExternalStore(subscribe, getSnapshot, () => [] as PendingOrder[]);
 }
 
+/** Orders awaiting user sign-off — Approvals page only. */
 export function usePendingApprovalOrders() {
   const all = usePendingOrders();
   return all.filter((o) => o.status === "pending_approval");
+}
+
+/** Orders the user approved — shown on the Orders page. */
+export function useApprovedOrders() {
+  const all = usePendingOrders();
+  return all.filter((o) => o.status === "approved");
 }

@@ -49,7 +49,7 @@ export function decide(id: string, status: "approved" | "declined") {
   emit();
 }
 
-/** Register a shopping order for Approvals + Orders pages. */
+/** Register a shopping order for Approvals (Orders page shows it after approval). */
 export function addPendingOrderApproval(order: PendingOrder) {
   const item: PendingItem = {
     id: order.id,
