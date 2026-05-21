@@ -105,6 +105,21 @@ export function clearAllOrders() {
   emit();
 }
 
+/** Replace in-memory orders (e.g. Jordan Ross sample data). */
+export function replacePendingOrders(next: PendingOrder[]) {
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem(SESSION_FLAG, "1");
+  }
+  orders = next.map((o) =>
+    o.category ? o : { ...o, category: inferOrderCategory(o.store, o.title) },
+  );
+  persist();
+  emit();
+  if (typeof window !== "undefined") {
+    void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
+  }
+}
+
 /** Re-run session reset (e.g. after tests). Budget localStorage is not touched. */
 export function initOrdersForSession() {
   if (typeof window === "undefined") return;

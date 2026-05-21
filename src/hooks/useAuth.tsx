@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { backendAvailable, demoUser } from "@/lib/demo-mode";
+import { applyJordanRossSampleData, backendAvailable, demoUser } from "@/lib/demo-mode";
+import { isJordanRossEmail } from "@/lib/jordan-ross-sample";
 
 type AuthCtx = {
   user: User | null;
@@ -17,7 +18,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(backendAvailable);
 
   useEffect(() => {
-    if (!backendAvailable) return;
+    if (!backendAvailable) {
+      applyJordanRossSampleData();
+      return;
+    }
     let active = true;
     const fallback = window.setTimeout(() => {
       if (active) setLoading(false);
@@ -27,12 +31,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       setSession(s);
       setLoading(false);
+      if (isJordanRossEmail(s?.user?.email)) applyJordanRossSampleData();
     });
 
     supabase.auth.getSession()
       .then(({ data }) => {
         if (!active) return;
         setSession(data.session);
+        if (isJordanRossEmail(data.session?.user?.email)) applyJordanRossSampleData();
       })
       .catch(() => {
         if (active) setSession(null);

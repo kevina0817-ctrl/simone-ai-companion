@@ -189,6 +189,15 @@ export function addPendingScheduleApproval(item: ScheduleItem) {
   emit();
 }
 
+/** Reset pending approvals (demo / sample personas). */
+export function resetApprovalsPending(items: PendingItem[]) {
+  state = {
+    items: Object.fromEntries(items.map((i) => [i.id, { item: i, status: "pending" as const }])),
+    order: items.map((i) => i.id),
+  };
+  emit();
+}
+
 export function useApprovalsSnapshot() {
   return useSyncExternalStore(
     subscribe,

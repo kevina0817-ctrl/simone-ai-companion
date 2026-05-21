@@ -1,20 +1,20 @@
 import type { User } from "@supabase/supabase-js";
 import type { CancelMatchCriteria } from "@/lib/schedule-item";
 import { findScheduleEventForCancel, isSameCalendarDay } from "@/lib/schedule-item";
+import {
+  applyJordanRossSampleData,
+  buildJordanRossSchedule,
+  jordanRossInsight,
+  jordanRossProfile,
+  jordanRossUser,
+  jordanRossWellness,
+} from "@/lib/jordan-ross-sample";
 
 export const backendAvailable = Boolean(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
 );
 
-export const demoUser = {
-  id: "demo-user",
-  aud: "authenticated",
-  role: "authenticated",
-  email: "demo@simone.local",
-  app_metadata: {},
-  user_metadata: { display_name: "Alex" },
-  created_at: "2026-05-18T00:00:00.000Z",
-} as User;
+export const demoUser = jordanRossUser;
 
 export type DemoEvent = {
   id: string;
@@ -31,39 +31,18 @@ export type DemoMessage = {
   created_at: string;
 };
 
-export const demoProfile = { display_name: "Alex" };
+export const demoProfile = jordanRossProfile;
 
-export const demoWellness = {
-  sleep_score: 82,
-  readiness_score: 76,
-  sleep_duration_min: 455,
-};
+export const demoWellness = jordanRossWellness;
+
+export { jordanRossInsight };
 
 const eventsKey = "simone-demo-events";
 const messagesKey = "simone-demo-messages";
 
-const todayAt = (hour: number, minute: number) => {
-  const date = new Date();
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
-};
+const defaultEvents = (): DemoEvent[] => buildJordanRossSchedule();
 
-const defaultEvents = (): DemoEvent[] => [
-  {
-    id: "demo-1",
-    title: "Client check-in",
-    subtitle: "Review next steps",
-    start_time: todayAt(15, 30),
-    level: "High",
-  },
-  {
-    id: "demo-2",
-    title: "Recovery session",
-    subtitle: "Sauna + cold plunge",
-    start_time: todayAt(17, 30),
-    level: "Medium",
-  },
-];
+export { applyJordanRossSampleData };
 
 const safeRead = <T,>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;

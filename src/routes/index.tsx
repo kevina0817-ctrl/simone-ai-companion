@@ -12,7 +12,15 @@ import { toast } from "sonner";
 import { useEffect } from "react";
 import { ScheduleEventActions } from "@/components/ScheduleEventActions";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
-import { backendAvailable, clearTodayDemoEvents, DEMO_EVENTS_CHANGED, demoProfile, demoWellness } from "@/lib/demo-mode";
+import {
+  backendAvailable,
+  clearTodayDemoEvents,
+  DEMO_EVENTS_CHANGED,
+  demoProfile,
+  demoWellness,
+  jordanRossInsight,
+} from "@/lib/demo-mode";
+import { isJordanRossEmail } from "@/lib/jordan-ross-sample";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -125,6 +133,7 @@ function Home() {
   })();
 
   const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
+  const jordanView = !backendAvailable || isJordanRossEmail(user?.email);
 
   return (
     <MobileFrame>
@@ -173,8 +182,14 @@ function Home() {
           <RingScore
             value={wellness?.readiness_score ?? 0}
             label="Readiness"
-            status={wellness ? "Steady" : "—"}
-            detail={wellness ? "Aligned" : "No data"}
+            status={
+              wellness
+                ? (wellness.readiness_score ?? 0) >= 88
+                  ? "High"
+                  : "Steady"
+                : "—"
+            }
+            detail={wellness ? ((wellness.readiness_score ?? 0) >= 88 ? "Peak form" : "Aligned") : "No data"}
             color="champagne"
           />
         </div>
@@ -186,7 +201,9 @@ function Home() {
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">
             {wellness
-              ? "A calm start supports a focused day. Your afternoon looks busy — block a 15 min reset between 1–3 PM."
+              ? jordanView
+                ? jordanRossInsight
+                : "A calm start supports a focused day. Your afternoon looks busy — block a 15 min reset between 1–3 PM."
               : "Log today's wellness to unlock personalized insights from Simone."}
           </p>
         </div>
