@@ -1,6 +1,7 @@
 import type { ChatAction } from "@/lib/chat-actions";
 import type { PendingOrder } from "@/lib/pending-order";
 import { normalizeOrderFromToolArgs, parseOrderFromText } from "@/lib/pending-order";
+import { orderWithBudgetFlags } from "@/lib/budget-store";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
 
 export function applyChatOrderResult(
@@ -14,7 +15,8 @@ export function applyChatOrderResult(
   const created: PendingOrder[] = [];
   const seen = new Set<string>();
 
-  const push = (order: PendingOrder) => {
+  const push = (raw: PendingOrder) => {
+    const order = orderWithBudgetFlags(raw);
     if (seen.has(order.id)) return;
     seen.add(order.id);
     addPendingOrderApproval(order);

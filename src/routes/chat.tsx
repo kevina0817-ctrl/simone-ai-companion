@@ -170,11 +170,19 @@ function ChatPage() {
       });
 
       if (orders.length > 0) {
+        const overBudget = orders.filter((o) => o.exceedsBudget);
         toast.success(
           orders.length === 1
             ? `Order “${orders[0].title}” sent for approval`
             : `${orders.length} orders sent for approval`,
         );
+        if (overBudget.length > 0) {
+          toast.warning(
+            overBudget.length === 1
+              ? "This order exceeds your monthly budget — review under Approvals"
+              : `${overBudget.length} orders exceed your monthly budget — review under Approvals`,
+          );
+        }
       }
 
       const aiMessage = {

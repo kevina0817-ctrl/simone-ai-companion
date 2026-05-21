@@ -225,6 +225,11 @@ function OrderApprovalCard({ id }: { id: string }) {
             {order.store} • {order.category === "amazon" ? "Amazon" : order.category === "grocery" ? "Grocery" : "Online"} • Pending approval
           </div>
         </div>
+        {order.exceedsBudget && (
+          <span className="rounded-full border border-risk-medium/40 bg-risk-medium/10 px-2.5 py-1 text-[10px] font-medium text-risk-medium">
+            Over budget
+          </span>
+        )}
       </div>
       <div className="mt-3">
         <PendingOrderCard order={order} compact />

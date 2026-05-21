@@ -20,6 +20,9 @@ export type PendingOrder = {
   totalEstimatedPrice: number;
   status: PendingOrderStatus;
   createdAt: string;
+  /** Set when this purchase would exceed the monthly budget */
+  exceedsBudget?: boolean;
+  budgetOverBy?: number;
 };
 
 const lineItemSchema = z.object({

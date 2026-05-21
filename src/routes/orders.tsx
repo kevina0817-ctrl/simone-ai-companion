@@ -5,6 +5,11 @@ import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
 import type { OrderCategory } from "@/lib/pending-order";
+import {
+  applyMonthOnlyBudgetIncrease,
+  dismissBudgetExceededWarning,
+  useBudgetSnapshot,
+} from "@/lib/budget-store";
 import { useApprovedOrders } from "@/lib/pending-orders-store";
 
 export const Route = createFileRoute("/orders")({
@@ -15,28 +20,47 @@ export const Route = createFileRoute("/orders")({
 const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
 
+function BudgetExceededWarning() {
+  const { showWarning } = useBudgetSnapshot();
+
+  if (!showWarning) return null;
+
+  return (
+    <div className="mt-4 rounded-2xl border border-risk-medium/40 bg-risk-medium/10 px-4 py-3 text-sm">
+      <p className="leading-relaxed text-foreground">
+        Warning: You have exceeded your budget threshold. Would you like me to adjust it to
+        higher for this month only?
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => dismissBudgetExceededWarning()}
+          className="flex-1 rounded-full border border-border bg-secondary/50 py-2 text-xs font-medium"
+        >
+          Not now
+        </button>
+        <button
+          type="button"
+          onClick={() => applyMonthOnlyBudgetIncrease()}
+          className="flex-1 rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground"
+        >
+          Yes, raise this month
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BudgetCard() {
-  const spent = 0;
-  const [monthly, setMonthly] = useState<number | "unlimited">(800);
+  const { spent, cap } = useBudgetSnapshot();
+  const unlimited = cap === "unlimited";
+  const monthly = unlimited ? 0 : cap;
+  const pct = unlimited ? 0 : Math.min(100, Math.round((spent / monthly) * 100));
 
   useEffect(() => {
     const read = () => {
-      try {
-        const raw = localStorage.getItem("simone:budget");
-        if (!raw) return;
-        const v = JSON.parse(raw);
-        if (v.amount === "unlimited") {
-          setMonthly("unlimited");
-        } else if (typeof v.amount === "number") {
-          const period = v.period ?? "Monthly";
-          const factor = period === "Weekly" ? 4 : period === "Quarterly" ? 1 / 3 : 1;
-          setMonthly(Math.round(v.amount * factor));
-        }
-      } catch {
-        /* ignore */
-      }
+      void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
     };
-    read();
     window.addEventListener("storage", read);
     window.addEventListener("focus", read);
     return () => {
@@ -44,9 +68,6 @@ function BudgetCard() {
       window.removeEventListener("focus", read);
     };
   }, []);
-
-  const unlimited = monthly === "unlimited";
-  const pct = unlimited ? 0 : Math.min(100, Math.round((spent / (monthly as number)) * 100));
 
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
@@ -59,20 +80,23 @@ function BudgetCard() {
           <div className="text-[11px] text-muted-foreground">
             {unlimited
               ? "Unlimited monthly budget — track spending freely."
-              : `You've spent ${pct}% of your monthly budget.`}
+              : spent > monthly
+                ? `Over monthly cap by $${(spent - monthly).toFixed(2)}.`
+                : `You've spent ${pct}% of your monthly budget.`}
           </div>
         </div>
         <div className="text-right text-xs font-medium">
-          ${spent}
+          ${spent.toFixed(2)}
           <span className="text-muted-foreground"> / {unlimited ? "∞" : `$${monthly}`}</span>
         </div>
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-primary to-champagne"
-          style={{ width: unlimited ? "20%" : `${pct}%` }}
+          className={`h-full rounded-full ${spent > monthly && !unlimited ? "bg-risk-medium" : "bg-gradient-to-r from-primary to-champagne"}`}
+          style={{ width: unlimited ? "20%" : `${Math.min(100, pct)}%` }}
         />
       </div>
+      <BudgetExceededWarning />
       <Link
         to="/orders/budget"
         className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-secondary/40 px-3 py-2.5"

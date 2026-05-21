@@ -56,11 +56,18 @@ export function addPendingOrder(order: PendingOrder): PendingOrder {
   orders = [order, ...orders.filter((o) => o.id !== order.id)];
   persist();
   emit();
+  if (typeof window !== "undefined") {
+    void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
+  }
   return order;
 }
 
 export function getPendingOrder(id: string): PendingOrder | undefined {
   return orders.find((o) => o.id === id);
+}
+
+export function getOrdersSnapshot(): PendingOrder[] {
+  return orders;
 }
 
 export function setPendingOrderStatus(id: string, status: PendingOrderStatus) {
@@ -69,6 +76,9 @@ export function setPendingOrderStatus(id: string, status: PendingOrderStatus) {
   orders = orders.map((o) => (o.id === id ? { ...o, status } : o));
   persist();
   emit();
+  if (typeof window !== "undefined") {
+    void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
+  }
 }
 
 export function usePendingOrders() {

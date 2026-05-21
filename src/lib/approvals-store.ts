@@ -4,7 +4,8 @@ import type { PendingOrder } from "@/lib/pending-order";
 import { formatOrderDetail } from "@/lib/pending-order";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
-import { addPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
+import { recordApprovedOrderSpend } from "@/lib/budget-store";
+import { addPendingOrder, getPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
 
 export type PendingItemKind = "calendar" | "grocery" | "order";
 
@@ -17,6 +18,9 @@ export type PendingItem = {
   orderId?: string;
   /** Schedule event payload — Approvals → Homepage after approve (never Orders) */
   scheduleEvent?: ScheduleItem;
+  /** Purchase would exceed monthly budget */
+  exceedsBudget?: boolean;
+  budgetOverBy?: number;
 };
 
 export type DecidedItem = PendingItem & {
@@ -117,6 +121,10 @@ export async function decide(
 
   if (entry.item.orderId) {
     setPendingOrderStatus(entry.item.orderId, status === "approved" ? "approved" : "declined");
+    if (status === "approved") {
+      const order = getPendingOrder(entry.item.orderId);
+      if (order) recordApprovedOrderSpend(order);
+    }
   }
 
   emit();
@@ -124,12 +132,17 @@ export async function decide(
 
 /** Shopping order → Approvals only until approved, then Orders page. */
 export function addPendingOrderApproval(order: PendingOrder) {
+  const detail = order.exceedsBudget
+    ? `${formatOrderDetail(order)} • Over budget by $${(order.budgetOverBy ?? 0).toFixed(2)}`
+    : formatOrderDetail(order);
   const item: PendingItem = {
     id: order.id,
-    kind: "order",
-    title: order.title,
-    detail: formatOrderDetail(order),
+    kind: order.exceedsBudget ? "grocery" : "order",
+    title: order.exceedsBudget ? `${order.title} (over budget)` : order.title,
+    detail,
     orderId: order.id,
+    exceedsBudget: order.exceedsBudget,
+    budgetOverBy: order.budgetOverBy,
   };
   addPendingOrder(order);
   if (state.items[order.id]) {
