@@ -1,14 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
+import { requestChatCompletion } from "@/lib/ai-gateway";
+import { normalizeScheduleFromToolArgs, findScheduleEventForCancel } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
+import { buildScheduleContextBlock } from "@/lib/schedule-context";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
   timezone: z.string().optional(),
   nowIso: z.string().optional(),
+  dayStartIso: z.string().optional(),
+  dayEndIso: z.string().optional(),
 });
 
 const SYSTEM_PROMPT = `You are Simone, a calm, perceptive AI life assistant in the style of an attentive concierge.
@@ -25,7 +29,7 @@ You CAN take real actions using tools:
 
 When the user asks to book / schedule / add something, CALL schedule_event immediately, then confirm naturally.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
-from the upcoming schedule (by title and/or time), then confirm. If nothing matches, ask which one to cancel.
+from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
 (name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
@@ -80,7 +84,7 @@ const tools = [
     type: "function",
     function: {
       name: "cancel_event",
-      description: "Cancel/remove an event from the user's schedule. Match against the UPCOMING SCHEDULE list shown in context.",
+      description: "Cancel/remove an event from the user's schedule. Match against TODAY'S SCHEDULE list shown in context (use event_id when available).",
       parameters: {
         type: "object",
         properties: {
@@ -105,16 +109,40 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       content: data.message,
     });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const [{ data: wellness }, { data: events }, { data: history }] = await Promise.all([
-      supabase.from("wellness_data").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
-      supabase
+    const nowIso = data.nowIso ?? new Date().toISOString();
+    const tz = data.timezone ?? "UTC";
+    const ref = new Date(nowIso);
+    const dayStartIso =
+      data.dayStartIso ??
+      (() => {
+        const s = new Date(ref);
+        s.setHours(0, 0, 0, 0);
+        return s.toISOString();
+      })();
+    const dayEndIso =
+      data.dayEndIso ??
+      (() => {
+        const e = new Date(ref);
+        e.setHours(23, 59, 59, 999);
+        return e.toISOString();
+      })();
+    const today = dayStartIso.slice(0, 10);
+
+    const fetchTodayEvents = async () => {
+      const { data: rows, error } = await supabase
         .from("schedule_events")
         .select("id,start_time,title,subtitle,level")
         .eq("user_id", userId)
-        .gte("start_time", new Date().toISOString())
-        .order("start_time", { ascending: true })
-        .limit(8),
+        .gte("start_time", dayStartIso)
+        .lte("start_time", dayEndIso)
+        .order("start_time", { ascending: true });
+      if (error) throw error;
+      return rows ?? [];
+    };
+
+    const [{ data: wellness }, events, { data: history }] = await Promise.all([
+      supabase.from("wellness_data").select("*").eq("user_id", userId).eq("date", today).maybeSingle(),
+      fetchTodayEvents(),
       supabase
         .from("chat_messages")
         .select("role,content")
@@ -123,73 +151,41 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .limit(12),
     ]);
 
-    const nowIso = data.nowIso ?? new Date().toISOString();
-    const tz = data.timezone ?? "UTC";
-
     const wellnessLine = wellness
       ? `Sleep ${wellness.sleep_score ?? "?"}/100 (${wellness.sleep_duration_min ?? "?"} min), readiness ${wellness.readiness_score ?? "?"}/100.`
       : "No wellness data logged today.";
 
-    const scheduleLines = events && events.length
-      ? events
-          .map((e) => `- ${new Date(e.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} — ${e.title} (${e.level})`)
-          .join("\n")
-      : "- Nothing scheduled.";
+    const contextBlock = buildScheduleContextBlock({
+      nowIso,
+      timezone: tz,
+      wellnessLine,
+      events,
+      heading: "Today's schedule",
+    });
 
-    const contextBlock = [
-      `Now: ${new Date(nowIso).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} (${tz}).`,
-      `Wellness today: ${wellnessLine}`,
-      `Upcoming:`,
-      scheduleLines,
-    ].join("\n");
+    const thread = (history ?? []).reverse().map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+    const last = thread[thread.length - 1];
+    if (last?.role !== "user" || last.content !== data.message) {
+      thread.push({ role: "user", content: data.message });
+    }
 
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
-      ...(history ?? []).reverse().map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
+      ...thread,
     ];
-
-    const agnicToken = process.env.AGNIC_TOKEN;
-    if (!agnicToken) throw new Error("AGNIC_TOKEN is not configured");
-
-    const callGateway = async (msgs: Array<Record<string, unknown>>) => {
-      const res = await fetch("https://api.agnic.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Agnic-Token": agnicToken,
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-4o-mini",
-          messages: msgs,
-          tools,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 429) throw new Error("Rate limit reached — try again in a moment.");
-        if (res.status === 402) throw new Error("AI credits exhausted. Add credits in workspace settings.");
-        throw new Error(`AI error: ${text.slice(0, 200)}`);
-      }
-      return (await res.json()) as {
-        choices?: Array<{
-          message?: {
-            content?: string;
-            tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-          };
-        }>;
-      };
-    };
 
     const actions: ChatAction[] = [];
     const pendingOrders: ChatResponse["pendingOrders"] = [];
     let reply = "";
 
+    let todayEvents = events;
+
     for (let i = 0; i < 3; i++) {
-      const json = await callGateway(messages);
+      const json = await requestChatCompletion(messages, tools);
       const msg = json.choices?.[0]?.message;
       if (!msg) break;
 
@@ -227,6 +223,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
                 start_time: inserted.start_time,
                 level: inserted.level as "High" | "Medium" | "Low",
               });
+              todayEvents = [...todayEvents, inserted].sort(
+                (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
+              );
             } else if (tc.function.name === "cancel_event") {
               const parsed = z
                 .object({
@@ -236,31 +235,22 @@ export const sendChatMessage = createServerFn({ method: "POST" })
                 })
                 .parse(args);
 
-              let target: { id: string; title: string } | null = null;
-              if (parsed.event_id) {
-                const found = (events ?? []).find((e) => e.id === parsed.event_id);
-                if (found) target = { id: found.id, title: found.title };
-              }
-              if (!target && (parsed.title || parsed.start_time)) {
-                const lcTitle = parsed.title?.toLowerCase();
-                const startMs = parsed.start_time ? new Date(parsed.start_time).getTime() : null;
-                const match = (events ?? []).find((e) => {
-                  const titleOk = lcTitle ? e.title.toLowerCase().includes(lcTitle) : true;
-                  const timeOk = startMs ? Math.abs(new Date(e.start_time).getTime() - startMs) < 30 * 60 * 1000 : true;
-                  return titleOk && timeOk;
-                });
-                if (match) target = { id: match.id, title: match.title };
-              }
-              if (!target) throw new Error("No matching upcoming event found");
+              const match = findScheduleEventForCancel(todayEvents, {
+                event_id: parsed.event_id,
+                title: parsed.title,
+                start_time: parsed.start_time,
+              });
+              if (!match) throw new Error("No matching event on today's schedule");
 
               const { error } = await supabase
                 .from("schedule_events")
                 .delete()
-                .eq("id", target.id)
+                .eq("id", match.id)
                 .eq("user_id", userId);
               if (error) throw error;
-              result = { ok: true, cancelled: target };
-              actions.push({ kind: "cancel_event", id: target.id, title: target.title });
+              result = { ok: true, cancelled: { id: match.id, title: match.title } };
+              actions.push({ kind: "cancel_event", id: match.id, title: match.title });
+              todayEvents = todayEvents.filter((e) => e.id !== match.id);
             } else if (tc.function.name === "create_pending_order") {
               const order = normalizeOrderFromToolArgs(args);
               if (!order) throw new Error("Invalid order fields");

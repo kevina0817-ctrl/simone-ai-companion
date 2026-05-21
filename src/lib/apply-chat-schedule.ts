@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { backendAvailable, getDemoEvents, addScheduleItem, removeScheduleItem } from "@/lib/demo-mode";
+import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   parseScheduleFromText,
   parseCancelFromText,
@@ -53,17 +54,14 @@ async function fetchTodayTimelineEvents(userId: string): Promise<ScheduleItem[]>
       }));
   }
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
+  const { startIso, endIso } = getLocalCalendarDayBounds();
 
   const { data, error } = await supabase
     .from("schedule_events")
     .select("id,title,subtitle,start_time,level")
     .eq("user_id", userId)
-    .gte("start_time", start.toISOString())
-    .lte("start_time", end.toISOString())
+    .gte("start_time", startIso)
+    .lte("start_time", endIso)
     .order("start_time", { ascending: true });
 
   if (error) throw error;
@@ -135,7 +133,11 @@ export async function applyChatScheduleResult(
       scheduled.push(item);
       todayEvents = await fetchTodayTimelineEvents(userId);
     } else if (action.kind === "cancel_event") {
-      let removed = await removeFromTimeline(cancelCriteria(action), userId, userMessage, todayEvents);
+      const alreadyHandled = Boolean(action.id && backendAvailable);
+      let removed = alreadyHandled
+        ? todayEvents.find((e) => e.id === action.id) ?? null
+        : await removeFromTimeline(cancelCriteria(action), userId, userMessage, todayEvents);
+
       if (!removed && action.id && action.title) {
         removed = {
           id: action.id,

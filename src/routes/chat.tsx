@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
+import { filterEventsForToday, getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   addDemoMessage,
   backendAvailable,
@@ -83,16 +84,17 @@ function ChatPage() {
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const nowIso = new Date().toISOString();
+      const { startIso: dayStartIso, endIso: dayEndIso } = getLocalCalendarDayBounds();
 
       const result = backendAvailable
-        ? await send({ data: { message: t, timezone, nowIso } })
+        ? await send({ data: { message: t, timezone, nowIso, dayStartIso, dayEndIso } })
         : await sendDemo({
             data: {
               message: t,
               timezone,
               nowIso,
               history: getDemoMessages().map((m) => ({ role: m.role, content: m.content })),
-              events: getDemoEvents(),
+              events: filterEventsForToday(getDemoEvents()),
               wellness: demoWellness,
             },
           });

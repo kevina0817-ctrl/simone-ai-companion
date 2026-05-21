@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
+import { buildScheduleContextBlock } from "@/lib/schedule-context";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -39,7 +41,7 @@ Answer ANY question intelligently — small talk, advice, planning, recommendati
 
 You CAN take real actions via tools when (and only when) the user clearly asks:
 - schedule_event: add an event to their schedule.
-- cancel_event: remove an event from their schedule. Match against UPCOMING SCHEDULE by id/title/time.
+- cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
 - create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price).
 
 When the user asks to buy groceries or order products, CALL create_pending_order.
@@ -94,7 +96,7 @@ const tools = [
     type: "function",
     function: {
       name: "cancel_event",
-      description: "Cancel/remove an event from the UPCOMING SCHEDULE.",
+      description: "Cancel/remove an event from TODAY'S SCHEDULE.",
       parameters: {
         type: "object",
         properties: {
@@ -107,34 +109,66 @@ const tools = [
   },
 ];
 
+function collectActionsFromToolCalls(
+  toolCalls: Array<{ function: { name: string; arguments: string } }>,
+): { actions: ChatAction[]; pendingOrders: ChatResponse["pendingOrders"] } {
+  const actions: ChatAction[] = [];
+  const pendingOrders: ChatResponse["pendingOrders"] = [];
+
+  for (const tc of toolCalls) {
+    try {
+      const args = JSON.parse(tc.function.arguments || "{}");
+      if (tc.function.name === "schedule_event") {
+        const item = normalizeScheduleFromToolArgs(args);
+        if (item) {
+          actions.push({
+            kind: "schedule_event",
+            title: item.title,
+            subtitle: item.subtitle,
+            start_time: item.start_time,
+            level: item.level,
+          });
+        }
+      } else if (tc.function.name === "create_pending_order") {
+        const order = normalizeOrderFromToolArgs(args);
+        if (order) {
+          actions.push({ kind: "create_pending_order", order });
+          pendingOrders.push(order);
+        }
+      } else if (tc.function.name === "cancel_event") {
+        actions.push({
+          kind: "cancel_event",
+          event_id: args.event_id ? String(args.event_id) : undefined,
+          title: args.title ? String(args.title) : undefined,
+          start_time: args.start_time ? String(args.start_time) : undefined,
+        });
+      }
+    } catch {
+      // ignore malformed args
+    }
+  }
+
+  return { actions, pendingOrders };
+}
+
 export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY is not configured");
-
     const nowIso = data.nowIso ?? new Date().toISOString();
     const tz = data.timezone ?? "UTC";
     const w = data.wellness;
 
-    const contextBlock = [
-      `CURRENT TIME: ${nowIso} (timezone: ${tz})`,
-      "",
-      "USER WELLNESS TODAY:",
-      w
-        ? `- Sleep ${w.sleep_score ?? "?"}/100, duration ${w.sleep_duration_min ?? "?"}min, readiness ${w.readiness_score ?? "?"}/100`
-        : "- No wellness data logged today",
-      "",
-      "UPCOMING SCHEDULE:",
-      data.events.length
-        ? data.events
-            .map(
-              (e) =>
-                `- id=${e.id} | ${new Date(e.start_time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })} | ${e.title}${e.level ? ` (${e.level})` : ""}`,
-            )
-            .join("\n")
-        : "- No upcoming events",
-    ].join("\n");
+    const wellnessLine = w
+      ? `Sleep ${w.sleep_score ?? "?"}/100 (${w.sleep_duration_min ?? "?"} min), readiness ${w.readiness_score ?? "?"}/100.`
+      : "No wellness data logged today.";
+
+    const contextBlock = buildScheduleContextBlock({
+      nowIso,
+      timezone: tz,
+      wellnessLine,
+      events: data.events,
+      heading: "Today's schedule",
+    });
 
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
@@ -143,75 +177,39 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       { role: "user", content: data.message },
     ];
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages,
-        tools,
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      if (res.status === 429) throw new Error("Rate limit reached — try again soon.");
-      if (res.status === 402) throw new Error("AI credits exhausted.");
-      throw new Error(`AI error: ${text.slice(0, 200)}`);
-    }
-
-    const json = (await res.json()) as {
-      choices?: Array<{
-        message?: {
-          content?: string;
-          tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-        };
-      }>;
-    };
-
-    const msg = json.choices?.[0]?.message;
     const actions: ChatAction[] = [];
     const pendingOrders: ChatResponse["pendingOrders"] = [];
+    let reply = "";
 
-    if (msg?.tool_calls?.length) {
-      for (const tc of msg.tool_calls) {
-        try {
-          const args = JSON.parse(tc.function.arguments || "{}");
-          if (tc.function.name === "schedule_event") {
-            const item = normalizeScheduleFromToolArgs(args);
-            if (item) {
-              actions.push({
-                kind: "schedule_event",
-                title: item.title,
-                subtitle: item.subtitle,
-                start_time: item.start_time,
-                level: item.level,
-              });
-            }
-          } else if (tc.function.name === "create_pending_order") {
-            const order = normalizeOrderFromToolArgs(args);
-            if (order) {
-              actions.push({ kind: "create_pending_order", order });
-              pendingOrders.push(order);
-            }
-          } else if (tc.function.name === "cancel_event") {
-            actions.push({
-              kind: "cancel_event",
-              event_id: args.event_id ? String(args.event_id) : undefined,
-              title: args.title ? String(args.title) : undefined,
-              start_time: args.start_time ? String(args.start_time) : undefined,
-            });
-          }
-        } catch {
-          // ignore malformed args
+    for (let i = 0; i < 3; i++) {
+      const json = await requestChatCompletion(messages, tools);
+      const msg = json.choices?.[0]?.message;
+      if (!msg) break;
+
+      if (msg.tool_calls?.length) {
+        const collected = collectActionsFromToolCalls(msg.tool_calls);
+        actions.push(...collected.actions);
+        pendingOrders.push(...collected.pendingOrders);
+
+        messages.push({
+          role: "assistant",
+          content: msg.content ?? "",
+          tool_calls: msg.tool_calls,
+        });
+        for (const tc of msg.tool_calls) {
+          messages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: true }),
+          });
         }
+        continue;
       }
+
+      reply = msg.content?.trim() ?? "";
+      break;
     }
 
-    let reply = msg?.content?.trim() ?? "";
     if (!reply) {
       if (actions.some((a) => a.kind === "create_pending_order")) {
         reply = "I've drafted your order — review it under Approvals or Orders.";
