@@ -208,7 +208,7 @@ function OrdersList({ category }: { category?: OrderCategory }) {
   return (
     <>
       {approvedOrders.map((order) => (
-        <PendingOrderCard key={order.id} order={order} />
+        <PendingOrderCard key={order.id} order={order} showApprovedActions />
       ))}
       {approvedOrders.length === 0 && (
         <EmptyState

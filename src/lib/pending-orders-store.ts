@@ -108,6 +108,21 @@ export function setPendingOrderStatus(id: string, status: PendingOrderStatus) {
   }
 }
 
+/** Remove an approved order from Orders (e.g. user canceled after approval). */
+export function cancelApprovedOrder(orderId: string): PendingOrder | null {
+  const existing = orders.find((o) => o.id === orderId && o.status === "approved");
+  if (!existing) return null;
+
+  const removed = clonePendingOrder(existing);
+  orders = orders.filter((o) => o.id !== orderId);
+  persist();
+  emit();
+  if (typeof window !== "undefined") {
+    void import("@/lib/budget-store").then((m) => m.refreshBudgetProgressFromSettings());
+  }
+  return removed;
+}
+
 /** Move pending order into approved Orders store (Grocery / Amazon / Other tabs). */
 export function commitApprovedShoppingOrder(orderId: string): PendingOrder | undefined {
   const existing = orders.find((o) => o.id === orderId);
