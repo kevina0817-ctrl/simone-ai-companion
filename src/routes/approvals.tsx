@@ -21,6 +21,7 @@ import type { OrderCategory } from "@/lib/order-category";
 import { formatScheduleTimeRange } from "@/lib/schedule-item";
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
+  approveAllPendingApprovals,
   approveShoppingOrderWithMonthlyBudgetCad,
   categoryLabel,
   declineShoppingApproval,
@@ -219,6 +220,7 @@ function OrderBudgetPrompt({
   check,
   orderTotal,
   priceSymbol,
+  batchLabel,
   onStartRaise,
   onDecline,
   busy,
@@ -226,6 +228,7 @@ function OrderBudgetPrompt({
   check: BudgetCheck;
   orderTotal: number;
   priceSymbol: string;
+  batchLabel?: boolean;
   onStartRaise: () => void;
   onDecline: () => void;
   busy: boolean;
@@ -236,9 +239,13 @@ function OrderBudgetPrompt({
   return (
     <div className="mt-4 rounded-2xl border border-risk-medium/40 bg-risk-medium/10 px-4 py-3 text-sm">
       <p className="leading-relaxed text-foreground">
-        {overBy > 0
-          ? `Approving this order (${priceSymbol}${orderTotal.toFixed(2)}) would put you $${overBy.toFixed(2)} over your $${cap.toFixed(0)} monthly budget. Raise your cap for this month only?`
-          : `This order would exceed your $${cap.toFixed(0)} monthly budget threshold. Raise your cap for this month only?`}
+        {batchLabel
+          ? overBy > 0
+            ? `Approving all pending orders (${priceSymbol}${orderTotal.toFixed(2)} total) would put you $${overBy.toFixed(2)} over your $${cap.toFixed(0)} monthly budget. Raise your cap for this month only?`
+            : `These orders would exceed your $${cap.toFixed(0)} monthly budget threshold. Raise your cap for this month only?`
+          : overBy > 0
+            ? `Approving this order (${priceSymbol}${orderTotal.toFixed(2)}) would put you $${overBy.toFixed(2)} over your $${cap.toFixed(0)} monthly budget. Raise your cap for this month only?`
+            : `This order would exceed your $${cap.toFixed(0)} monthly budget threshold. Raise your cap for this month only?`}
       </p>
       <div className="mt-3 flex gap-2">
         <button
@@ -483,6 +490,125 @@ function OrderApprovalCard({ id }: { id: string }) {
   );
 }
 
+function ApproveAllBar() {
+  const ctx = useDecideContext();
+  const pending = usePending();
+  const [busy, setBusy] = useState(false);
+  const [budgetCheck, setBudgetCheck] = useState<BudgetCheck | null>(null);
+  const [batchOrderTotal, setBatchOrderTotal] = useState(0);
+  const [showBudgetInput, setShowBudgetInput] = useState(false);
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  const clearBudgetFlow = () => {
+    setBudgetCheck(null);
+    setShowBudgetInput(false);
+    setInputError(null);
+    setBatchOrderTotal(0);
+  };
+
+  const finishApproved = (schedules: number, orders: number) => {
+    clearBudgetFlow();
+    const parts: string[] = [];
+    if (schedules > 0) parts.push(`${schedules} event${schedules === 1 ? "" : "s"} on today's schedule`);
+    if (orders > 0) parts.push(`${orders} order${orders === 1 ? "" : "s"} on Orders`);
+    toast.success(parts.length > 0 ? `Approved — ${parts.join("; ")}` : "All items approved");
+  };
+
+  const onApproveAll = async () => {
+    if (!ctx) return;
+    setBusy(true);
+    setInputError(null);
+    try {
+      const result = await approveAllPendingApprovals(ctx);
+      if (result.status === "needs_budget") {
+        setBudgetCheck(result.check);
+        setBatchOrderTotal(result.batchOrderTotal);
+        setShowBudgetInput(false);
+        return;
+      }
+      if (result.status === "approved") {
+        finishApproved(result.schedules, result.orders);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSaveBudgetAndApproveAll = async (amountCad: number) => {
+    if (!ctx) return;
+    setBusy(true);
+    setInputError(null);
+    try {
+      const result = await approveAllPendingApprovals(ctx, amountCad);
+      if (result.status === "invalid_budget") {
+        setInputError(result.message);
+        return;
+      }
+      if (result.status === "needs_budget") {
+        setBudgetCheck(result.check);
+        setBatchOrderTotal(result.batchOrderTotal);
+        setShowBudgetInput(false);
+        setInputError("That budget is still too low for these orders. Try a higher amount.");
+        return;
+      }
+      if (result.status === "approved") {
+        finishApproved(result.schedules, result.orders);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const inBudgetFlow = Boolean(budgetCheck);
+
+  return (
+    <div className="mt-4 rounded-3xl border border-primary/25 bg-card/80 p-4 shadow-card">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium">Review {pending.length} pending</div>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Approve schedule events and orders in one step
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={!ctx || busy || inBudgetFlow}
+          onClick={() => void onApproveAll()}
+          className="shrink-0 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+        >
+          Approve All
+        </button>
+      </div>
+      {budgetCheck && !showBudgetInput && (
+        <OrderBudgetPrompt
+          check={budgetCheck}
+          orderTotal={batchOrderTotal}
+          priceSymbol="CA$"
+          batchLabel
+          onStartRaise={() => {
+            setShowBudgetInput(true);
+            setInputError(null);
+          }}
+          onDecline={clearBudgetFlow}
+          busy={busy}
+        />
+      )}
+      {budgetCheck && showBudgetInput && (
+        <OrderBudgetRaiseForm
+          check={budgetCheck}
+          busy={busy}
+          inputError={inputError}
+          onCancel={() => {
+            setShowBudgetInput(false);
+            setInputError(null);
+          }}
+          onSave={(amount) => void onSaveBudgetAndApproveAll(amount)}
+        />
+      )}
+    </div>
+  );
+}
+
 function NeedsReview() {
   const pending = usePending();
   const schedulePending = pending.filter(isScheduleApproval);
@@ -502,6 +628,7 @@ function NeedsReview() {
 
   return (
     <>
+      <ApproveAllBar />
       {schedulePending.length > 0 && <SectionLabel>Schedule & events</SectionLabel>}
       {schedulePending.map((p) => (
         <ScheduleApprovalCard key={p.id} id={p.id} item={p} />

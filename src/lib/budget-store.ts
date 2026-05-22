@@ -273,18 +273,33 @@ export type BudgetCheck = {
   projected: number;
 };
 
+function budgetCheckFromProjected(
+  spent: number,
+  projected: number,
+  monthlyCap: number | "unlimited",
+): BudgetCheck {
+  if (monthlyCap === "unlimited") {
+    return { exceeds: false, overBy: 0, monthlyCap, spent, projected };
+  }
+  const exceeds = projected > monthlyCap;
+  const overBy = exceeds ? Math.round((projected - monthlyCap) * 100) / 100 : 0;
+  return { exceeds, overBy, monthlyCap, spent, projected };
+}
+
 export function evaluateOrderBudget(order: PendingOrder): BudgetCheck {
   const spent = getApprovedSpendTotal();
   const monthlyCap = getEffectiveMonthlyCap();
   const projected = Math.round((spent + order.totalEstimatedPrice) * 100) / 100;
+  return budgetCheckFromProjected(spent, projected, monthlyCap);
+}
 
-  if (monthlyCap === "unlimited") {
-    return { exceeds: false, overBy: 0, monthlyCap, spent, projected };
-  }
-
-  const exceeds = projected > monthlyCap;
-  const overBy = exceeds ? Math.round((projected - monthlyCap) * 100) / 100 : 0;
-  return { exceeds, overBy, monthlyCap, spent, projected };
+/** Sum of multiple pending orders — used for Approve All. */
+export function evaluateBatchOrdersBudget(orders: PendingOrder[]): BudgetCheck {
+  const spent = getApprovedSpendTotal();
+  const monthlyCap = getEffectiveMonthlyCap();
+  const add = orders.reduce((s, o) => s + o.totalEstimatedPrice, 0);
+  const projected = Math.round((spent + add) * 100) / 100;
+  return budgetCheckFromProjected(spent, projected, monthlyCap);
 }
 
 export function orderWithBudgetFlags(order: PendingOrder): PendingOrder {

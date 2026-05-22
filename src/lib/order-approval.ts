@@ -1,6 +1,7 @@
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
   computeAutoAdjustedMonthlyCapCad,
+  evaluateBatchOrdersBudget,
   evaluateOrderBudget,
   saveSharedMonthlyBudgetCapCad,
   validateMonthlyBudgetCad,
@@ -8,6 +9,9 @@ import {
 import {
   completeShoppingApproval,
   declineShoppingApproval as declineShoppingApprovalInStore,
+  executeApproveAllPending,
+  getPendingApprovalIds,
+  getPendingItemsByKind,
   resolveOrderIdForApproval,
   type ApprovalsDecideContext,
 } from "@/lib/approvals-store";
@@ -92,4 +96,51 @@ export async function declineShoppingApproval(
 
 export function suggestedMonthlyBudgetCad(check: BudgetCheck): number {
   return computeAutoAdjustedMonthlyCapCad(check.projected);
+}
+
+export type ApproveAllPendingResult =
+  | { status: "approved"; schedules: number; orders: number }
+  | { status: "needs_budget"; check: BudgetCheck; batchOrderTotal: number }
+  | { status: "invalid_budget"; message: string }
+  | { status: "nothing_pending" };
+
+function resolvePendingShoppingOrders(approvalIds: string[]): PendingOrder[] {
+  return approvalIds
+    .map((id) => resolvePendingOrder(id))
+    .filter((o): o is PendingOrder => Boolean(o && o.status === "pending_approval"));
+}
+
+/**
+ * Approve every pending item: schedules → timeline; orders → Orders + budget tracking.
+ * If batch orders exceed budget, returns needs_budget unless monthlyCapCad is provided.
+ */
+export async function approveAllPendingApprovals(
+  ctx: ApprovalsDecideContext,
+  monthlyCapCad?: number,
+): Promise<ApproveAllPendingResult> {
+  const pendingIds = getPendingApprovalIds();
+  if (pendingIds.length === 0) return { status: "nothing_pending" };
+
+  const { orderIds } = getPendingItemsByKind();
+  const pendingOrders = resolvePendingShoppingOrders(orderIds);
+
+  if (monthlyCapCad !== undefined) {
+    const validation = validateMonthlyBudgetCad(
+      monthlyCapCad,
+      evaluateBatchOrdersBudget(pendingOrders).projected,
+    );
+    if (!validation.ok) {
+      return { status: "invalid_budget", message: validation.message };
+    }
+    saveSharedMonthlyBudgetCapCad(monthlyCapCad);
+  }
+
+  const batchCheck = evaluateBatchOrdersBudget(pendingOrders);
+  const batchOrderTotal = pendingOrders.reduce((s, o) => s + o.totalEstimatedPrice, 0);
+  if (batchCheck.exceeds) {
+    return { status: "needs_budget", check: batchCheck, batchOrderTotal };
+  }
+
+  const { schedules, orders } = await executeApproveAllPending(ctx);
+  return { status: "approved", schedules, orders };
 }

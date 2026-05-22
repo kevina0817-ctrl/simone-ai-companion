@@ -72,6 +72,37 @@ function formatScheduleDetail(item: ScheduleItem): string {
   return parts.join(" • ");
 }
 
+async function commitScheduleApproval(
+  id: string,
+  ctx: ApprovalsDecideContext,
+): Promise<{ ok: true; title: string } | { ok: false }> {
+  const entry = state.items[id];
+  if (!entry || entry.status !== "pending" || !entry.item.scheduleEvent) {
+    return { ok: false };
+  }
+  try {
+    const { commitScheduleToTimeline } = await import("@/lib/apply-chat-schedule");
+    const committed = await commitScheduleToTimeline(
+      ctx.queryClient,
+      entry.item.scheduleEvent,
+      ctx.userId,
+    );
+    return { ok: true, title: committed.title };
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : "Could not add event to today's schedule");
+    return { ok: false };
+  }
+}
+
+function markApprovalDecided(id: string, status: "approved" | "declined") {
+  const entry = state.items[id];
+  if (!entry || entry.status !== "pending") return;
+  state = {
+    ...state,
+    items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
+  };
+}
+
 export async function decide(
   id: string,
   status: "approved" | "declined",
@@ -87,24 +118,12 @@ export async function decide(
       toast.error("Could not update today's schedule — try again");
       return;
     }
-    try {
-      const { commitScheduleToTimeline } = await import("@/lib/apply-chat-schedule");
-      const committed = await commitScheduleToTimeline(
-        activeCtx.queryClient,
-        entry.item.scheduleEvent,
-        activeCtx.userId,
-      );
-      toast.success(`Added “${committed.title}” to today's schedule`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not add event to today's schedule");
-      return;
-    }
+    const result = await commitScheduleApproval(id, activeCtx);
+    if (!result.ok) return;
+    toast.success(`Added “${result.title}” to today's schedule`);
   }
 
-  state = {
-    ...state,
-    items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
-  };
+  markApprovalDecided(id, status);
 
   const orderId = entry.item.orderId ?? (isShoppingApproval(entry.item) ? id : undefined);
   if (orderId) {
@@ -202,6 +221,46 @@ export function useApprovalsSnapshot() {
 export function usePending() {
   const s = useApprovalsSnapshot();
   return s.order.map((id) => s.items[id]).filter((e) => e.status === "pending").map((e) => e.item);
+}
+
+export function getPendingApprovalIds(): string[] {
+  return state.order.filter((id) => state.items[id]?.status === "pending");
+}
+
+export function getPendingItemsByKind(): { scheduleIds: string[]; orderIds: string[] } {
+  const scheduleIds: string[] = [];
+  const orderIds: string[] = [];
+  for (const id of getPendingApprovalIds()) {
+    const entry = state.items[id];
+    if (!entry) continue;
+    if (isScheduleApproval(entry.item)) scheduleIds.push(id);
+    else if (isShoppingApproval(entry.item)) orderIds.push(id);
+  }
+  return { scheduleIds, orderIds };
+}
+
+/** Approve all pending schedule + shopping items (budget must be validated first for orders). */
+export async function executeApproveAllPending(
+  ctx: ApprovalsDecideContext,
+): Promise<{ schedules: number; orders: number }> {
+  const { scheduleIds, orderIds } = getPendingItemsByKind();
+  let schedules = 0;
+
+  for (const id of scheduleIds) {
+    const result = await commitScheduleApproval(id, ctx);
+    if (result.ok) {
+      markApprovalDecided(id, "approved");
+      schedules += 1;
+    }
+  }
+
+  let orders = 0;
+  for (const id of orderIds) {
+    if (completeShoppingApproval(id)) orders += 1;
+  }
+
+  emit();
+  return { schedules, orders };
 }
 
 export function useStatus(id: string): "pending" | "approved" | "declined" | undefined {
