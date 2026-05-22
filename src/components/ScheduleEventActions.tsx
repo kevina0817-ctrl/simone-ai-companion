@@ -15,6 +15,7 @@ import {
   type TimelineEventRow,
 } from "@/lib/schedule-timeline-cache";
 import type { ScheduleLevel } from "@/lib/schedule-item";
+import { getSchedulePriorityStyles } from "@/lib/schedule-priority";
 
 type Props = {
   event: TimelineEventRow;
@@ -131,9 +132,14 @@ export function ScheduleEventActions({ event, userId }: Props) {
                 onChange={(e) => setLevel(e.target.value as ScheduleLevel)}
                 className="w-full rounded-xl border border-border bg-background/60 px-3 py-2"
               >
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
+                {(["High", "Medium", "Low"] as const).map((opt) => {
+                  const styles = getSchedulePriorityStyles(opt);
+                  return (
+                    <option key={opt} value={opt}>
+                      {styles.label} — {opt}
+                    </option>
+                  );
+                })}
               </select>
             </label>
           </div>

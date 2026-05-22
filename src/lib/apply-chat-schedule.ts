@@ -24,6 +24,7 @@ import {
   type ScheduleItem,
   type CancelMatchCriteria,
 } from "@/lib/schedule-item";
+import { resolveScheduleLevel } from "@/lib/schedule-priority";
 
 import {
   shouldParseStructuredScheduleFromReply,
@@ -50,7 +51,7 @@ function toScheduleItem(action: Extract<ChatScheduleAction, { kind: "schedule_ev
     subtitle: action.subtitle ?? null,
     start_time: new Date(action.start_time).toISOString(),
     end_time: action.end_time ? new Date(action.end_time).toISOString() : undefined,
-    level: action.level ?? "Medium",
+    level: resolveScheduleLevel(action.level, action.title),
   };
 }
 

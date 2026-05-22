@@ -19,6 +19,8 @@ import {
 } from "@/lib/approvals-store";
 import type { OrderCategory } from "@/lib/order-category";
 import { formatScheduleTimeRange } from "@/lib/schedule-item";
+import { SchedulePriorityIndicator } from "@/components/SchedulePriorityIndicator";
+import { getSchedulePriorityStyles } from "@/lib/schedule-priority";
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
   approveAllPendingApprovals,
@@ -187,20 +189,19 @@ function ScheduleApprovalCard({ id, item }: { id: string; item: PendingItem }) {
   if (!ev) return null;
 
   const when = formatScheduleTimeRange(ev);
+  const priority = getSchedulePriorityStyles(ev.level, ev.title);
 
   return (
-    <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
+    <article className={`mt-4 rounded-3xl border-l-4 bg-card/70 p-5 shadow-card ${priority.accent}`}>
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15">
-          <Calendar className="h-5 w-5 text-primary" />
+        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${priority.chip}`}>
+          <Calendar className={`h-5 w-5 ${priority.text}`} />
         </div>
         <div className="flex-1">
           <div className="text-base font-medium leading-tight">{ev.title}</div>
           <div className="text-[11px] text-muted-foreground">Schedule • Adds to today&apos;s timeline when approved</div>
         </div>
-        <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[10px] font-medium text-primary">
-          {ev.level}
-        </span>
+        <SchedulePriorityIndicator level={ev.level} title={ev.title} variant="dot-chip" />
       </div>
       <div className="mt-3 rounded-2xl border border-border/60 bg-background/40 p-3 text-sm">
         <div className="text-[11px] uppercase tracking-wide text-muted-foreground">When</div>

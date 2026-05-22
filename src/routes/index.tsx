@@ -11,6 +11,7 @@ import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { ScheduleEventActions } from "@/components/ScheduleEventActions";
+import { SchedulePriorityIndicator, SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
 import {
   backendAvailable,
@@ -39,17 +40,6 @@ export const Route = createFileRoute("/")({
   }),
   component: () => <RequireAuth><Home /></RequireAuth>,
 });
-
-const levelDot: Record<string, string> = {
-  High: "bg-primary",
-  Medium: "bg-champagne",
-  Low: "bg-success",
-};
-const levelChip: Record<string, string> = {
-  High: "bg-primary/15 text-primary",
-  Medium: "bg-champagne/15 text-champagne",
-  Low: "bg-success/15 text-success",
-};
 
 function Home() {
   const { user } = useAuth();
@@ -238,8 +228,11 @@ function Home() {
         {showLifestyle && <PersonaLifestyleCard lifestyle={resolvedLifestyle!} />}
 
         <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-display text-xl">Today's schedule</h2>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-display text-xl">Today's schedule</h2>
+              <SchedulePriorityLegend className="mt-1" />
+            </div>
             <div className="flex items-center gap-3">
               {events && events.length > 0 && (
                 <button
@@ -267,15 +260,18 @@ function Home() {
                       <span className="w-12 text-[11px] font-medium text-muted-foreground">
                         {new Date(item.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                       </span>
-                      <span className={`relative z-10 h-2.5 w-2.5 rounded-full ${levelDot[item.level]} ring-4 ring-card/60`} />
+                      <SchedulePriorityIndicator
+                        level={item.level}
+                        title={item.title}
+                        variant="dot"
+                        className="relative z-10"
+                      />
                       <div className="flex-1">
                         <div className="text-sm font-medium leading-tight">{item.title}</div>
                         <div className="text-xs text-muted-foreground">{item.subtitle}</div>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${levelChip[item.level]}`}>
-                          {item.level}
-                        </span>
+                        <SchedulePriorityIndicator level={item.level} title={item.title} variant="chip" />
                         <ScheduleEventActions event={item} userId={user!.id} />
                       </div>
                     </li>
