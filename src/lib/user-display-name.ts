@@ -7,6 +7,17 @@ type ProfileNameSource = { display_name?: string | null } | null | undefined;
 
 export const PROFILE_DISPLAY_NAME_UPDATED = "simone-profile-display-name-updated";
 
+/** One-time fixes for names corrupted by earlier title-case signup logic. */
+const LEGACY_DISPLAY_NAME_CORRECTIONS: Readonly<Record<string, string>> = {
+  "Gto Wizard": "GTO Wizard",
+};
+
+/** Correct known bad stored names without changing other users. */
+export function correctLegacyDisplayName(displayName: string): string {
+  const trimmed = displayName.trim();
+  return LEGACY_DISPLAY_NAME_CORRECTIONS[trimmed] ?? trimmed;
+}
+
 function titleCaseWord(word: string): string {
   if (!word) return word;
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
@@ -19,7 +30,7 @@ export function buildDisplayNameFromParts(firstName: string, lastName: string): 
 
 /** Stored or user-entered display name — no title-casing. */
 function preserveDisplayName(raw: string): string {
-  return raw.trim();
+  return correctLegacyDisplayName(raw.trim());
 }
 
 /** Read first + last (or display_name) from auth user_metadata after signup. */
@@ -134,18 +145,41 @@ export async function syncProfileDisplayNameFromUser(user: User): Promise<void> 
 
   if (readError) return;
 
-  const canonical = resolveUserDisplayName(user, profile);
+  let canonical = resolveUserDisplayName(user, profile);
   if (!canonical || canonical === "friend") return;
 
+  canonical = correctLegacyDisplayName(canonical);
+
   const stored = profile?.display_name?.trim() ?? "";
-  if (stored === canonical) return;
+  const storedNeedsLegacyFix = stored in LEGACY_DISPLAY_NAME_CORRECTIONS;
+
+  if (stored === canonical && !storedNeedsLegacyFix) return;
 
   const { error: writeError } = await supabase
     .from("profiles")
     .update({ display_name: canonical, updated_at: new Date().toISOString() })
     .eq("id", user.id);
 
-  if (!writeError && typeof window !== "undefined") {
+  if (writeError) return;
+
+  if (storedNeedsLegacyFix || stored !== canonical) {
+    const meta = user.user_metadata ?? {};
+    const last =
+      typeof meta.last_name === "string" && meta.last_name.trim()
+        ? meta.last_name.trim()
+        : canonical.split(/\s+/).slice(1).join(" ");
+
+    await supabase.auth.updateUser({
+      data: {
+        ...meta,
+        display_name: canonical,
+        first_name: storedNeedsLegacyFix ? "GTO" : meta.first_name,
+        last_name: last || "Wizard",
+      },
+    });
+  }
+
+  if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PROFILE_DISPLAY_NAME_UPDATED));
   }
 }
