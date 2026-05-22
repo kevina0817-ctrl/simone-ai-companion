@@ -12,11 +12,14 @@ function titleCaseWord(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }
 
-/** Build a display name from signup first / last name fields. */
+/** Build a display name from signup first / last name fields (preserves exact casing). */
 export function buildDisplayNameFromParts(firstName: string, lastName: string): string {
-  const parts = [firstName.trim(), lastName.trim()].filter(Boolean);
-  if (parts.length === 0) return "";
-  return parts.map(titleCaseWord).join(" ");
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+}
+
+/** Stored or user-entered display name — no title-casing. */
+function preserveDisplayName(raw: string): string {
+  return raw.trim();
 }
 
 /** Read first + last (or display_name) from auth user_metadata after signup. */
@@ -34,7 +37,7 @@ export function resolveNameFromUserMetadata(
 
   const display =
     typeof metadata.display_name === "string" ? metadata.display_name.trim() : "";
-  if (display) return formatDisplayName(display);
+  if (display) return preserveDisplayName(display);
 
   return "";
 }
@@ -91,11 +94,11 @@ export function resolveUserDisplayName(
   const profileName = profile?.display_name?.trim();
 
   if (profileName && !isHandleLikeDisplayName(profileName, user.email)) {
-    return formatDisplayName(profileName);
+    return preserveDisplayName(profileName);
   }
 
   if (fromMetadata && !isHandleLikeDisplayName(fromMetadata, user.email)) {
-    return fromMetadata;
+    return preserveDisplayName(fromMetadata);
   }
 
   if (profileName) return formatDisplayName(profileName);
@@ -104,6 +107,9 @@ export function resolveUserDisplayName(
     typeof user.user_metadata?.display_name === "string"
       ? user.user_metadata.display_name.trim()
       : "";
+  if (metaDisplay && !isHandleLikeDisplayName(metaDisplay, user.email)) {
+    return preserveDisplayName(metaDisplay);
+  }
   if (metaDisplay) return formatDisplayName(metaDisplay);
 
   const local = user.email?.split("@")[0];
