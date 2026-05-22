@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import { inferOrderCategory } from "@/lib/order-category";
+import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
+import { getOrdersSnapshot } from "@/lib/pending-orders-store";
 import type { PendingOrder } from "@/lib/pending-order";
 
 const BUDGET_KEY = "simone:budget";
@@ -112,10 +113,28 @@ function loadOrdersFromStorage(): PendingOrder[] {
   }
 }
 
+function approvedOrdersForSpend(): PendingOrder[] {
+  if (typeof window !== "undefined") {
+    const mem = getOrdersSnapshot();
+    if (mem.length > 0) {
+      return mem.filter((o) => o.status === "approved");
+    }
+  }
+  return loadOrdersFromStorage().filter((o) => o.status === "approved");
+}
+
 export function getApprovedSpendTotal(): number {
-  const approved = loadOrdersFromStorage().filter((o) => o.status === "approved");
-  const sum = approved.reduce((s, o) => s + (Number(o.totalEstimatedPrice) || 0), 0);
+  const sum = approvedOrdersForSpend().reduce((s, o) => s + (Number(o.totalEstimatedPrice) || 0), 0);
   return Math.round(sum * 100) / 100;
+}
+
+export function getApprovedSpendByCategory(): Record<OrderCategory, number> {
+  const totals: Record<OrderCategory, number> = { grocery: 0, amazon: 0, other: 0 };
+  for (const o of approvedOrdersForSpend()) {
+    const cat = o.category ?? inferOrderCategory(o.store, o.title);
+    totals[cat] = Math.round((totals[cat] + (Number(o.totalEstimatedPrice) || 0)) * 100) / 100;
+  }
+  return totals;
 }
 
 export type BudgetSnapshotView = {
@@ -123,6 +142,13 @@ export type BudgetSnapshotView = {
   cap: number | "unlimited";
   showWarning: boolean;
   monthOnlyCap: number | null;
+  period: BudgetPeriod;
+  periodAmount: number | "unlimited";
+  alertAt: number;
+  remaining: number | null;
+  percentUsed: number;
+  nearAlert: boolean;
+  spentByCategory: Record<OrderCategory, number>;
 };
 
 let cachedBudgetKey = "";
@@ -131,23 +157,74 @@ let cachedBudgetView: BudgetSnapshotView = {
   cap: 800,
   showWarning: false,
   monthOnlyCap: null,
+  period: "Monthly",
+  periodAmount: 800,
+  alertAt: 90,
+  remaining: 800,
+  percentUsed: 0,
+  nearAlert: false,
+  spentByCategory: { grocery: 0, amazon: 0, other: 0 },
 };
 
 function getBudgetSnapshotView(): BudgetSnapshotView {
+  const settings = readBudgetSettings();
   const spent = getApprovedSpendTotal();
   const cap = getEffectiveMonthlyCap();
   const showWarning = getBudgetExceededWarning();
   const monthOnlyCap = readTracking().monthOnlyCap;
-  const key = `${spent}|${cap}|${showWarning}|${monthOnlyCap ?? ""}`;
+  const alertAt = settings.alertAt ?? 90;
+  const unlimited = cap === "unlimited";
+  const monthly = unlimited ? 0 : Math.max(0, cap);
+  const percentUsed =
+    unlimited || monthly <= 0 ? 0 : Math.min(100, Math.round((spent / monthly) * 100));
+  const nearAlert = !unlimited && monthly > 0 && percentUsed >= alertAt && spent <= monthly;
+  const remaining = unlimited ? null : Math.round((monthly - spent) * 100) / 100;
+  const spentByCategory = getApprovedSpendByCategory();
+
+  const key = `${spent}|${cap}|${showWarning}|${monthOnlyCap ?? ""}|${settings.period}|${settings.amount}|${alertAt}|${spentByCategory.grocery}|${spentByCategory.other}`;
   if (key === cachedBudgetKey) return cachedBudgetView;
   cachedBudgetKey = key;
-  cachedBudgetView = { spent, cap, showWarning, monthOnlyCap };
+  cachedBudgetView = {
+    spent,
+    cap,
+    showWarning,
+    monthOnlyCap,
+    period: settings.period,
+    periodAmount: settings.amount,
+    alertAt,
+    remaining,
+    percentUsed,
+    nearAlert,
+    spentByCategory,
+  };
   return cachedBudgetView;
 }
+
+/** After persona seed or order replace — align warning state with spend vs cap. */
+export function syncBudgetWithApprovedSpend(settings?: BudgetSettings) {
+  if (typeof window === "undefined") return;
+  if (settings) writeBudgetSettings(settings);
+  const cap = getEffectiveMonthlyCap();
+  const spent = getApprovedSpendTotal();
+  const alertAt = (settings ?? readBudgetSettings()).alertAt ?? 90;
+  if (cap !== "unlimited" && cap > 0) {
+    const pct = (spent / cap) * 100;
+    const t = readTracking();
+    if (spent > cap || pct >= alertAt) {
+      writeTracking({ ...t, monthKey: currentMonthKey(), showExceededWarning: spent > cap });
+    }
+  }
+  notifyBudgetChanged();
+}
+
+export const BUDGET_CHANGED_EVENT = "simone-budget-changed";
 
 export function notifyBudgetChanged() {
   cachedBudgetKey = "";
   emitBudget();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(BUDGET_CHANGED_EVENT));
+  }
 }
 
 export type BudgetCheck = {

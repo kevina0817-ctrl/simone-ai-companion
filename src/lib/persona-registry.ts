@@ -1,5 +1,7 @@
 import type { User } from "@supabase/supabase-js";
-import { writeBudgetSettings } from "@/lib/budget-store";
+import { syncBudgetWithApprovedSpend } from "@/lib/budget-store";
+import { resetApprovalsPending } from "@/lib/approvals-store";
+import { replacePendingOrders } from "@/lib/pending-orders-store";
 import type { DemoMessage } from "@/lib/demo-mode";
 import {
   isJordanRossEmail,
@@ -155,10 +157,9 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   );
   localStorage.setItem("simone-demo-messages", JSON.stringify(persona.chatMessages()));
 
-  writeBudgetSettings(persona.budget);
-
-  void import("@/lib/pending-orders-store").then((m) => m.replacePendingOrders(orders));
-  void import("@/lib/approvals-store").then((m) => m.resetApprovalsPending(persona.approvals(orders)));
+  replacePendingOrders(orders);
+  resetApprovalsPending(persona.approvals(orders));
+  syncBudgetWithApprovedSpend(persona.budget);
 
   window.dispatchEvent(new Event("simone-demo-events-changed"));
   window.dispatchEvent(new Event("simone-persona-wellness-changed"));

@@ -5,7 +5,7 @@ export function inferOrderCategory(store: string, title?: string): OrderCategory
   const s = `${store} ${title ?? ""}`.toLowerCase();
   if (/\bamazon\b/.test(s)) return "amazon";
   if (
-    /\b(whole foods|trader joe|grocery|groceries|target|costco|safeway|kroger|wegmans)\b/.test(
+    /\b(whole foods|trader joe|t&t|tnt|grocery|groceries|target|costco|safeway|kroger|wegmans)\b/.test(
       s,
     )
   ) {

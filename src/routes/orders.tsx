@@ -7,10 +7,14 @@ import { PendingOrderCard } from "@/components/PendingOrderCard";
 import type { OrderCategory } from "@/lib/pending-order";
 import {
   applyMonthOnlyBudgetIncrease,
+  BUDGET_CHANGED_EVENT,
   dismissBudgetExceededWarning,
+  notifyBudgetChanged,
   useBudgetSnapshot,
 } from "@/lib/budget-store";
 import { useApprovedOrders } from "@/lib/pending-orders-store";
+import { useAuth } from "@/hooks/useAuth";
+import { applyPersonaForUser } from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -21,15 +25,19 @@ const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
 
 function BudgetExceededWarning() {
-  const { showWarning } = useBudgetSnapshot();
+  const { showWarning, spent, cap } = useBudgetSnapshot();
+  const unlimited = cap === "unlimited";
+  const monthly = unlimited ? 0 : cap;
 
-  if (!showWarning) return null;
+  if (!showWarning && !(spent > monthly && !unlimited)) return null;
+  if (unlimited) return null;
 
   return (
     <div className="mt-4 rounded-2xl border border-risk-medium/40 bg-risk-medium/10 px-4 py-3 text-sm">
       <p className="leading-relaxed text-foreground">
-        Warning: You have exceeded your budget threshold. Would you like me to adjust it to
-        higher for this month only?
+        {spent > monthly
+          ? `You're $${(spent - monthly).toFixed(2)} over your ${monthly.toFixed(0)} monthly cap. Raise it for this month only?`
+          : "You're approaching your budget alert threshold. Raise your cap for this month only?"}
       </p>
       <div className="mt-3 flex gap-2">
         <button
@@ -52,23 +60,40 @@ function BudgetExceededWarning() {
 }
 
 function BudgetCard() {
-  const { spent, cap } = useBudgetSnapshot();
+  const {
+    spent,
+    cap,
+    period,
+    periodAmount,
+    alertAt,
+    remaining,
+    percentUsed,
+    nearAlert,
+    spentByCategory,
+  } = useBudgetSnapshot();
   const unlimited = cap === "unlimited";
   const monthly = unlimited ? 0 : Math.max(0, cap);
-  const pct =
-    unlimited || monthly <= 0 ? 0 : Math.min(100, Math.round((spent / monthly) * 100));
+  const pct = unlimited || monthly <= 0 ? 0 : percentUsed;
 
   useEffect(() => {
-    const read = () => {
-      void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
-    };
-    window.addEventListener("storage", read);
-    window.addEventListener("focus", read);
+    const refresh = () => notifyBudgetChanged();
+    window.addEventListener(BUDGET_CHANGED_EVENT, refresh);
+    window.addEventListener("simone-persona-wellness-changed", refresh);
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    refresh();
     return () => {
-      window.removeEventListener("storage", read);
-      window.removeEventListener("focus", read);
+      window.removeEventListener(BUDGET_CHANGED_EVENT, refresh);
+      window.removeEventListener("simone-persona-wellness-changed", refresh);
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
+
+  const periodLabel =
+    periodAmount === "unlimited"
+      ? `${period} · unlimited`
+      : `${period} · $${typeof periodAmount === "number" ? periodAmount.toLocaleString() : periodAmount}`;
 
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
@@ -79,11 +104,19 @@ function BudgetCard() {
         <div className="flex-1">
           <div className="text-sm font-medium">Budget threshold</div>
           <div className="text-[11px] text-muted-foreground">
+            {periodLabel}
+            {!unlimited && ` · alert at ${alertAt}%`}
+          </div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">
             {unlimited
               ? "Unlimited monthly budget — track spending freely."
               : spent > monthly
                 ? `Over monthly cap by $${(spent - monthly).toFixed(2)}.`
-                : `You've spent ${pct}% of your monthly budget.`}
+                : nearAlert
+                  ? `At ${pct}% — within ${alertAt}% alert zone.`
+                  : remaining != null && remaining >= 0
+                    ? `$${remaining.toFixed(2)} left this month.`
+                    : `You've spent ${pct}% of your monthly budget.`}
           </div>
         </div>
         <div className="text-right text-xs font-medium">
@@ -93,10 +126,23 @@ function BudgetCard() {
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
         <div
-          className={`h-full rounded-full ${spent > monthly && !unlimited ? "bg-risk-medium" : "bg-gradient-to-r from-primary to-champagne"}`}
+          className={`h-full rounded-full transition-all ${
+            spent > monthly && !unlimited
+              ? "bg-risk-medium"
+              : nearAlert
+                ? "bg-champagne"
+                : "bg-gradient-to-r from-primary to-champagne"
+          }`}
           style={{ width: unlimited ? "20%" : `${Math.min(100, pct)}%` }}
         />
       </div>
+      {!unlimited && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+          <CategorySpend label="Grocery" amount={spentByCategory.grocery} />
+          <CategorySpend label="Amazon" amount={spentByCategory.amazon} />
+          <CategorySpend label="Other" amount={spentByCategory.other} />
+        </div>
+      )}
       <BudgetExceededWarning />
       <Link
         to="/orders/budget"
@@ -111,6 +157,15 @@ function BudgetCard() {
         </div>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </Link>
+    </div>
+  );
+}
+
+function CategorySpend({ label, amount }: { label: string; amount: number }) {
+  return (
+    <div className="rounded-lg bg-secondary/40 px-2 py-1.5">
+      <div className="text-muted-foreground">{label}</div>
+      <div className="font-medium text-foreground">${amount.toFixed(2)}</div>
     </div>
   );
 }
@@ -163,6 +218,12 @@ function TabContent({ tab }: { tab: Tab }) {
 
 function OrdersPage() {
   const [tab, setTab] = useState<Tab>("All");
+  const { user } = useAuth();
+
+  useEffect(() => {
+    applyPersonaForUser(user);
+    notifyBudgetChanged();
+  }, [user?.id, user?.email]);
 
   return (
     <MobileFrame>
