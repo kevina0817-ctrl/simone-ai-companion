@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, ChevronRight, Inbox, Menu, ShoppingBag, SlidersHorizontal } from "lucide-react";
+import { Bell, ChevronRight, Inbox, Menu, SlidersHorizontal, Wallet } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -24,6 +24,16 @@ export const Route = createFileRoute("/orders")({
 
 const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
+
+/** Alert zone / red warning band begins at 67% of monthly budget spent. */
+const ALERT_ZONE_PERCENT = 67;
+
+function budgetProgressBarColor(percentUsed: number, overMonthlyCap: boolean): string {
+  if (overMonthlyCap) return "bg-risk-high";
+  if (percentUsed <= 33) return "bg-success";
+  if (percentUsed <= 66) return "bg-champagne";
+  return "bg-risk-medium";
+}
 
 function BudgetExceededWarning() {
   const { showWarning, spent, cap } = useBudgetSnapshot();
@@ -66,10 +76,8 @@ function BudgetCard() {
     cap,
     period,
     periodAmount,
-    alertAt,
     remaining,
     percentUsed,
-    nearAlert,
     spentByCategory,
   } = useBudgetSnapshot();
   const unlimited = cap === "unlimited";
@@ -99,22 +107,22 @@ function BudgetCard() {
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-champagne/20">
-          <ShoppingBag className="h-5 w-5 text-champagne" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/15">
+          <Wallet className="h-5 w-5 text-success" />
         </div>
         <div className="flex-1">
           <div className="text-sm font-medium">Budget threshold</div>
           <div className="text-[11px] text-muted-foreground">
             {periodLabel}
-            {!unlimited && ` · alert at ${alertAt}%`}
+            {!unlimited && ` · alert zone from ${ALERT_ZONE_PERCENT}%`}
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
             {unlimited
               ? "Unlimited monthly budget — track spending freely."
               : spent > monthly
                 ? `Over monthly cap by $${(spent - monthly).toFixed(2)}.`
-                : nearAlert
-                  ? `At ${pct}% — within ${alertAt}% alert zone.`
+                : pct >= ALERT_ZONE_PERCENT
+                  ? `At ${pct}% — in alert zone (${ALERT_ZONE_PERCENT}%+).`
                   : remaining != null && remaining >= 0
                     ? `$${remaining.toFixed(2)} left this month.`
                     : `You've spent ${pct}% of your monthly budget.`}
@@ -125,17 +133,24 @@ function BudgetCard() {
           <span className="text-muted-foreground"> / {unlimited ? "∞" : `$${monthly}`}</span>
         </div>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-secondary">
-        <div
-          className={`h-full rounded-full transition-all ${
-            spent > monthly && !unlimited
-              ? "bg-risk-medium"
-              : nearAlert
-                ? "bg-champagne"
-                : "bg-gradient-to-r from-primary to-champagne"
-          }`}
-          style={{ width: unlimited ? "20%" : `${Math.min(100, pct)}%` }}
-        />
+      <div className="relative mt-3 h-2">
+        <div className="h-2 overflow-hidden rounded-full bg-secondary">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${budgetProgressBarColor(
+              pct,
+              !unlimited && spent > monthly,
+            )}`}
+            style={{ width: unlimited ? "20%" : `${Math.min(100, pct)}%` }}
+          />
+        </div>
+        {!unlimited && (
+          <div
+            className="pointer-events-none absolute top-0 z-10 h-full w-px -translate-x-1/2 bg-foreground/45 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+            style={{ left: `${ALERT_ZONE_PERCENT}%` }}
+            aria-hidden
+            title={`Alert zone starts at ${ALERT_ZONE_PERCENT}%`}
+          />
+        )}
       </div>
       {!unlimited && (
         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
