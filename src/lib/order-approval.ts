@@ -10,6 +10,7 @@ import {
   completeShoppingApproval,
   declineShoppingApproval as declineShoppingApprovalInStore,
   executeApproveAllPending,
+  executeDeclineAllPending,
   getPendingApprovalIds,
   getPendingItemsByKind,
   resolveOrderIdForApproval,
@@ -143,4 +144,15 @@ export async function approveAllPendingApprovals(
 
   const { schedules, orders } = await executeApproveAllPending(ctx);
   return { status: "approved", schedules, orders };
+}
+
+export type DeclineAllPendingResult =
+  | { status: "declined"; schedules: number; orders: number }
+  | { status: "nothing_pending" };
+
+/** Decline every pending approval without touching timeline, Orders, or budget. */
+export function declineAllPendingApprovals(): DeclineAllPendingResult {
+  if (getPendingApprovalIds().length === 0) return { status: "nothing_pending" };
+  const { schedules, orders } = executeDeclineAllPending();
+  return { status: "declined", schedules, orders };
 }

@@ -22,6 +22,7 @@ import { formatScheduleTimeRange } from "@/lib/schedule-item";
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
   approveAllPendingApprovals,
+  declineAllPendingApprovals,
   approveShoppingOrderWithMonthlyBudgetCad,
   categoryLabel,
   declineShoppingApproval,
@@ -514,6 +515,24 @@ function ApproveAllBar() {
     toast.success(parts.length > 0 ? `Approved — ${parts.join("; ")}` : "All items approved");
   };
 
+  const onDeclineAll = () => {
+    setBusy(true);
+    clearBudgetFlow();
+    try {
+      const result = declineAllPendingApprovals();
+      if (result.status === "declined") {
+        const n = result.schedules + result.orders;
+        toast.message(
+          n === 0
+            ? "Nothing left to decline"
+            : `Declined ${n} item${n === 1 ? "" : "s"} — removed from your review queue`,
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onApproveAll = async () => {
     if (!ctx) return;
     setBusy(true);
@@ -567,17 +586,27 @@ function ApproveAllBar() {
         <div>
           <div className="text-sm font-medium">Review {pending.length} pending</div>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Approve schedule events and orders in one step
+            Approve or decline everything in your review queue
           </p>
         </div>
-        <button
-          type="button"
-          disabled={!ctx || busy || inBudgetFlow}
-          onClick={() => void onApproveAll()}
-          className="shrink-0 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
-        >
-          Approve All
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            disabled={busy || inBudgetFlow}
+            onClick={onDeclineAll}
+            className="rounded-full border border-border bg-secondary/50 px-4 py-2 text-sm font-medium disabled:opacity-50"
+          >
+            Decline All
+          </button>
+          <button
+            type="button"
+            disabled={!ctx || busy || inBudgetFlow}
+            onClick={() => void onApproveAll()}
+            className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+          >
+            Approve All
+          </button>
+        </div>
       </div>
       {budgetCheck && !showBudgetInput && (
         <OrderBudgetPrompt

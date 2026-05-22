@@ -263,6 +263,31 @@ export async function executeApproveAllPending(
   return { schedules, orders };
 }
 
+/** Decline all pending items — no timeline, Orders, or budget updates. */
+export function executeDeclineAllPending(): { schedules: number; orders: number } {
+  const { scheduleIds, orderIds } = getPendingItemsByKind();
+  let schedules = 0;
+
+  for (const id of scheduleIds) {
+    const entry = state.items[id];
+    if (!entry || entry.status !== "pending") continue;
+    markApprovalDecided(id, "declined");
+    removeFromPendingApprovalQueue(id);
+    schedules += 1;
+  }
+
+  let orders = 0;
+  for (const id of orderIds) {
+    const entry = state.items[id];
+    if (!entry || entry.status !== "pending") continue;
+    declineShoppingApproval(id);
+    orders += 1;
+  }
+
+  emit();
+  return { schedules, orders };
+}
+
 export function useStatus(id: string): "pending" | "approved" | "declined" | undefined {
   const s = useApprovalsSnapshot();
   return s.items[id]?.status;
