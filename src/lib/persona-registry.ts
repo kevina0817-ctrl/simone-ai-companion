@@ -42,14 +42,12 @@ function personaBudgetMatches(persona: PersonaBundle): boolean {
   return saved.period === persona.budget.period && saved.amount === persona.budget.amount;
 }
 
-/** Align budget with persona only when switching accounts — never overwrite a user-raised cap. */
+/** Always align Orders budget cap with the signed-in persona (e.g. Nicole $2200 not Kevin $850). */
 export function ensurePersonaBudgetForEmail(email: string | undefined | null): void {
   if (typeof window === "undefined") return;
   const persona = resolvePersonaByEmail(email);
   if (!persona) return;
-  const prevActive = localStorage.getItem(ACTIVE_PERSONA_KEY);
-  const personaChanged = prevActive != null && prevActive !== persona.id;
-  if (personaChanged && !personaBudgetMatches(persona)) {
+  if (!personaBudgetMatches(persona)) {
     syncBudgetWithApprovedSpend(persona.budget);
   }
 }
@@ -247,18 +245,9 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   }
 
   localStorage.setItem(ACTIVE_PERSONA_KEY, persona.id);
-
-  const shouldReseedOrdersAndApprovals = personaChanged || !skipContentSeed;
-  if (shouldReseedOrdersAndApprovals) {
-    replacePendingOrders(orders);
-    resetApprovalsPending(persona.approvals(orders));
-    if (!personaBudgetMatches(persona)) {
-      syncBudgetWithApprovedSpend(persona.budget);
-    }
-  } else {
-    void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
-    void import("@/lib/pending-orders-store").then((m) => m.notifyOrdersChanged());
-  }
+  replacePendingOrders(orders);
+  resetApprovalsPending(persona.approvals(orders));
+  syncBudgetWithApprovedSpend(persona.budget);
 
   window.dispatchEvent(new Event("simone-demo-events-changed"));
   window.dispatchEvent(new Event("simone-persona-wellness-changed"));

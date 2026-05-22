@@ -6,8 +6,6 @@ import type { PendingOrder, PendingOrderStatus } from "@/lib/pending-order";
 const STORAGE_KEY = "simone-pending-orders";
 const SESSION_FLAG = "simone-orders-session";
 
-export const ORDERS_CHANGED_EVENT = "simone-orders-changed";
-
 const listeners = new Set<() => void>();
 
 function loadFromStorage(): PendingOrder[] {
@@ -46,13 +44,6 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
-export function notifyOrdersChanged() {
-  emit();
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(ORDERS_CHANGED_EVENT));
-  }
-}
-
 function subscribe(listener: () => void) {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -60,12 +51,6 @@ function subscribe(listener: () => void) {
 
 function getSnapshot() {
   return orders;
-}
-
-function getApprovedSnapshot(): PendingOrder[] {
-  return orders.filter(
-    (o) => o.status === "approved" && isShoppingOrderCategory(o.category ?? inferOrderCategory(o.store, o.title)),
-  );
 }
 
 export function addPendingOrder(order: PendingOrder): PendingOrder {
@@ -93,20 +78,10 @@ export function setPendingOrderStatus(id: string, status: PendingOrderStatus) {
   if (idx < 0) return;
   orders = orders.map((o) => (o.id === id ? { ...o, status } : o));
   persist();
-  notifyOrdersChanged();
-}
-
-/** Approve order in store — preserves category for Orders tabs (Grocery / Amazon / Other). */
-export function approveOrderInStore(orderId: string): PendingOrder | undefined {
-  const existing = orders.find((o) => o.id === orderId);
-  if (!existing) return undefined;
-  const category = existing.category ?? inferOrderCategory(existing.store, existing.title);
-  orders = orders.map((o) =>
-    o.id === orderId ? { ...o, category, status: "approved" as const } : o,
-  );
-  persist();
-  notifyOrdersChanged();
-  return orders.find((o) => o.id === orderId);
+  emit();
+  if (typeof window !== "undefined") {
+    void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
+  }
 }
 
 export function usePendingOrders() {
@@ -121,7 +96,10 @@ export function usePendingApprovalOrders() {
 
 /** Approved grocery / Amazon / online orders — Orders page only (never calendar events). */
 export function useApprovedOrders() {
-  return useSyncExternalStore(subscribe, getApprovedSnapshot, () => [] as PendingOrder[]);
+  const all = usePendingOrders();
+  return all.filter(
+    (o) => o.status === "approved" && isShoppingOrderCategory(o.category),
+  );
 }
 
 export function clearAllOrders() {
