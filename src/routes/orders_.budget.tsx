@@ -22,33 +22,64 @@ const CATEGORIES = [
   { key: "others", label: "Others", emoji: "🛍️" },
 ];
 
-const PRESETS: Record<Period, { amount: number; cats: Record<string, number> }> = {
-  Weekly:    { amount: 200,  cats: { grocery: 100, amazon: 60,  others: 40  } },
-  Monthly:   { amount: 800,  cats: { grocery: 400, amazon: 250, others: 150 } },
-  Quarterly: { amount: 2400, cats: { grocery: 1200, amazon: 750, others: 450 } },
+const PRESETS: Record<Period, { amount: number }> = {
+  Weekly: { amount: 200 },
+  Monthly: { amount: 800 },
+  Quarterly: { amount: 2400 },
 };
+
+const EMPTY_CATS: Record<string, number> = { grocery: 0, amazon: 0, others: 0 };
+
+function readUiCategoryCats(raw: Record<string, number> | undefined): Record<string, number> {
+  if (!raw) return { ...EMPTY_CATS };
+  const keyMap: Record<string, keyof typeof EMPTY_CATS> = {
+    grocery: "grocery",
+    Grocery: "grocery",
+    amazon: "amazon",
+    Amazon: "amazon",
+    others: "others",
+    Others: "others",
+    other: "others",
+    Other: "others",
+  };
+  const out = { ...EMPTY_CATS };
+  for (const [k, val] of Object.entries(raw)) {
+    const uiKey = keyMap[k];
+    if (uiKey && typeof val === "number") out[uiKey] = val;
+  }
+  return out;
+}
 
 function BudgetPage() {
   const navigate = useNavigate();
   const [period, setPeriodState] = useState<Period>("Monthly");
   const [amount, setAmount] = useState<number>(PRESETS.Monthly.amount);
   const [alertAt, setAlertAt] = useState<number>(90);
-  const [cats, setCats] = useState<Record<string, number>>(PRESETS.Monthly.cats);
+  const [cats, setCats] = useState<Record<string, number>>({ ...EMPTY_CATS });
   const [saved, setSaved] = useState(false);
+
+  const setAmountAndResetCats = (next: number) => {
+    setAmount(next);
+    setCats({ ...EMPTY_CATS });
+  };
 
   const setPeriod = (p: Period) => {
     setPeriodState(p);
-    setAmount(PRESETS[p].amount);
-    setCats(PRESETS[p].cats);
+    setAmountAndResetCats(PRESETS[p].amount);
   };
 
   useEffect(() => {
     const v = readBudgetSettings();
-    if (v.period) setPeriodState(v.period);
+    const p = v.period ?? "Monthly";
+    if (v.period) setPeriodState(p);
     if (v.amount === "unlimited") setAmount(Infinity);
     else if (typeof v.amount === "number") setAmount(v.amount);
     if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
-    if (v.cats) setCats({ ...PRESETS[v.period ?? "Monthly"].cats, ...v.cats });
+    const uiCats = readUiCategoryCats(v.cats);
+    const savedFromThisForm = ["grocery", "amazon", "others"].some(
+      (k) => typeof v.cats?.[k] === "number",
+    );
+    setCats(savedFromThisForm ? uiCats : { ...EMPTY_CATS });
   }, []);
 
   const total = Object.values(cats).reduce((a, b) => a + b, 0);
@@ -110,15 +141,20 @@ function BudgetPage() {
               disabled={amount === Infinity}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(/[^\d]/g, ""));
-                setAmount(Math.max(0, Number.isFinite(n) ? n : 0));
+                setAmountAndResetCats(Math.max(0, Number.isFinite(n) ? n : 0));
               }}
               className="h-12 text-2xl font-display"
             />
             <button
               type="button"
-              onClick={() =>
-                setAmount(amount === Infinity ? PRESETS[period].amount : Infinity)
-              }
+              onClick={() => {
+                if (amount === Infinity) {
+                  setAmountAndResetCats(PRESETS[period].amount);
+                } else {
+                  setAmount(Infinity);
+                  setCats({ ...EMPTY_CATS });
+                }
+              }}
               className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-medium transition-colors ${
                 amount === Infinity
                   ? "bg-primary text-primary-foreground"
@@ -137,7 +173,7 @@ function BudgetPage() {
                   min={50}
                   max={sliderMax}
                   step={50}
-                  onValueChange={(v) => setAmount(v[0])}
+                  onValueChange={(v) => setAmountAndResetCats(v[0])}
                 />
                 <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
                   <span>$50</span><span>${sliderMax.toLocaleString()}+</span>
