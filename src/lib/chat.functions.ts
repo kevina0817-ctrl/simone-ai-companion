@@ -10,6 +10,7 @@ import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
   shouldCreateOrderApproval,
+  shouldRequireScheduleApproval,
 } from "@/lib/chat-intent";
 
 const inputSchema = z.object({
@@ -32,8 +33,10 @@ You CAN take real actions using tools:
 - cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
 - create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
-SINGLE EVENT (direct to Today's Schedule): When the user asks to add/book/schedule ONE specific event for today (e.g. "Add gym at 7 PM today"), call schedule_event once — it is added directly to Today's Schedule with NO Approvals step.
-MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with multiple activities, weekend itineraries, or when they ask to add events to Approvals — call schedule_event once per activity; each goes to Approvals first.
+SINGLE EVENT (direct to Today's Schedule): When the user asks to add/book/schedule ONE specific event for today (e.g. "Add gym at 7 PM today"), call schedule_event once — it is added directly to Today's Schedule with NO Approvals step. Confirm it is already on their schedule; NEVER say pending approval, awaiting confirmation, or "once you confirm".
+MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with multiple activities, weekend itineraries, or when they ask to add events to Approvals — call schedule_event once per activity; each goes to Approvals first. Only then mention Approvals or confirmation.
+When the schedule_event tool returns added_to_today_schedule: true, the event is already live — use past-tense direct confirmation only.
+When the tool returns pending_approval: true, the event is waiting in Approvals — you may mention reviewing or confirming there.
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
 When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
 For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
@@ -231,7 +234,18 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             if (tc.function.name === "schedule_event") {
               const item = normalizeScheduleFromToolArgs(args);
               if (!item) throw new Error("Invalid schedule fields");
-              result = { ok: true, pending_approval: true, event: item };
+              const needsApproval = shouldRequireScheduleApproval(data.message, 1, {
+                toolCallCount: 1,
+              });
+              result = needsApproval
+                ? { ok: true, pending_approval: true, event: item }
+                : {
+                    ok: true,
+                    added_to_today_schedule: true,
+                    message:
+                      "Event is already on today's schedule (no Approvals). Confirm directly to the user.",
+                    event: item,
+                  };
               actions.push({
                 kind: "schedule_event",
                 title: item.title,

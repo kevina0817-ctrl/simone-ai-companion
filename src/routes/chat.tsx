@@ -15,6 +15,7 @@ import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
 import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
+import { applyScheduleReplyOutcome } from "@/lib/chat-schedule-reply";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
 import {
   applyChatCurrencyToReply,
@@ -156,6 +157,11 @@ function ChatPage() {
         userId: user!.id,
       });
 
+      const displayReply = applyScheduleReplyOutcome(replyText, {
+        committed,
+        pendingApproval,
+      });
+
       if (committed.length > 0) {
         toast.success(
           committed.length === 1
@@ -198,12 +204,12 @@ function ChatPage() {
       const aiMessage = {
         id: `ai-${Date.now()}`,
         role: "assistant",
-        content: replyText,
+        content: displayReply,
         created_at: new Date().toISOString(),
       };
 
       if (!backendAvailable) {
-        addDemoMessage({ role: "assistant", content: replyText });
+        addDemoMessage({ role: "assistant", content: displayReply });
       }
 
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [

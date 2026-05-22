@@ -8,6 +8,7 @@ import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
   shouldCreateOrderApproval,
+  shouldRequireScheduleApproval,
 } from "@/lib/chat-intent";
 
 const eventSchema = z.object({
@@ -44,7 +45,7 @@ Be concise (1-3 short sentences), warm, perceptive, and proactive. Reference the
 Answer ANY question intelligently — small talk, advice, planning, recommendations, reflection prompts, summaries of their day, etc.
 
 You CAN take real actions via tools when (and only when) the user clearly asks:
-- schedule_event: add one event (title + start_time + end_time ISO). One specific event for today → direct to Today's Schedule; multiple events or full plans → Approvals.
+- schedule_event: add one event (title + start_time + end_time ISO). One specific event for today → direct to Today's Schedule; multiple events or full plans → Approvals. For direct adds, confirm it is already scheduled — never say pending approval or "once you confirm".
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
 - create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in USD).
 
@@ -212,10 +213,33 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
           tool_calls: msg.tool_calls,
         });
         for (const tc of msg.tool_calls) {
+          let toolPayload: Record<string, unknown> = { ok: true };
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            if (tc.function.name === "schedule_event") {
+              const item = normalizeScheduleFromToolArgs(args);
+              if (item) {
+                const needsApproval = shouldRequireScheduleApproval(data.message, 1, {
+                  toolCallCount: 1,
+                });
+                toolPayload = needsApproval
+                  ? { ok: true, pending_approval: true, event: item }
+                  : {
+                      ok: true,
+                      added_to_today_schedule: true,
+                      message:
+                        "Event is already on today's schedule (no Approvals). Confirm directly.",
+                      event: item,
+                    };
+              }
+            }
+          } catch {
+            // keep { ok: true }
+          }
           messages.push({
             role: "tool",
             tool_call_id: tc.id,
-            content: JSON.stringify({ ok: true }),
+            content: JSON.stringify(toolPayload),
           });
         }
         continue;
