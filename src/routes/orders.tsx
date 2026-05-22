@@ -14,7 +14,7 @@ import {
 } from "@/lib/budget-store";
 import { useApprovedOrders } from "@/lib/pending-orders-store";
 import { useAuth } from "@/hooks/useAuth";
-import { applyPersonaForUser } from "@/lib/persona-registry";
+import { applyPersonaForUser, ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -222,6 +222,7 @@ function OrdersPage() {
 
   useEffect(() => {
     applyPersonaForUser(user);
+    ensurePersonaBudgetForEmail(user?.email);
     notifyBudgetChanged();
   }, [user?.id, user?.email]);
 

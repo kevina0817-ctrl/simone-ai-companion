@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { backendAvailable, demoUser } from "@/lib/demo-mode";
-import { applyPersonaForUser } from "@/lib/persona-registry";
+import { applyPersonaForUser, ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
 
 type AuthCtx = {
   user: User | null;
@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setLoading(false);
       applyPersonaForUser(s?.user);
+      ensurePersonaBudgetForEmail(s?.user?.email);
     });
 
     supabase.auth.getSession()
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         setSession(data.session);
         applyPersonaForUser(data.session?.user);
+        ensurePersonaBudgetForEmail(data.session?.user?.email);
       })
       .catch(() => {
         if (active) setSession(null);

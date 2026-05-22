@@ -1,5 +1,5 @@
 import type { User } from "@supabase/supabase-js";
-import { syncBudgetWithApprovedSpend } from "@/lib/budget-store";
+import { readBudgetSettings, syncBudgetWithApprovedSpend } from "@/lib/budget-store";
 import { resetApprovalsPending } from "@/lib/approvals-store";
 import { replacePendingOrders } from "@/lib/pending-orders-store";
 import type { DemoMessage } from "@/lib/demo-mode";
@@ -33,6 +33,22 @@ import {
 import type { PersonaBundle, PersonaWellness } from "@/lib/persona-types";
 
 export const LIFESTYLE_STORAGE_KEY = "simone-persona-lifestyle";
+const ACTIVE_PERSONA_KEY = "simone-active-persona-id";
+
+function personaBudgetMatches(persona: PersonaBundle): boolean {
+  const saved = readBudgetSettings();
+  return saved.period === persona.budget.period && saved.amount === persona.budget.amount;
+}
+
+/** Always align Orders budget cap with the signed-in persona (e.g. Nicole $2200 not Kevin $850). */
+export function ensurePersonaBudgetForEmail(email: string | undefined | null): void {
+  if (typeof window === "undefined") return;
+  const persona = resolvePersonaByEmail(email);
+  if (!persona) return;
+  if (!personaBudgetMatches(persona)) {
+    syncBudgetWithApprovedSpend(persona.budget);
+  }
+}
 
 export type StoredPersonaLifestyle = {
   personaId: string;
@@ -136,27 +152,33 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   if (typeof window === "undefined") return;
   const persona = resolvePersonaByEmail(email);
   if (!persona) return;
-  if (!opts?.force && localStorage.getItem(persona.seededFlagKey)) return;
 
-  const events = persona.scheduleToday();
   const orders = persona.orders();
+  const prevActive = localStorage.getItem(ACTIVE_PERSONA_KEY);
+  const personaChanged = prevActive !== persona.id;
+  const skipContentSeed =
+    !opts?.force && !personaChanged && Boolean(localStorage.getItem(persona.seededFlagKey));
 
-  localStorage.setItem("simone-demo-events", JSON.stringify(events));
-  localStorage.setItem(persona.seededFlagKey, new Date().toISOString());
-  localStorage.setItem(
-    LIFESTYLE_STORAGE_KEY,
-    JSON.stringify({
-      personaId: persona.id,
-      wellness: persona.wellness,
-      insight: persona.insight,
-      recommendations: persona.recommendations,
-      notifications: persona.notifications,
-      preferences: persona.preferences,
-      weekOverview: persona.weekOverview,
-    } satisfies StoredPersonaLifestyle),
-  );
-  localStorage.setItem("simone-demo-messages", JSON.stringify(persona.chatMessages()));
+  if (!skipContentSeed) {
+    const events = persona.scheduleToday();
+    localStorage.setItem("simone-demo-events", JSON.stringify(events));
+    localStorage.setItem(persona.seededFlagKey, new Date().toISOString());
+    localStorage.setItem(
+      LIFESTYLE_STORAGE_KEY,
+      JSON.stringify({
+        personaId: persona.id,
+        wellness: persona.wellness,
+        insight: persona.insight,
+        recommendations: persona.recommendations,
+        notifications: persona.notifications,
+        preferences: persona.preferences,
+        weekOverview: persona.weekOverview,
+      } satisfies StoredPersonaLifestyle),
+    );
+    localStorage.setItem("simone-demo-messages", JSON.stringify(persona.chatMessages()));
+  }
 
+  localStorage.setItem(ACTIVE_PERSONA_KEY, persona.id);
   replacePendingOrders(orders);
   resetApprovalsPending(persona.approvals(orders));
   syncBudgetWithApprovedSpend(persona.budget);
@@ -168,6 +190,7 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
 export function applyPersonaForUser(user: User | null | undefined, opts?: { force?: boolean }) {
   if (!user?.email) return;
   applyPersonaSampleData(user.email, opts);
+  ensurePersonaBudgetForEmail(user.email);
 }
 
 export function applyJordanRossSampleData(opts?: { force?: boolean }): void {
