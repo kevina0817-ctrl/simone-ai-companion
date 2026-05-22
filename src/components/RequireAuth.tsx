@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { backendAvailable } from "@/lib/demo-mode";
 import { SimoneBrandHeader, SimoneLogoMark } from "@/components/SimoneBrandHeader";
-import { buildDisplayNameFromParts } from "@/lib/user-display-name";
+import {
+  buildDisplayNameFromParts,
+  syncProfileDisplayNameFromUser,
+} from "@/lib/user-display-name";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -74,12 +77,12 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Profile row is created by DB trigger from user_metadata.display_name.
       if (data.session?.user) {
         await supabase.from("profiles").upsert({
           id: data.session.user.id,
           display_name: displayName,
         });
+        await syncProfileDisplayNameFromUser(data.session.user);
       }
 
       toast.success("Check your email to confirm.");

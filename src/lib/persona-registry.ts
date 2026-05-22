@@ -89,6 +89,11 @@ export function resolvePersonaByEmail(email: string | undefined | null): Persona
   return PERSONAS.find((p) => p.user.email?.toLowerCase() === e) ?? null;
 }
 
+/** Demo personas always keep bundled display names (unaffected by signup metadata). */
+export function isDemoPersonaEmail(email: string | undefined | null): boolean {
+  return Boolean(resolvePersonaByEmail(email));
+}
+
 export function resolvePersonaByUser(
   user: Pick<User, "id" | "email"> | null | undefined,
 ): PersonaBundle | null {

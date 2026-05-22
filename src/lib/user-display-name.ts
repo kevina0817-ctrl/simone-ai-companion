@@ -1,7 +1,11 @@
 import type { User } from "@supabase/supabase-js";
-import { resolvePersonaByEmail } from "@/lib/persona-registry";
+import { supabase } from "@/integrations/supabase/client";
+import { backendAvailable } from "@/lib/demo-mode";
+import { isDemoPersonaEmail, resolvePersonaByEmail } from "@/lib/persona-registry";
 
 type ProfileNameSource = { display_name?: string | null } | null | undefined;
+
+export const PROFILE_DISPLAY_NAME_UPDATED = "simone-profile-display-name-updated";
 
 function titleCaseWord(word: string): string {
   if (!word) return word;
@@ -13,6 +17,26 @@ export function buildDisplayNameFromParts(firstName: string, lastName: string): 
   const parts = [firstName.trim(), lastName.trim()].filter(Boolean);
   if (parts.length === 0) return "";
   return parts.map(titleCaseWord).join(" ");
+}
+
+/** Read first + last (or display_name) from auth user_metadata after signup. */
+export function resolveNameFromUserMetadata(
+  metadata: User["user_metadata"] | undefined,
+): string {
+  if (!metadata || typeof metadata !== "object") return "";
+
+  const first =
+    typeof metadata.first_name === "string" ? metadata.first_name.trim() : "";
+  const last =
+    typeof metadata.last_name === "string" ? metadata.last_name.trim() : "";
+  const fromParts = buildDisplayNameFromParts(first, last);
+  if (fromParts) return fromParts;
+
+  const display =
+    typeof metadata.display_name === "string" ? metadata.display_name.trim() : "";
+  if (display) return formatDisplayName(display);
+
+  return "";
 }
 
 /** Turn email local-part / handle into a spaced display name (e.g. jordan.ross → Jordan Ross). */
@@ -49,8 +73,8 @@ export function isHandleLikeDisplayName(
 }
 
 /**
- * Prefer profiles.display_name / user_metadata when they are real names;
- * fall back to persona full names, then formatted handle.
+ * Prefer profiles.display_name / signup metadata (first + last);
+ * demo persona emails always use bundled names.
  */
 export function resolveUserDisplayName(
   user: Pick<User, "email" | "user_metadata"> | null | undefined,
@@ -59,28 +83,63 @@ export function resolveUserDisplayName(
   if (!user) return "friend";
 
   const persona = resolvePersonaByEmail(user.email);
-  const personaName = persona?.profile.display_name?.trim();
+  if (isDemoPersonaEmail(user.email) && persona?.profile.display_name) {
+    return persona.profile.display_name;
+  }
 
+  const fromMetadata = resolveNameFromUserMetadata(user.user_metadata);
   const profileName = profile?.display_name?.trim();
+
   if (profileName && !isHandleLikeDisplayName(profileName, user.email)) {
     return formatDisplayName(profileName);
   }
 
-  const metaName =
+  if (fromMetadata && !isHandleLikeDisplayName(fromMetadata, user.email)) {
+    return fromMetadata;
+  }
+
+  if (profileName) return formatDisplayName(profileName);
+
+  const metaDisplay =
     typeof user.user_metadata?.display_name === "string"
       ? user.user_metadata.display_name.trim()
       : "";
-  if (metaName && !isHandleLikeDisplayName(metaName, user.email)) {
-    return formatDisplayName(metaName);
-  }
-
-  if (personaName) return personaName;
-
-  if (profileName) return formatDisplayName(profileName);
-  if (metaName) return formatDisplayName(metaName);
+  if (metaDisplay) return formatDisplayName(metaDisplay);
 
   const local = user.email?.split("@")[0];
   if (local) return formatHandleToDisplayName(local);
 
   return "friend";
+}
+
+/**
+ * Persist signup / metadata name to profiles so Home and Chat survive refresh.
+ * Skips demo persona accounts.
+ */
+export async function syncProfileDisplayNameFromUser(user: User): Promise<void> {
+  if (!backendAvailable || typeof window === "undefined") return;
+  if (isDemoPersonaEmail(user.email)) return;
+
+  const { data: profile, error: readError } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (readError) return;
+
+  const canonical = resolveUserDisplayName(user, profile);
+  if (!canonical || canonical === "friend") return;
+
+  const stored = profile?.display_name?.trim() ?? "";
+  if (stored === canonical) return;
+
+  const { error: writeError } = await supabase
+    .from("profiles")
+    .update({ display_name: canonical, updated_at: new Date().toISOString() })
+    .eq("id", user.id);
+
+  if (!writeError && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(PROFILE_DISPLAY_NAME_UPDATED));
+  }
 }
