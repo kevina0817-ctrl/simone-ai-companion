@@ -46,6 +46,7 @@ You CAN take real actions via tools when (and only when) the user clearly asks:
 
 When the user asks to buy, order, or purchase anything, ONLY CALL create_pending_order — never schedule_event.
 Do not split product names or prices into fake calendar events.
+Order title and item names must be real products only — never assistant filler phrases.
 When the user asks to buy groceries or order products, CALL create_pending_order once.
 Quote prices as US dollars (e.g. "approximately US$950") — never call unconverted tool estimates CAD.
 For other-category / luxury items, note CAD is applied when the order is saved to Approvals.

@@ -35,7 +35,8 @@ When the user asks to cancel / remove / drop / skip a meeting or event, CALL can
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 When the user asks to buy, order, purchase, or shop for a product — ONLY CALL create_pending_order (never schedule_event).
 Do not turn product descriptions, prices, or shopping lists into calendar events.
-When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
+For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
+When the user asks to buy groceries, order items, or shop — CALL create_pending_order once with title, store, and line items
 (name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
 Always quote tool prices in US dollars (e.g. "approximately US$950") — never label unconverted estimates as CAD.
 For luxury / non-grocery / non-Amazon orders, you may note that CAD conversion happens when they approve.
@@ -70,14 +71,21 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Order title, e.g. Weekly grocery run" },
+          title: {
+            type: "string",
+            description:
+              "Real product name only (e.g. Tiffany & Co. Pearl Necklace). Never assistant filler or phrases like 'for this item' or 'need further assistance'.",
+          },
           store: { type: "string", description: "Store name, e.g. Whole Foods or Amazon" },
           items: {
             type: "array",
             items: {
               type: "object",
               properties: {
-                name: { type: "string" },
+                name: {
+                  type: "string",
+                  description: "Line item product name only — same rules as order title",
+                },
                 qty: { type: "number" },
                 estimated_price: { type: "number", description: "Unit price USD" },
               },
@@ -246,14 +254,20 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               todayEvents = todayEvents.filter((e) => e.id !== match.id);
             } else if (tc.function.name === "create_pending_order") {
               const order = normalizeOrderFromToolArgs(args);
-              if (!order) throw new Error("Invalid order fields");
-              result = { ok: true, orderId: order.id, itemCount: order.items.length };
-              pendingOrders.push(order);
-              actions.push({
-                kind: "create_pending_order",
-                orderId: order.id,
-                title: order.title,
-              });
+              if (!order) {
+                result = {
+                  ok: false,
+                  error: "Invalid order — use real product names only, not assistant filler text",
+                };
+              } else {
+                result = { ok: true, orderId: order.id, itemCount: order.items.length };
+                pendingOrders.push(order);
+                actions.push({
+                  kind: "create_pending_order",
+                  orderId: order.id,
+                  title: order.title,
+                });
+              }
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };

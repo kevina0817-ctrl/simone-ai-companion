@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isPurchaseOrderIntent } from "@/lib/chat-intent";
 import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
+import { isValidPendingOrder, isValidProductName } from "@/lib/order-validation";
 
 export type { OrderCategory } from "@/lib/order-category";
 
@@ -76,7 +77,8 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
 
   const title = parsed.data.title.trim();
   const store = parsed.data.store?.trim() || "Whole Foods";
-  return {
+
+  const order: PendingOrder = {
     id: generateOrderId(),
     title,
     store,
@@ -87,19 +89,26 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
     amountCurrency: "USD",
     createdAt: new Date().toISOString(),
   };
+
+  return isValidPendingOrder(order) ? order : null;
 }
 
-/** Fallback when the model does not call create_pending_order. */
-export function parseOrderFromText(text: string): PendingOrder | null {
-  const trimmed = text.trim();
+/** Fallback when the model does not call create_pending_order — user message only. */
+export function parseOrderFromUserMessage(userMessage: string): PendingOrder | null {
+  const trimmed = userMessage.trim();
   if (!isPurchaseOrderIntent(trimmed)) return null;
 
   const titleMatch = trimmed.match(
-    /(?:buy|order|shop for|purchase|get)\s+(?:the\s+)?(.+?)(?:\s+from\s+|\s+at\s+|\.|,|$)/i,
+    /(?:buy|order|shop for|purchase|get)\s+(?:the\s+)?(.+?)(?:\s+from\s+|\s+at\s+|\.|,|\?|$)/i,
   );
-  const title =
-    titleMatch?.[1]?.trim().slice(0, 80) ||
-    (/\btiffany\b/i.test(trimmed) ? "Tiffany Signature Pendant" : "Shopping order");
+  let title = titleMatch?.[1]?.trim().slice(0, 80) ?? "";
+  if (!isValidProductName(title)) {
+    if (/\btiffany\b/i.test(trimmed) && /\b(pearl|necklace|pendant)\b/i.test(trimmed)) {
+      title = "Tiffany & Co. Pearl Necklace";
+    } else {
+      return null;
+    }
+  }
 
   const storeMatch = trimmed.match(
     /\b(?:from|at)\s+(whole foods|amazon|target|trader joe'?s?|tiffany(?:\s+&\s+co)?)\b/i,
@@ -125,7 +134,7 @@ export function parseOrderFromText(text: string): PendingOrder | null {
         ];
 
   const normalizedTitle = title.charAt(0).toUpperCase() + title.slice(1);
-  return {
+  const order: PendingOrder = {
     id: generateOrderId(),
     title: normalizedTitle,
     store,
@@ -136,6 +145,13 @@ export function parseOrderFromText(text: string): PendingOrder | null {
     amountCurrency: "USD",
     createdAt: new Date().toISOString(),
   };
+
+  return isValidPendingOrder(order) ? order : null;
+}
+
+/** @deprecated Use parseOrderFromUserMessage — never parse assistant reply text. */
+export function parseOrderFromText(text: string): PendingOrder | null {
+  return parseOrderFromUserMessage(text);
 }
 
 export function formatOrderDetail(order: PendingOrder): string {

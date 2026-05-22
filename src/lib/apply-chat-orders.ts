@@ -2,10 +2,10 @@ import type { ChatAction } from "@/lib/chat-actions";
 import type { PendingOrder } from "@/lib/pending-order";
 import {
   clonePendingOrder,
-  normalizeOrderFromToolArgs,
-  parseOrderFromText,
+  parseOrderFromUserMessage,
 } from "@/lib/pending-order";
 import { isPurchaseOrderIntent } from "@/lib/chat-intent";
+import { isValidPendingOrder, orderDedupeKey } from "@/lib/order-validation";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
 import { prepareOrderForApprovals } from "@/lib/order-approval";
 
@@ -18,12 +18,16 @@ export function applyChatOrderResult(
   },
 ): PendingOrder[] {
   const created: PendingOrder[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenProducts = new Set<string>();
 
   const push = (raw: PendingOrder) => {
+    if (!isValidPendingOrder(raw)) return;
     const order = prepareOrderForApprovals(clonePendingOrder(raw));
-    if (seen.has(order.id)) return;
-    seen.add(order.id);
+    const productKey = orderDedupeKey(order);
+    if (seenIds.has(order.id) || seenProducts.has(productKey)) return;
+    seenIds.add(order.id);
+    seenProducts.add(productKey);
     addPendingOrderApproval(order);
     created.push(order);
   };
@@ -39,8 +43,7 @@ export function applyChatOrderResult(
   }
 
   if (created.length === 0 && isPurchaseOrderIntent(input.userMessage)) {
-    const combined = `${input.userMessage}\n${input.assistantReply ?? ""}`;
-    const parsed = parseOrderFromText(combined);
+    const parsed = parseOrderFromUserMessage(input.userMessage);
     if (parsed) {
       push(parsed);
     }
