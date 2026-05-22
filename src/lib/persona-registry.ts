@@ -19,6 +19,15 @@ import {
   kevinZhangUser,
   kevinZhangWellness,
 } from "@/lib/kevin-zhang-sample";
+import {
+  isNicoleHartEmail,
+  NICOLE_HART_EMAIL,
+  nicoleHartInsight,
+  nicoleHartPersona,
+  nicoleHartProfile,
+  nicoleHartUser,
+  nicoleHartWellness,
+} from "@/lib/nicole-hart-sample";
 import type { PersonaBundle, PersonaWellness } from "@/lib/persona-types";
 
 export const LIFESTYLE_STORAGE_KEY = "simone-persona-lifestyle";
@@ -33,13 +42,14 @@ export type StoredPersonaLifestyle = {
   weekOverview: PersonaBundle["weekOverview"];
 };
 
-const PERSONAS: PersonaBundle[] = [jordanRossPersona, kevinZhangPersona];
+const PERSONAS: PersonaBundle[] = [jordanRossPersona, kevinZhangPersona, nicoleHartPersona];
 
 export function resolvePersonaByEmail(email: string | undefined | null): PersonaBundle | null {
   const e = email?.trim().toLowerCase();
   if (!e) return null;
   if (isJordanRossEmail(e)) return jordanRossPersona;
   if (isKevinZhangEmail(e)) return kevinZhangPersona;
+  if (isNicoleHartEmail(e)) return nicoleHartPersona;
   return PERSONAS.find((p) => p.user.email?.toLowerCase() === e) ?? null;
 }
 
@@ -85,7 +95,8 @@ export function getSleepRingMeta(wellness: PersonaWellness | null | undefined) {
   const min = wellness?.sleep_duration_min;
   return {
     value: score,
-    status: score >= 75 ? "Good" : score >= 60 ? "Fair" : score > 0 ? "Low" : "—",
+    status:
+      score >= 90 ? "Excellent" : score >= 75 ? "Good" : score >= 60 ? "Fair" : score > 0 ? "Low" : "—",
     detail: min != null ? `${Math.floor(min / 60)}h ${min % 60}m` : "No data",
   };
 }
@@ -94,9 +105,18 @@ export function getReadinessRingMeta(wellness: PersonaWellness | null | undefine
   const score = wellness?.readiness_score ?? 0;
   return {
     value: score,
-    status: score >= 88 ? "High" : score >= 70 ? "Steady" : score > 0 ? "Moderate" : "—",
+    status:
+      score >= 92 ? "Peak" : score >= 88 ? "High" : score >= 70 ? "Steady" : score > 0 ? "Moderate" : "—",
     detail:
-      score >= 88 ? "Peak form" : score >= 70 ? "Aligned" : score > 0 ? "Recovery needed" : "No data",
+      score >= 92
+        ? "Glowing"
+        : score >= 88
+          ? "Peak form"
+          : score >= 70
+            ? "Aligned"
+            : score > 0
+              ? "Recovery needed"
+              : "No data",
   };
 }
 
@@ -157,18 +177,28 @@ export function applyKevinZhangSampleData(opts?: { force?: boolean }): void {
   applyPersonaSampleData(KEVIN_ZHANG_EMAIL, opts);
 }
 
+export function applyNicoleHartSampleData(opts?: { force?: boolean }): void {
+  applyPersonaSampleData(NICOLE_HART_EMAIL, opts);
+}
+
 // Re-exports for existing imports
 export {
   isJordanRossEmail,
   isKevinZhangEmail,
+  isNicoleHartEmail,
   JORDAN_ROSS_EMAIL,
   KEVIN_ZHANG_EMAIL,
+  NICOLE_HART_EMAIL,
   jordanRossUser,
   kevinZhangUser,
+  nicoleHartUser,
   jordanRossProfile,
   jordanRossWellness,
   kevinZhangWellness,
+  nicoleHartWellness,
   jordanRossInsight,
   kevinZhangInsight,
+  nicoleHartInsight,
   kevinZhangProfile,
+  nicoleHartProfile,
 };

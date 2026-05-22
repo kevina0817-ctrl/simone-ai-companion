@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { jordanRossPersona } from "@/lib/jordan-ross-sample";
 import { kevinZhangPersona } from "@/lib/kevin-zhang-sample";
+import { nicoleHartPersona } from "@/lib/nicole-hart-sample";
 import { resolvePersonaByEmail } from "@/lib/persona-registry";
 
 function emailFromClaims(claims: unknown): string | null {
@@ -57,4 +58,4 @@ export const seedDemoData = createServerFn({ method: "POST" })
     return { ok: true, persona: persona.id };
   });
 
-export { kevinZhangPersona, jordanRossPersona };
+export { kevinZhangPersona, jordanRossPersona, nicoleHartPersona };

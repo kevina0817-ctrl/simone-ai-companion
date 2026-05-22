@@ -3,6 +3,7 @@ import type { CancelMatchCriteria } from "@/lib/schedule-item";
 import { findScheduleEventForCancel, isSameCalendarDay } from "@/lib/schedule-item";
 import { buildJordanRossSchedule, jordanRossUser } from "@/lib/jordan-ross-sample";
 import { buildKevinZhangSchedule, kevinZhangUser } from "@/lib/kevin-zhang-sample";
+import { buildNicoleHartSchedule, nicoleHartUser } from "@/lib/nicole-hart-sample";
 import {
   applyJordanRossSampleData,
   getInsightForEmail,
@@ -23,7 +24,11 @@ export const backendAvailable = Boolean(
 const demoPersonaEnv = import.meta.env.VITE_DEMO_PERSONA?.toLowerCase();
 
 export const demoUser =
-  demoPersonaEnv === "kevin" || demoPersonaEnv === "kzhang" ? kevinZhangUser : jordanRossUser;
+  demoPersonaEnv === "kevin" || demoPersonaEnv === "kzhang"
+    ? kevinZhangUser
+    : demoPersonaEnv === "nicole" || demoPersonaEnv === "hart"
+      ? nicoleHartUser
+      : jordanRossUser;
 
 export type DemoEvent = {
   id: string;
@@ -68,8 +73,11 @@ export function getDemoInsightForUser(email?: string | null) {
 const eventsKey = "simone-demo-events";
 const messagesKey = "simone-demo-messages";
 
-const defaultEvents = (): DemoEvent[] =>
-  demoUser.id === kevinZhangUser.id ? buildKevinZhangSchedule() : buildJordanRossSchedule();
+const defaultEvents = (): DemoEvent[] => {
+  if (demoUser.id === kevinZhangUser.id) return buildKevinZhangSchedule();
+  if (demoUser.id === nicoleHartUser.id) return buildNicoleHartSchedule();
+  return buildJordanRossSchedule();
+};
 
 export { applyJordanRossSampleData };
 
