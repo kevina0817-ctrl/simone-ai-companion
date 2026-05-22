@@ -6,6 +6,7 @@ import { MobileFrame } from "@/components/MobileFrame";
 import { RingScore } from "@/components/RingScore";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { useResolvedDisplayName } from "@/hooks/useResolvedDisplayName";
 import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
@@ -19,7 +20,6 @@ import {
   clearTodayDemoEvents,
   DEMO_EVENTS_CHANGED,
   getDemoInsightForUser,
-  getDemoProfileForUser,
 } from "@/lib/demo-mode";
 import { PersonaLifestyleCard } from "@/components/PersonaLifestyleCard";
 import {
@@ -47,15 +47,7 @@ function Home() {
   const qc = useQueryClient();
   const seed = useServerFn(seedDemoData);
 
-  const { data: profile } = useQuery({
-    queryKey: ["profile", user!.id, user?.email],
-    queryFn: async () => {
-      const personaProfile = getDemoProfileForUser(user?.email);
-      if (!backendAvailable) return personaProfile;
-      const { data } = await supabase.from("profiles").select("display_name").eq("id", user!.id).maybeSingle();
-      return data?.display_name ? data : personaProfile;
-    },
-  });
+  const displayName = useResolvedDisplayName();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -150,7 +142,6 @@ function Home() {
     return "Good Evening";
   })();
 
-  const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
   const persona = resolvePersonaByUser(user);
   const resolvedLifestyle = lifestyle ?? getHomePersonaLifestyle(user?.email, user?.id);
   const insight = resolvedLifestyle?.insight ?? getDemoInsightForUser(user?.email);
@@ -167,7 +158,7 @@ function Home() {
             <h1 className="font-display text-3xl font-light leading-tight">
               {greeting},
               <br />
-              {name}
+              {displayName}
             </h1>
           </div>
           <Link to="/privacy" className="rounded-full bg-card/70 p-2.5">
