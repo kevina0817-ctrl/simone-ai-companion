@@ -5,6 +5,10 @@ import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
+import {
+  pickSingleOrderForApproval,
+  shouldCreateOrderApproval,
+} from "@/lib/chat-intent";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -44,10 +48,12 @@ You CAN take real actions via tools when (and only when) the user clearly asks:
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
 - create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in USD).
 
-When the user asks to buy, order, or purchase anything, ONLY CALL create_pending_order — never schedule_event.
+RECOMMENDATION MODE: when the user wants suggestions or multiple options, list them in chat only — do NOT call create_pending_order.
+ORDER MODE: only after they pick one item ("I want the…", "buy this one", "second option") call create_pending_order once for that product.
+When the user asks to buy a specific product they already chose, ONLY CALL create_pending_order once — never schedule_event.
 Do not split product names or prices into fake calendar events.
+Never create multiple pending orders for multiple recommended options in one turn.
 Order title and item names must be real products only — never assistant filler phrases.
-When the user asks to buy groceries or order products, CALL create_pending_order once.
 Quote prices as US dollars (e.g. "approximately US$950") — never call unconverted tool estimates CAD.
 For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
 Do NOT call a tool for general questions or chit-chat.`;
@@ -116,6 +122,7 @@ const tools = [
 
 function collectActionsFromToolCalls(
   toolCalls: Array<{ function: { name: string; arguments: string } }>,
+  userMessage: string,
 ): { actions: ChatAction[]; pendingOrders: ChatResponse["pendingOrders"] } {
   const actions: ChatAction[] = [];
   const pendingOrders: ChatResponse["pendingOrders"] = [];
@@ -134,7 +141,7 @@ function collectActionsFromToolCalls(
             level: item.level,
           });
         }
-      } else if (tc.function.name === "create_pending_order") {
+      } else if (tc.function.name === "create_pending_order" && shouldCreateOrderApproval(userMessage)) {
         const order = normalizeOrderFromToolArgs(args);
         if (order) {
           actions.push({ kind: "create_pending_order", order });
@@ -192,7 +199,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       if (!msg) break;
 
       if (msg.tool_calls?.length) {
-        const collected = collectActionsFromToolCalls(msg.tool_calls);
+        const collected = collectActionsFromToolCalls(msg.tool_calls, data.message);
         actions.push(...collected.actions);
         pendingOrders.push(...collected.pendingOrders);
 
@@ -223,5 +230,9 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       else reply = "Got it.";
     }
 
-    return { reply, actions, pendingOrders } satisfies ChatResponse;
+    const ordersForApproval = shouldCreateOrderApproval(data.message)
+      ? pickSingleOrderForApproval(data.message, pendingOrders)
+      : [];
+
+    return { reply, actions, pendingOrders: ordersForApproval } satisfies ChatResponse;
   });

@@ -4,7 +4,10 @@ import {
   clonePendingOrder,
   parseOrderFromUserMessage,
 } from "@/lib/pending-order";
-import { isPurchaseOrderIntent } from "@/lib/chat-intent";
+import {
+  pickSingleOrderForApproval,
+  shouldCreateOrderApproval,
+} from "@/lib/chat-intent";
 import { isValidPendingOrder, orderDedupeKey } from "@/lib/order-validation";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
 import { prepareOrderForApprovals } from "@/lib/order-approval";
@@ -17,6 +20,10 @@ export function applyChatOrderResult(
     assistantReply?: string;
   },
 ): PendingOrder[] {
+  if (!shouldCreateOrderApproval(input.userMessage)) {
+    return [];
+  }
+
   const created: PendingOrder[] = [];
   const seenIds = new Set<string>();
   const seenProducts = new Set<string>();
@@ -32,17 +39,30 @@ export function applyChatOrderResult(
     created.push(order);
   };
 
-  for (const order of input.pendingOrders ?? []) {
+  const rawToolOrders: PendingOrder[] = [
+    ...(input.pendingOrders ?? []),
+    ...(input.actions ?? [])
+      .filter(
+        (a): a is Extract<ChatAction, { kind: "create_pending_order"; order: PendingOrder }> =>
+          a.kind === "create_pending_order" && "order" in a && Boolean(a.order),
+      )
+      .map((a) => a.order),
+  ];
+  const uniqueToolOrders: PendingOrder[] = [];
+  const seenToolKeys = new Set<string>();
+  for (const o of rawToolOrders) {
+    const key = orderDedupeKey(o);
+    if (seenToolKeys.has(key)) continue;
+    seenToolKeys.add(key);
+    uniqueToolOrders.push(o);
+  }
+  const toolOrders = pickSingleOrderForApproval(input.userMessage, uniqueToolOrders);
+
+  for (const order of toolOrders) {
     push(order);
   }
 
-  for (const action of input.actions ?? []) {
-    if (action.kind === "create_pending_order" && "order" in action && action.order) {
-      push(action.order);
-    }
-  }
-
-  if (created.length === 0 && isPurchaseOrderIntent(input.userMessage)) {
+  if (created.length === 0) {
     const parsed = parseOrderFromUserMessage(input.userMessage);
     if (parsed) {
       push(parsed);

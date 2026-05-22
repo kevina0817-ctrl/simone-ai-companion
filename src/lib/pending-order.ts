@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isPurchaseOrderIntent } from "@/lib/chat-intent";
+import { shouldCreateOrderApproval } from "@/lib/chat-intent";
 import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
 import { isValidPendingOrder, isValidProductName } from "@/lib/order-validation";
 
@@ -96,7 +96,7 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
 /** Fallback when the model does not call create_pending_order — user message only. */
 export function parseOrderFromUserMessage(userMessage: string): PendingOrder | null {
   const trimmed = userMessage.trim();
-  if (!isPurchaseOrderIntent(trimmed)) return null;
+  if (!shouldCreateOrderApproval(trimmed)) return null;
 
   const titleMatch = trimmed.match(
     /(?:buy|order|shop for|purchase|get)\s+(?:the\s+)?(.+?)(?:\s+from\s+|\s+at\s+|\.|,|\?|$)/i,

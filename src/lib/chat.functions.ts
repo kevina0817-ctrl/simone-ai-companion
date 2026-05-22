@@ -7,6 +7,10 @@ import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { applyChatCurrencyToReply, collectUsdOrdersFromChatResult } from "@/lib/chat-order-currency";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
+import {
+  pickSingleOrderForApproval,
+  shouldCreateOrderApproval,
+} from "@/lib/chat-intent";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -33,10 +37,14 @@ For weekend plans or itineraries ONLY when they ask to schedule events: call sch
 When the user asks to add all events to Approvals, call schedule_event for each listed activity.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
-When the user asks to buy, order, purchase, or shop for a product — ONLY CALL create_pending_order (never schedule_event).
+RECOMMENDATION MODE vs ORDER MODE:
+- When the user asks for suggestions, options, comparisons, or "what do you recommend" — stay in RECOMMENDATION MODE: list products in chat only. Do NOT call create_pending_order. Do not say items were sent to Approvals.
+- ORDER MODE — only after the user explicitly picks ONE product (e.g. "I want the Tiffany Pearl Necklace", "buy this one", "add the second option"): call create_pending_order exactly ONCE for that single product.
+When the user asks to buy, order, purchase, or shop for a specific product they already named — ONLY CALL create_pending_order once (never schedule_event).
 Do not turn product descriptions, prices, or shopping lists into calendar events.
+Never call create_pending_order multiple times for multiple recommended options in the same turn.
 For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
-When the user asks to buy groceries, order items, or shop — CALL create_pending_order once with title, store, and line items
+When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
 (name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
 Always quote tool prices in US dollars (e.g. "approximately US$950") — never label unconverted estimates as CAD.
 For luxury / non-grocery / non-Amazon orders, you may note that CAD conversion happens when they approve.
@@ -253,20 +261,28 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               actions.push({ kind: "cancel_event", id: match.id, title: match.title });
               todayEvents = todayEvents.filter((e) => e.id !== match.id);
             } else if (tc.function.name === "create_pending_order") {
-              const order = normalizeOrderFromToolArgs(args);
-              if (!order) {
+              if (!shouldCreateOrderApproval(data.message)) {
                 result = {
                   ok: false,
-                  error: "Invalid order — use real product names only, not assistant filler text",
+                  error:
+                    "Recommendation mode — describe options in chat only; call create_pending_order after the user picks one item",
                 };
               } else {
-                result = { ok: true, orderId: order.id, itemCount: order.items.length };
-                pendingOrders.push(order);
-                actions.push({
-                  kind: "create_pending_order",
-                  orderId: order.id,
-                  title: order.title,
-                });
+                const order = normalizeOrderFromToolArgs(args);
+                if (!order) {
+                  result = {
+                    ok: false,
+                    error: "Invalid order — use real product names only, not assistant filler text",
+                  };
+                } else {
+                  result = { ok: true, orderId: order.id, itemCount: order.items.length };
+                  pendingOrders.push(order);
+                  actions.push({
+                    kind: "create_pending_order",
+                    orderId: order.id,
+                    title: order.title,
+                  });
+                }
               }
             }
           } catch (e) {
@@ -287,7 +303,14 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     if (!reply) reply = "Done.";
 
-    const usdOrders = collectUsdOrdersFromChatResult({ pendingOrders, actions });
+    const ordersForApproval = shouldCreateOrderApproval(data.message)
+      ? pickSingleOrderForApproval(data.message, pendingOrders)
+      : [];
+
+    const usdOrders = collectUsdOrdersFromChatResult({
+      pendingOrders: ordersForApproval,
+      actions,
+    });
     reply = applyChatCurrencyToReply(reply, usdOrders);
 
     await supabase.from("chat_messages").insert({
@@ -296,7 +319,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       content: reply,
     });
 
-    return { reply, actions, pendingOrders } satisfies ChatResponse;
+    return { reply, actions, pendingOrders: ordersForApproval } satisfies ChatResponse;
   });
 
 export const clearChatHistory = createServerFn({ method: "POST" })
