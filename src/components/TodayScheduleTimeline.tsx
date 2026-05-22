@@ -9,8 +9,6 @@ import {
 import type { TimelineEventRow } from "@/lib/schedule-timeline-cache";
 
 const NOW_TICK_MS = 30_000;
-const DAY_START_MINUTES = 6 * 60;
-const DAY_END_MINUTES = 23 * 60 + 30;
 
 type TimelineRow =
   | { kind: "now"; minutes: number }
@@ -54,16 +52,6 @@ function buildTimelineRows(events: TimelineEventRow[], now: Date): TimelineRow[]
   return rows;
 }
 
-/** 0–100 position on the vertical day rail (Toronto local). */
-function nowRailPercent(events: TimelineEventRow[], nowMins: number): number {
-  const eventMins = events.map((e) => minutesInToronto(new Date(e.start_time)));
-  const dayStart = Math.min(DAY_START_MINUTES, ...eventMins) - 15;
-  const dayEnd = Math.max(DAY_END_MINUTES, ...eventMins) + 15;
-  const span = Math.max(dayEnd - dayStart, 60);
-  const clamped = Math.min(Math.max(nowMins, dayStart), dayEnd);
-  return ((clamped - dayStart) / span) * 100;
-}
-
 function NowMarkerRow({ timeLabel }: { timeLabel: string }) {
   return (
     <li className="relative z-10 flex items-center gap-3 py-2">
@@ -79,7 +67,6 @@ function NowMarkerRow({ timeLabel }: { timeLabel: string }) {
         <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-primary">
           Now
         </span>
-        <div className="h-px flex-1 bg-primary/50" aria-hidden />
       </div>
     </li>
   );
@@ -93,15 +80,15 @@ function ScheduleEventRow({
   userId: string;
 }) {
   return (
-    <li className="relative flex items-center gap-3">
-      <span className="w-12 shrink-0 text-[11px] font-medium text-muted-foreground">
+    <li className="relative flex items-start gap-3">
+      <span className="w-12 shrink-0 pt-0.5 text-[11px] font-medium leading-tight text-muted-foreground">
         {formatEventTimeToronto(event.start_time)}
       </span>
       <SchedulePriorityIndicator
         level={event.level}
         title={event.title}
         variant="dot"
-        className="relative z-10"
+        className="relative z-10 mt-1"
       />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium leading-tight">{event.title}</div>
@@ -132,8 +119,6 @@ export function TodayScheduleTimeline({ events, userId }: Props) {
 
   const nowLabel = formatZonedTime(getZonedClock(now, EVENING_PLAN_TIMEZONE));
   const rows = useMemo(() => buildTimelineRows(events, now), [events, now]);
-  const nowMins = minutesInToronto(now);
-  const railPercent = events.length > 0 ? nowRailPercent(events, nowMins) : 50;
 
   if (events.length === 0) {
     return (
@@ -151,16 +136,6 @@ export function TodayScheduleTimeline({ events, userId }: Props) {
   return (
     <div className="relative">
       <div className="absolute left-[42px] top-6 bottom-6 w-px bg-border" aria-hidden />
-      <div
-        className="pointer-events-none absolute left-[38px] right-3 z-20 flex -translate-y-1/2 items-center"
-        style={{
-          top: `calc(1.5rem + (100% - 3rem) * ${railPercent / 100})`,
-        }}
-        aria-hidden
-      >
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary ring-4 ring-primary/20" />
-        <span className="ml-0.5 h-px flex-1 bg-primary/55" />
-      </div>
       <ul className="space-y-4">
         {rows.map((row) =>
           row.kind === "now" ? (
