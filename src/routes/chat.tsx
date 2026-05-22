@@ -3,6 +3,7 @@ import { Calendar, DollarSign, Menu, Mic, Moon, Package, Send, Sparkles, Trash2 
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { ChatMessageInput } from "@/components/ChatMessageInput";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
@@ -287,20 +288,23 @@ function ChatPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 rounded-full bg-card/70 px-2 py-2 shadow-card">
-          <input
+        <div className="flex items-end gap-1 rounded-2xl bg-card/70 px-2 py-2 shadow-card sm:gap-2">
+          <ChatMessageInput
             value={text}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="Message Simone…"
-            className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
+            onChange={setDraft}
+            onSubmit={() => submit()}
             disabled={pending || clearing}
+            className="flex-1"
           />
-          <button className="p-2 text-muted-foreground"><Mic className="h-4 w-4" /></button>
+          <button type="button" className="mb-0.5 shrink-0 p-2 text-muted-foreground" aria-label="Voice input">
+            <Mic className="h-4 w-4" />
+          </button>
           <button
+            type="button"
             onClick={() => submit()}
             disabled={pending || clearing}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow disabled:opacity-50"
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow disabled:opacity-50"
+            aria-label="Send message"
           >
             <Send className="h-4 w-4" />
           </button>
