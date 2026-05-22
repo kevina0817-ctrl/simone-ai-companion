@@ -6,6 +6,7 @@ export type ScheduleEventAction = {
   title: string;
   subtitle?: string | null;
   start_time: string;
+  end_time?: string;
   level?: "High" | "Medium" | "Low";
 };
 

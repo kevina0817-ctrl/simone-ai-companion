@@ -2,7 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import { clonePendingOrder, type PendingOrder } from "@/lib/pending-order";
 import { formatApprovalOrderDetail, prepareOrderForApprovals } from "@/lib/order-prepare";
-import type { ScheduleItem } from "@/lib/schedule-item";
+import { formatScheduleTimeRange, type ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
 import { recordApprovedOrderSpend } from "@/lib/budget-store";
 import {
@@ -67,12 +67,7 @@ export function setApprovalsDecideContext(ctx: ApprovalsDecideContext | null) {
 }
 
 function formatScheduleDetail(item: ScheduleItem): string {
-  const when = new Date(item.start_time).toLocaleString([], {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const parts = [when, item.level];
+  const parts = [`Schedule • ${formatScheduleTimeRange(item)}`, item.level];
   if (item.subtitle) parts.push(item.subtitle);
   return parts.join(" • ");
 }

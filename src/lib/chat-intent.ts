@@ -139,10 +139,10 @@ export function shouldSuppressScheduleApprovals(userMessage: string): boolean {
   return isPurchaseOrderIntent(userMessage) && !isScheduleManagementIntent(userMessage);
 }
 
-/** Only run schedule text fallbacks when the user clearly asked about calendar/events. */
+/** Text fallback only when the user explicitly asked to book/queue events — never from assistant replies. */
 export function shouldRunScheduleTextFallbacks(userMessage: string): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
-  return isScheduleManagementIntent(userMessage) || wantsBulkScheduleApprovals(userMessage);
+  return wantsBulkScheduleApprovals(userMessage) || isScheduleManagementIntent(userMessage);
 }
 
 /** Line looks like order/product copy, not a calendar event. */

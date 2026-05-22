@@ -18,6 +18,7 @@ import {
   type PendingItem,
 } from "@/lib/approvals-store";
 import type { OrderCategory } from "@/lib/order-category";
+import { formatScheduleTimeRange } from "@/lib/schedule-item";
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
   approveShoppingOrderWithMonthlyBudgetCad,
@@ -183,13 +184,7 @@ function ScheduleApprovalCard({ id, item }: { id: string; item: PendingItem }) {
   const ev = item.scheduleEvent;
   if (!ev) return null;
 
-  const when = new Date(ev.start_time).toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const when = formatScheduleTimeRange(ev);
 
   return (
     <article className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">

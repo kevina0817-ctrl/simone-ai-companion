@@ -33,8 +33,10 @@ You CAN take real actions using tools:
 - create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
 When the user asks to book / schedule / move / reschedule a calendar event, CALL schedule_event (Approvals first; after approve it appears on today's schedule).
-For weekend plans or itineraries ONLY when they ask to schedule events: call schedule_event once per activity with a specific title and start_time — never one event named "these events" or "all events".
-When the user asks to add all events to Approvals, call schedule_event for each listed activity.
+Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
+When suggesting a daily plan or listing activity ideas in chat only (no request to book or add to Approvals), do NOT call schedule_event — use structured lines in the reply: "Title — 8:00 AM - 9:00 AM".
+For weekend plans or itineraries ONLY when they ask to schedule events: call schedule_event once per activity with title, start_time, and end_time — never one event named "these events" or "all events".
+When the user asks to add all events to Approvals, call schedule_event separately for each activity with title, start_time, and end_time.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 RECOMMENDATION MODE vs ORDER MODE:
@@ -57,16 +59,17 @@ const tools = [
     function: {
       name: "schedule_event",
       description:
-        "Add one event to Approvals. Call separately for each activity in a plan. Title must name the activity (e.g. 'Farmers market'), not 'these events'.",
+        "Add one structured schedule event to Approvals. Call once per activity. Never use for recommendation-only replies.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Short event title, e.g. 'Recovery session'" },
+          title: { type: "string", description: "Short event title only, e.g. 'Pilates' or 'Healthy Lunch'" },
           subtitle: { type: "string", description: "Optional short detail, e.g. 'Sauna + cold plunge'" },
-          start_time: { type: "string", description: "ISO 8601 datetime with timezone offset, e.g. 2026-05-18T17:30:00-07:00" },
+          start_time: { type: "string", description: "ISO 8601 start datetime with timezone offset" },
+          end_time: { type: "string", description: "ISO 8601 end datetime with timezone offset (after start_time)" },
           level: { type: "string", enum: ["High", "Medium", "Low"], description: "Priority level, default Medium" },
         },
-        required: ["title", "start_time"],
+        required: ["title", "start_time", "end_time"],
       },
     },
   },
@@ -233,6 +236,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
                 title: item.title,
                 subtitle: item.subtitle,
                 start_time: item.start_time,
+                end_time: item.end_time,
                 level: item.level,
               });
             } else if (tc.function.name === "cancel_event") {

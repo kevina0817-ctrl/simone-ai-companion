@@ -44,7 +44,7 @@ Be concise (1-3 short sentences), warm, perceptive, and proactive. Reference the
 Answer ANY question intelligently — small talk, advice, planning, recommendations, reflection prompts, summaries of their day, etc.
 
 You CAN take real actions via tools when (and only when) the user clearly asks:
-- schedule_event: propose one calendar event for Approvals (only when they ask to schedule/book/move an event).
+- schedule_event: add one structured event to Approvals (title + start_time + end_time ISO). Only when they ask to book/schedule/add to Approvals — not for recommendation-only daily plans in chat.
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
 - create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in USD).
 
@@ -63,16 +63,17 @@ const tools = [
     type: "function",
     function: {
       name: "schedule_event",
-      description: "Add a new event to the user's schedule.",
+      description: "Add one structured event to Approvals (not for recommendation-only chat lists).",
       parameters: {
         type: "object",
         properties: {
           title: { type: "string" },
           subtitle: { type: "string" },
-          start_time: { type: "string", description: "ISO 8601 datetime" },
+          start_time: { type: "string", description: "ISO 8601 start datetime" },
+          end_time: { type: "string", description: "ISO 8601 end datetime" },
           level: { type: "string", enum: ["High", "Medium", "Low"] },
         },
-        required: ["title", "start_time"],
+        required: ["title", "start_time", "end_time"],
       },
     },
   },
@@ -138,6 +139,7 @@ function collectActionsFromToolCalls(
             title: item.title,
             subtitle: item.subtitle,
             start_time: item.start_time,
+            end_time: item.end_time,
             level: item.level,
           });
         }

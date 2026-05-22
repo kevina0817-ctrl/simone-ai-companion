@@ -22,6 +22,8 @@ export type ScheduleItem = {
   title: string;
   subtitle: string | null;
   start_time: string;
+  /** End of block (required for Approvals extraction; optional on persisted timeline rows). */
+  end_time?: string;
   level: ScheduleLevel;
 };
 
@@ -30,6 +32,7 @@ const toolArgsSchema = z.object({
   subtitle: z.string().max(200).optional(),
   description: z.string().max(200).optional(),
   start_time: z.string().min(1),
+  end_time: z.string().min(1).optional(),
   level: z.enum(["High", "Medium", "Low"]).optional(),
 });
 
@@ -43,15 +46,24 @@ export function normalizeScheduleFromToolArgs(
   const startDate = new Date(parsed.data.start_time);
   if (isNaN(startDate.getTime())) return null;
 
+  let endIso: string | undefined;
+  if (parsed.data.end_time) {
+    const endDate = new Date(parsed.data.end_time);
+    if (!isNaN(endDate.getTime())) endIso = endDate.toISOString();
+  }
+
   const description = parsed.data.subtitle ?? parsed.data.description ?? null;
 
-  return {
+  const item: ScheduleItem = {
     id: id ?? `schedule-${Date.now()}`,
     title: parsed.data.title.trim(),
     subtitle: description?.trim() || null,
     start_time: startDate.toISOString(),
+    end_time: endIso,
     level: parsed.data.level ?? "Medium",
   };
+
+  return isValidStructuredScheduleEvent(item) ? item : null;
 }
 
 const WEEKDAY_NAMES = [
@@ -67,11 +79,48 @@ const WEEKDAY_NAMES = [
 const GENERIC_TITLE =
   /^(these|those|all|them|the|this|that|above|below|it|events?|the events?|each event|every event|weekend plan|my plan|your plan)\b/i;
 
+const DESCRIPTIVE_TITLE =
+  /^(?:time|when|details?|note|description)\s*:?\s*$/i;
+
+const TITLE_WITH_EXPLANATION =
+  /^([a-z][a-z\s]{0,30}):\s*(?:finish|start|wrap|wind|enjoy|have|take|end)\b/i;
+
 export function isValidScheduleTitle(title: string): boolean {
   const t = title.trim().replace(/[.:—–-]+$/g, "").trim();
-  if (t.length < 2 || t.length > 120) return false;
+  if (t.length < 2 || t.length > 80) return false;
   if (GENERIC_TITLE.test(t)) return false;
+  if (DESCRIPTIVE_TITLE.test(t)) return false;
+  if (TITLE_WITH_EXPLANATION.test(t)) return false;
+  if (/\b(?:finish the day|balanced meal|further assistance|let me know)\b/i.test(t)) return false;
   return true;
+}
+
+/** Approvals: title plus valid start/end window (from tool JSON or structured list lines). */
+export function isValidStructuredScheduleEvent(item: ScheduleItem): boolean {
+  if (!isValidScheduleTitle(item.title)) return false;
+  const start = new Date(item.start_time);
+  if (Number.isNaN(start.getTime())) return false;
+  if (!item.end_time) return false;
+  const end = new Date(item.end_time);
+  if (Number.isNaN(end.getTime())) return false;
+  if (end.getTime() <= start.getTime()) return false;
+  if (end.getTime() - start.getTime() > 24 * 60 * 60 * 1000) return false;
+  return true;
+}
+
+export function formatScheduleTimeRange(item: ScheduleItem): string {
+  const start = new Date(item.start_time);
+  const end = item.end_time ? new Date(item.end_time) : null;
+  const fmt = (d: Date) =>
+    d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  if (end && !Number.isNaN(end.getTime())) {
+    return `${fmt(start)} – ${fmt(end)}`;
+  }
+  return start.toLocaleString([], {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /** User wants every event from Simone's reply queued separately on Approvals. */
@@ -108,38 +157,93 @@ function parseClockToken(
   return { hour, minute };
 }
 
-function buildScheduleItem(
-  title: string,
+function clockOnDay(
+  token: string,
   day: Date,
-  hour: number,
-  minute: number,
-  subtitle: string | null,
+  defaultMeridiem?: "am" | "pm",
+): Date | null {
+  const clock = parseClockToken(token, defaultMeridiem);
+  if (!clock) return null;
+  const d = new Date(day);
+  d.setHours(clock.hour, clock.minute, 0, 0);
+  return d;
+}
+
+function looksLikeDescriptiveScheduleLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return true;
+  if (/^time\s*:/i.test(t)) return true;
+  if (/^(?:details?|note|description)\s*:/i.test(t)) return true;
+  if (TITLE_WITH_EXPLANATION.test(t)) return true;
+  if (looksLikeOrderOrProductLine(t)) return true;
+  return false;
+}
+
+/** "Pilates — 8:00 AM - 9:00 AM" → structured event; ignores prose-only lines. */
+function parseStructuredScheduleLine(
+  line: string,
+  day: Date,
   ref: Date,
   index: number,
 ): ScheduleItem | null {
+  if (looksLikeDescriptiveScheduleLine(line)) return null;
+
+  let working = line.trim().replace(/\*\*/g, "");
+  let eventDay = new Date(day);
+
+  const weekdayLead = working.match(
+    /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(.+)$/i,
+  );
+  if (weekdayLead) {
+    eventDay = resolveWeekday(weekdayLead[1], ref);
+    working = weekdayLead[2].trim();
+  }
+
+  const rangeMatch = working.match(
+    /^(.+?)\s*[—–-]\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*$/i,
+  );
+  if (!rangeMatch) return null;
+
+  const title = rangeMatch[1].trim();
+  const startToken = rangeMatch[2].trim();
+  const endToken = rangeMatch[3].trim();
   if (!isValidScheduleTitle(title)) return null;
-  const start = new Date(day);
-  start.setHours(hour, minute, 0, 0);
-  return {
+
+  const startMeridiem = startToken.match(/(am|pm)\b/i)?.[1]?.toLowerCase() as "am" | "pm" | undefined;
+  const start = clockOnDay(startToken, eventDay, startMeridiem);
+  const end = clockOnDay(endToken, eventDay, startMeridiem ?? (start && start.getHours() >= 12 ? "pm" : "am"));
+  if (!start || !end) return null;
+
+  let endDate = end;
+  if (endDate.getTime() <= start.getTime()) {
+    endDate = new Date(endDate.getTime() + 12 * 60 * 60 * 1000);
+  }
+  if (endDate.getTime() <= start.getTime()) return null;
+
+  const item: ScheduleItem = {
     id: `schedule-${ref.getTime()}-${index}`,
-    title: title.trim().slice(0, 120),
-    subtitle: subtitle?.trim().slice(0, 200) ?? null,
+    title: title.slice(0, 120),
+    subtitle: null,
     start_time: start.toISOString(),
+    end_time: endDate.toISOString(),
     level: "Medium",
   };
+
+  return isValidStructuredScheduleEvent(item) ? item : null;
 }
 
 /**
- * Extract multiple events from plans, bullet lists, and weekend itineraries in chat text.
+ * Extract schedule events from structured list lines in **user** text only.
+ * Format: Title — 8:00 AM - 9:00 AM (one event per line).
  */
-export function parseSchedulesFromText(text: string, ref = new Date()): ScheduleItem[] {
+export function parseStructuredSchedulesFromText(text: string, ref = new Date()): ScheduleItem[] {
   const results: ScheduleItem[] = [];
   const seen = new Set<string>();
   let currentDay: Date | null = null;
   let index = 0;
 
   const push = (item: ScheduleItem | null) => {
-    if (!item) return;
+    if (!item || !isValidStructuredScheduleEvent(item)) return;
     const key = `${item.title.toLowerCase()}|${item.start_time}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -165,10 +269,7 @@ export function parseSchedulesFromText(text: string, ref = new Date()): Schedule
     if (dayHeader) {
       currentDay = resolveWeekday(dayHeader[1], ref);
       const rest = dayHeader[2].trim();
-      if (rest) {
-        const parsed = parseScheduleLine(rest, currentDay, ref, index++);
-        push(parsed);
-      }
+      if (rest) push(parseStructuredScheduleLine(rest, currentDay, ref, index++));
       continue;
     }
 
@@ -176,88 +277,24 @@ export function parseSchedulesFromText(text: string, ref = new Date()): Schedule
     const numbered = line.match(/^\d+[.)]\s+(.+)$/);
     const content = (bullet?.[1] ?? numbered?.[1] ?? line).trim();
 
-    if (looksLikeOrderOrProductLine(content)) continue;
-
     const dayInLine = content.match(
       /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[,:]?\s+(.+)$/i,
     );
     if (dayInLine) {
       currentDay = resolveWeekday(dayInLine[1], ref);
-      push(parseScheduleLine(dayInLine[2], currentDay, ref, index++));
+      push(parseStructuredScheduleLine(dayInLine[2], currentDay, ref, index++));
       continue;
     }
 
-    const day = currentDay ?? ref;
-    push(parseScheduleLine(content, day, ref, index++));
+    push(parseStructuredScheduleLine(content, currentDay ?? ref, ref, index++));
   }
 
   return results.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
 }
 
-function parseScheduleLine(
-  line: string,
-  day: Date,
-  ref: Date,
-  index: number,
-): ScheduleItem | null {
-  let working = line.trim();
-  let eventDay = new Date(day);
-
-  const weekdayLead = working.match(
-    /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—:]\s*(.+)$/i,
-  );
-  if (weekdayLead) {
-    eventDay = resolveWeekday(weekdayLead[1], ref);
-    const clock = parseClockToken(weekdayLead[2]);
-    if (clock) {
-      return buildScheduleItem(weekdayLead[3], eventDay, clock.hour, clock.minute, null, ref, index);
-    }
-    working = weekdayLead[3];
-  }
-
-  const timeFirst = working.match(
-    /^(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—:]+\s*(.+)$/i,
-  );
-  if (timeFirst) {
-    const clock = parseClockToken(timeFirst[1]);
-    if (clock) return buildScheduleItem(timeFirst[2], eventDay, clock.hour, clock.minute, null, ref, index);
-  }
-
-  const timeLast = working.match(
-    /^(.+?)\s+(?:at|@)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*$/i,
-  );
-  if (timeLast) {
-    const clock = parseClockToken(timeLast[2]);
-    if (clock) return buildScheduleItem(timeLast[1], eventDay, clock.hour, clock.minute, null, ref, index);
-  }
-
-  const atMatch = working.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
-  if (atMatch) {
-    const clock = parseClockToken(
-      `${atMatch[1]}${atMatch[2] ? `:${atMatch[2]}` : ""}${atMatch[3] ? ` ${atMatch[3]}` : ""}`,
-    );
-    const title = working.replace(atMatch[0], "").trim().replace(/^[-–—:]+\s*/, "");
-    if (clock && title) return buildScheduleItem(title, eventDay, clock.hour, clock.minute, null, ref, index);
-  }
-
-  if (/\b(morning|afternoon|evening|night)\b/i.test(working)) {
-    const hour =
-      /\bmorning\b/i.test(working) ? 9 : /\bafternoon\b/i.test(working) ? 14 : /\bevening\b/i.test(working) ? 18 : 20;
-    const title = working
-      .replace(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, "")
-      .replace(/\b(morning|afternoon|evening|night)\b/gi, "")
-      .replace(/^[-–—:]+\s*/, "")
-      .trim();
-    if (title) return buildScheduleItem(title, eventDay, hour, 0, null, ref, index);
-  }
-
-  if (isValidScheduleTitle(working)) {
-    const d = new Date(eventDay);
-    d.setHours(9 + (index % 5), (index % 2) * 30, 0, 0);
-    return buildScheduleItem(working, d, d.getHours(), d.getMinutes(), null, ref, index);
-  }
-
-  return null;
+/** @deprecated Use parseStructuredSchedulesFromText — never parse assistant prose. */
+export function parseSchedulesFromText(text: string, ref = new Date()): ScheduleItem[] {
+  return parseStructuredSchedulesFromText(text, ref);
 }
 
 /**
@@ -266,6 +303,10 @@ function parseScheduleLine(
 export function parseScheduleFromText(text: string, ref = new Date()): ScheduleItem | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
+
+  const structured = parseStructuredSchedulesFromText(trimmed, ref);
+  if (structured.length === 1) return structured[0]!;
+  if (structured.length > 1) return null;
 
   const scheduleIntent =
     /\b(schedule|book|add|set up|plan|put|create)\b/i.test(trimmed) &&
@@ -334,13 +375,19 @@ export function parseScheduleFromText(text: string, ref = new Date()): ScheduleI
 
   if (!isValidScheduleTitle(title)) return null;
 
-  return {
+  const end = new Date(day);
+  end.setHours(hour + 1, minute, 0, 0);
+
+  const item: ScheduleItem = {
     id: `schedule-${Date.now()}`,
     title,
     subtitle,
     start_time: day.toISOString(),
+    end_time: end.toISOString(),
     level: "Medium",
   };
+
+  return isValidStructuredScheduleEvent(item) ? item : null;
 }
 
 export function isSameCalendarDay(iso: string, day = new Date()): boolean {
