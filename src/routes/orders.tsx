@@ -12,6 +12,8 @@ import {
   dismissBudgetExceededWarning,
   notifyBudgetChanged,
   useBudgetSnapshot,
+  type BudgetPeriod,
+  type BudgetPeriodSnapshot,
 } from "@/lib/budget-store";
 import { useApprovedOrders } from "@/lib/pending-orders-store";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,6 +26,17 @@ export const Route = createFileRoute("/orders")({
 
 const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
+
+const BUDGET_PERIOD_TABS: BudgetPeriod[] = ["Weekly", "Monthly", "Quarterly"];
+
+function periodSnapshotForTab(
+  snapshot: ReturnType<typeof useBudgetSnapshot>,
+  period: BudgetPeriod,
+): BudgetPeriodSnapshot {
+  if (period === "Weekly") return snapshot.weekly;
+  if (period === "Quarterly") return snapshot.quarterly;
+  return snapshot.monthly;
+}
 
 function budgetProgressBarColor(percentUsed: number, overMonthlyCap: boolean): string {
   if (overMonthlyCap) return "bg-risk-high";
@@ -68,20 +81,22 @@ function BudgetExceededWarning() {
 }
 
 function BudgetCard() {
-  const {
-    spent,
-    cap,
-    period,
-    periodAmount,
-    remaining,
-    percentUsed,
-    alertAt,
-    spentByCategory,
-  } = useBudgetSnapshot();
+  const snapshot = useBudgetSnapshot();
+  const [budgetPeriodTab, setBudgetPeriodTab] = useState<BudgetPeriod>("Monthly");
+  const view = periodSnapshotForTab(snapshot, budgetPeriodTab);
+  const { spent, cap, remaining, percentUsed, alertAt } = view;
   const unlimited = cap === "unlimited";
-  const monthly = unlimited ? 0 : Math.max(0, cap);
-  const pct = unlimited || monthly <= 0 ? 0 : percentUsed;
-  const barWidthPct = unlimited || monthly <= 0 ? 0 : Math.min(100, percentUsed);
+  const periodCap = unlimited ? 0 : Math.max(0, cap);
+  const pct = unlimited || periodCap <= 0 ? 0 : percentUsed;
+  const barWidthPct = unlimited || periodCap <= 0 ? 0 : Math.min(100, percentUsed);
+  const periodLabelLower = budgetPeriodTab.toLowerCase();
+
+  const spentByCategory =
+    budgetPeriodTab === "Weekly"
+      ? snapshot.weeklySpentByCategory
+      : budgetPeriodTab === "Quarterly"
+        ? snapshot.quarterlySpentByCategory
+        : snapshot.spentByCategory;
 
   useEffect(() => {
     const refresh = () => notifyBudgetChanged();
@@ -98,10 +113,10 @@ function BudgetCard() {
     };
   }, []);
 
-  const periodLabel =
-    periodAmount === "unlimited"
-      ? `${period} · unlimited`
-      : `${period} · $${typeof periodAmount === "number" ? periodAmount.toLocaleString() : periodAmount}`;
+  const periodCapLabel =
+    unlimited
+      ? `${budgetPeriodTab} · unlimited`
+      : `${budgetPeriodTab} · $${periodCap.toLocaleString()}`;
 
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
@@ -112,32 +127,48 @@ function BudgetCard() {
         <div className="flex-1">
           <div className="text-sm font-medium">Budget threshold</div>
           <div className="text-[11px] text-muted-foreground">
-            {periodLabel}
+            {periodCapLabel}
             {!unlimited && ` · alert at ${alertAt}%`}
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
             {unlimited
-              ? "Unlimited monthly budget — track spending freely."
-              : spent > monthly
-                ? `Over monthly cap by $${(spent - monthly).toFixed(2)}.`
+              ? `Unlimited ${periodLabelLower} budget — track spending freely.`
+              : spent > periodCap
+                ? `Over ${periodLabelLower} cap by $${(spent - periodCap).toFixed(2)}.`
                 : pct >= alertAt
                   ? `At ${pct}% — at or past your ${alertAt}% alert.`
                   : remaining != null && remaining >= 0
-                    ? `$${remaining.toFixed(2)} left this month.`
-                    : `You've spent ${pct}% of your monthly budget.`}
+                    ? `$${remaining.toFixed(2)} left this ${periodLabelLower}.`
+                    : `You've spent ${pct}% of your ${periodLabelLower} budget.`}
           </div>
         </div>
         <div className="text-right text-xs font-medium">
           ${spent.toFixed(2)}
-          <span className="text-muted-foreground"> / {unlimited ? "∞" : `$${monthly}`}</span>
+          <span className="text-muted-foreground"> / {unlimited ? "∞" : `$${periodCap}`}</span>
         </div>
       </div>
+
+      <div className="mt-3 flex gap-1 rounded-full bg-card/60 p-1">
+        {BUDGET_PERIOD_TABS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setBudgetPeriodTab(p)}
+            className={`flex-1 rounded-full px-2 py-1.5 text-[10px] font-medium transition-colors ${
+              budgetPeriodTab === p ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
       <div className="relative mt-3 h-2">
         <div className="h-2 overflow-hidden rounded-full bg-secondary">
           <div
             className={`h-full rounded-full transition-all duration-300 ${budgetProgressBarColor(
               pct,
-              !unlimited && spent > monthly,
+              !unlimited && spent > periodCap,
             )}`}
             style={{ width: unlimited ? "20%" : `${barWidthPct}%` }}
           />
@@ -147,7 +178,7 @@ function BudgetCard() {
             className="pointer-events-none absolute top-0 z-10 h-full w-px -translate-x-1/2 bg-foreground/45 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
             style={{ left: `${alertAt}%` }}
             aria-hidden
-            title={`Alert at ${alertAt}% of monthly budget`}
+            title={`Alert at ${alertAt}% of ${periodLabelLower} budget`}
           />
         )}
       </div>

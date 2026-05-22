@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import {
   BUDGET_CHANGED_EVENT,
+  normalizePeriodBudgets,
   notifyBudgetChanged,
   readBudgetSettings,
   setBudgetAlertAtPercent,
@@ -70,9 +71,29 @@ function BudgetPage() {
     setCats({ ...EMPTY_CATS });
   };
 
+  const applyPeriodFromStore = (p: Period, v = readBudgetSettings()) => {
+    const normalized = normalizePeriodBudgets(v);
+    const cap =
+      p === "Weekly"
+        ? normalized.weeklyBudget
+        : p === "Quarterly"
+          ? normalized.quarterlyBudget
+          : normalized.monthlyBudget;
+    if (cap === "unlimited") setAmount(Infinity);
+    else setAmount(cap);
+    setAlertAt(
+      p === "Weekly"
+        ? normalized.weeklyAlertPercentage
+        : p === "Quarterly"
+          ? normalized.quarterlyAlertPercentage
+          : normalized.monthlyAlertPercentage,
+    );
+  };
+
   const setPeriod = (p: Period) => {
     setPeriodState(p);
-    setAmountAndResetCats(PRESETS[p].amount);
+    applyPeriodFromStore(p);
+    setCats({ ...EMPTY_CATS });
   };
 
   useEffect(() => {
@@ -80,9 +101,7 @@ function BudgetPage() {
       const v = readBudgetSettings();
       const p = v.period ?? "Monthly";
       setPeriodState(p);
-      if (v.amount === "unlimited") setAmount(Infinity);
-      else if (typeof v.amount === "number") setAmount(v.amount);
-      if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
+      applyPeriodFromStore(p, v);
       const uiCats = readUiCategoryCats(v.cats);
       const savedFromThisForm = ["grocery", "amazon", "others"].some(
         (k) => typeof v.cats?.[k] === "number",
@@ -251,7 +270,7 @@ function BudgetPage() {
             onValueChange={(v) => {
               const next = v[0];
               setAlertAt(next);
-              setBudgetAlertAtPercent(next);
+              setBudgetAlertAtPercent(next, period);
             }}
           />
           <p className="mt-2 text-[11px] text-muted-foreground">
