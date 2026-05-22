@@ -258,14 +258,38 @@ export function orderWithBudgetFlags(order: PendingOrder): PendingOrder {
   };
 }
 
-/** After user approves an order — show budget warning on Orders if over cap. */
-export function recordApprovedOrderSpend(_order: PendingOrder) {
+/** Minimum monthly cap (CAD) after approval: cover spend + CA$50 buffer, rounded up. */
+export function computeAutoAdjustedMonthlyCapCad(spent: number): number {
+  const ceilSpent = Math.ceil(spent);
+  return ceilSpent + 50;
+}
+
+/**
+ * After approval, bump saved monthly budget so spend fits (e.g. CA$4307.52 → CA$4358).
+ * Updates Set your budget amount and refreshes Orders budget UI.
+ */
+export function autoAdjustMonthlyBudgetToCoverSpend(): number | null {
+  const spent = getApprovedSpendTotal();
   const cap = getEffectiveMonthlyCap();
-  if (cap === "unlimited") return;
-  const spentAfter = getApprovedSpendTotal();
-  if (spentAfter > cap) {
-    writeTracking({ ...readTracking(), showExceededWarning: true });
+  if (cap === "unlimited") return null;
+
+  if (spent <= cap) {
+    const t = readTracking();
+    if (t.showExceededWarning) {
+      writeTracking({ ...t, showExceededWarning: false });
+      notifyBudgetChanged();
+    }
+    return cap;
   }
+
+  const nextCap = computeAutoAdjustedMonthlyCapCad(spent);
+  setMonthlyBudgetCapCad(nextCap);
+  return nextCap;
+}
+
+/** After user approves an order — sync spend vs cap and auto-raise monthly budget if needed. */
+export function recordApprovedOrderSpend(_order: PendingOrder) {
+  autoAdjustMonthlyBudgetToCoverSpend();
 }
 
 export function getBudgetExceededWarning(): boolean {

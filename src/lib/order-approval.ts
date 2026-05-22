@@ -1,5 +1,6 @@
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
+  computeAutoAdjustedMonthlyCapCad,
   evaluateOrderBudget,
   setMonthlyBudgetCapCad,
   validateMonthlyBudgetCad,
@@ -90,6 +91,5 @@ export async function declineShoppingApproval(
 }
 
 export function suggestedMonthlyBudgetCad(check: BudgetCheck): number {
-  if (check.monthlyCap === "unlimited") return Math.ceil(check.projected);
-  return Math.max(Math.ceil(check.projected), check.monthlyCap);
+  return computeAutoAdjustedMonthlyCapCad(check.projected);
 }

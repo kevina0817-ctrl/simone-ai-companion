@@ -6,7 +6,12 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { readBudgetSettings, writeBudgetSettings, type BudgetPeriod } from "@/lib/budget-store";
+import {
+  BUDGET_CHANGED_EVENT,
+  readBudgetSettings,
+  writeBudgetSettings,
+  type BudgetPeriod,
+} from "@/lib/budget-store";
 
 export const Route = createFileRoute("/orders_/budget")({
   head: () => ({ meta: [{ title: "Set your budget — Simone" }] }),
@@ -69,17 +74,23 @@ function BudgetPage() {
   };
 
   useEffect(() => {
-    const v = readBudgetSettings();
-    const p = v.period ?? "Monthly";
-    if (v.period) setPeriodState(p);
-    if (v.amount === "unlimited") setAmount(Infinity);
-    else if (typeof v.amount === "number") setAmount(v.amount);
-    if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
-    const uiCats = readUiCategoryCats(v.cats);
-    const savedFromThisForm = ["grocery", "amazon", "others"].some(
-      (k) => typeof v.cats?.[k] === "number",
-    );
-    setCats(savedFromThisForm ? uiCats : { ...EMPTY_CATS });
+    const loadFromStore = () => {
+      const v = readBudgetSettings();
+      const p = v.period ?? "Monthly";
+      setPeriodState(p);
+      if (v.amount === "unlimited") setAmount(Infinity);
+      else if (typeof v.amount === "number") setAmount(v.amount);
+      if (typeof v.alertAt === "number") setAlertAt(v.alertAt);
+      const uiCats = readUiCategoryCats(v.cats);
+      const savedFromThisForm = ["grocery", "amazon", "others"].some(
+        (k) => typeof v.cats?.[k] === "number",
+      );
+      setCats(savedFromThisForm ? uiCats : { ...EMPTY_CATS });
+    };
+
+    loadFromStore();
+    window.addEventListener(BUDGET_CHANGED_EVENT, loadFromStore);
+    return () => window.removeEventListener(BUDGET_CHANGED_EVENT, loadFromStore);
   }, []);
 
   const total = Object.values(cats).reduce((a, b) => a + b, 0);
