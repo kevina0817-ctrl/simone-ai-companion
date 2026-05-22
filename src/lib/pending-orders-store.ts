@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { inferOrderCategory, isShoppingOrderCategory } from "@/lib/order-category";
-import { prepareOrderForApprovals } from "@/lib/order-approval";
+import { prepareOrderForApprovals } from "@/lib/order-prepare";
 import type { PendingOrder, PendingOrderStatus } from "@/lib/pending-order";
 
 const STORAGE_KEY = "simone-pending-orders";
@@ -84,6 +84,29 @@ export function setPendingOrderStatus(id: string, status: PendingOrderStatus) {
   }
 }
 
+/** Move pending order into approved Orders store (Grocery / Amazon / Other tabs). */
+export function commitApprovedShoppingOrder(orderId: string): PendingOrder | undefined {
+  const existing = orders.find((o) => o.id === orderId);
+  if (!existing || existing.status !== "pending_approval") return undefined;
+
+  const category = existing.category ?? inferOrderCategory(existing.store, existing.title);
+  const approved: PendingOrder = {
+    ...existing,
+    category,
+    status: "approved",
+    exceedsBudget: undefined,
+    budgetOverBy: undefined,
+  };
+
+  orders = orders.map((o) => (o.id === orderId ? approved : o));
+  persist();
+  emit();
+  if (typeof window !== "undefined") {
+    void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
+  }
+  return approved;
+}
+
 export function usePendingOrders() {
   return useSyncExternalStore(subscribe, getSnapshot, () => [] as PendingOrder[]);
 }
@@ -97,9 +120,11 @@ export function usePendingApprovalOrders() {
 /** Approved grocery / Amazon / online orders — Orders page only (never calendar events). */
 export function useApprovedOrders() {
   const all = usePendingOrders();
-  return all.filter(
-    (o) => o.status === "approved" && isShoppingOrderCategory(o.category),
-  );
+  return all.filter((o) => {
+    if (o.status !== "approved") return false;
+    const category = o.category ?? inferOrderCategory(o.store, o.title);
+    return isShoppingOrderCategory(category);
+  });
 }
 
 export function clearAllOrders() {

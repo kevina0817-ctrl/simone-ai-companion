@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
+import { inferOrderCategory } from "@/lib/order-category";
 import type { OrderCategory } from "@/lib/pending-order";
 import {
   applyMonthOnlyBudgetIncrease,
@@ -14,7 +15,7 @@ import {
 } from "@/lib/budget-store";
 import { useApprovedOrders } from "@/lib/pending-orders-store";
 import { useAuth } from "@/hooks/useAuth";
-import { applyPersonaForUser, ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
+import { ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -183,7 +184,10 @@ function EmptyState({ title, hint }: { title: string; hint: string }) {
 }
 
 function OrdersList({ category }: { category?: OrderCategory }) {
-  const approvedOrders = useApprovedOrders().filter((o) => !category || o.category === category);
+  const approvedOrders = useApprovedOrders().filter((o) => {
+    const cat = o.category ?? inferOrderCategory(o.store, o.title);
+    return !category || cat === category;
+  });
 
   return (
     <>
@@ -221,7 +225,6 @@ function OrdersPage() {
   const { user } = useAuth();
 
   useEffect(() => {
-    applyPersonaForUser(user);
     ensurePersonaBudgetForEmail(user?.email);
     notifyBudgetChanged();
   }, [user?.id, user?.email]);

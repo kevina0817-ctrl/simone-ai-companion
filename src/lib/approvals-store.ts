@@ -1,11 +1,16 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import type { PendingOrder } from "@/lib/pending-order";
-import { formatApprovalOrderDetail } from "@/lib/order-approval";
+import { formatApprovalOrderDetail } from "@/lib/order-prepare";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
 import { recordApprovedOrderSpend } from "@/lib/budget-store";
-import { addPendingOrder, getPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
+import {
+  addPendingOrder,
+  commitApprovedShoppingOrder,
+  getPendingOrder,
+  setPendingOrderStatus,
+} from "@/lib/pending-orders-store";
 
 export type PendingItemKind = "calendar" | "grocery" | "order";
 
@@ -232,4 +237,51 @@ export function isShoppingApproval(item: PendingItem): boolean {
 export function resolveOrderIdForApproval(approvalId: string): string | undefined {
   const entry = state.items[approvalId];
   return entry?.item.orderId ?? approvalId;
+}
+
+function markShoppingApprovalDecided(
+  approvalId: string,
+  status: "approved" | "declined",
+  order?: PendingOrder,
+) {
+  const decidedAt = Date.now();
+  const entry = state.items[approvalId];
+  if (entry && entry.status === "pending") {
+    state = {
+      ...state,
+      items: { ...state.items, [approvalId]: { ...entry, status, decidedAt } },
+    };
+  } else if (order) {
+    const item: PendingItem = {
+      id: approvalId,
+      kind: "order",
+      title: order.title,
+      detail: formatApprovalOrderDetail(order),
+      orderId: order.id,
+    };
+    state = {
+      items: { ...state.items, [approvalId]: { item, status, decidedAt } },
+      order: state.order.includes(approvalId) ? state.order : [approvalId, ...state.order],
+    };
+  }
+  emit();
+}
+
+/**
+ * Approve shopping order: write to Orders store first, then remove from Approvals pending.
+ */
+export function completeShoppingApproval(approvalId: string): PendingOrder | null {
+  const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
+  const approved = commitApprovedShoppingOrder(orderId);
+  if (!approved) return null;
+
+  markShoppingApprovalDecided(approvalId, "approved", approved);
+  recordApprovedOrderSpend(approved);
+  return approved;
+}
+
+export function declineShoppingApproval(approvalId: string): void {
+  const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
+  setPendingOrderStatus(orderId, "declined");
+  markShoppingApprovalDecided(approvalId, "declined", getPendingOrder(orderId));
 }

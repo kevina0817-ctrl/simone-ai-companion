@@ -5,88 +5,23 @@ import {
   validateMonthlyBudgetCad,
 } from "@/lib/budget-store";
 import {
-  decide,
+  completeShoppingApproval,
+  declineShoppingApproval as declineShoppingApprovalInStore,
   resolveOrderIdForApproval,
   type ApprovalsDecideContext,
 } from "@/lib/approvals-store";
 import { getPendingOrder } from "@/lib/pending-orders-store";
-import {
-  computeOrderTotal,
-  formatOrderDetail,
-  type PendingOrder,
-} from "@/lib/pending-order";
+import type { PendingOrder } from "@/lib/pending-order";
 import type { OrderCategory } from "@/lib/order-category";
 
-/** Demo FX rate — non–Grocery/Amazon tool prices are treated as USD and converted to CAD. */
-export const USD_TO_CAD_RATE = 1.36;
-
-function roundMoney(n: number) {
-  return Math.round(n * 100) / 100;
-}
-
-function stripBudgetFlags(order: PendingOrder): PendingOrder {
-  const { exceedsBudget: _e, budgetOverBy: _b, ...rest } = order;
-  return rest;
-}
-
-/** Convert USD-priced “other” orders to CAD before Approvals. Grocery/Amazon stay as-is. */
-export function convertOtherOrderToCad(order: PendingOrder): PendingOrder {
-  if (order.category !== "other") return stripBudgetFlags(order);
-  if (order.amountCurrency === "CAD") return stripBudgetFlags(order);
-
-  const originalTotalUsd = order.totalEstimatedPrice;
-  const items = order.items.map((item) => ({
-    ...item,
-    estimatedPrice: roundMoney(item.estimatedPrice * USD_TO_CAD_RATE),
-  }));
-
-  return {
-    ...stripBudgetFlags(order),
-    items,
-    totalEstimatedPrice: computeOrderTotal(items),
-    amountCurrency: "CAD",
-    originalTotalUsd,
-  };
-}
-
-/** Queue in Approvals — no budget flags until the user taps Approve. */
-export function prepareOrderForApprovals(order: PendingOrder): PendingOrder {
-  const normalized =
-    order.category === "grocery" || order.category === "amazon"
-      ? stripBudgetFlags(order)
-      : convertOtherOrderToCad(order);
-  return {
-    ...normalized,
-    status: "pending_approval",
-    exceedsBudget: undefined,
-    budgetOverBy: undefined,
-  };
-}
-
-export function formatApprovalOrderDetail(order: PendingOrder): string {
-  const base = formatOrderDetail(order);
-  if (order.amountCurrency === "CAD" && order.originalTotalUsd != null) {
-    return `${base} · converted from US$${order.originalTotalUsd.toFixed(2)}`;
-  }
-  return base;
-}
-
-export function categoryLabel(category: OrderCategory): string {
-  if (category === "amazon") return "Amazon";
-  if (category === "grocery") return "Grocery";
-  return "Other";
-}
-
-export function ordersTabForCategory(category: OrderCategory): "Grocery" | "Amazon" | "Other" {
-  if (category === "grocery") return "Grocery";
-  if (category === "amazon") return "Amazon";
-  return "Other";
-}
-
-function resolvePendingOrder(approvalId: string): PendingOrder | undefined {
-  const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
-  return getPendingOrder(orderId);
-}
+export {
+  USD_TO_CAD_RATE,
+  convertOtherOrderToCad,
+  prepareOrderForApprovals,
+  formatApprovalOrderDetail,
+  categoryLabel,
+  ordersTabForCategory,
+} from "@/lib/order-prepare";
 
 export type ApproveShoppingResult =
   | { status: "approved"; order: PendingOrder }
@@ -94,9 +29,14 @@ export type ApproveShoppingResult =
   | { status: "needs_budget"; check: BudgetCheck; order: PendingOrder }
   | { status: "invalid_budget"; message: string };
 
+function resolvePendingOrder(approvalId: string): PendingOrder | undefined {
+  const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
+  return getPendingOrder(orderId);
+}
+
 export async function tryApproveShoppingOrder(
   approvalId: string,
-  ctx?: ApprovalsDecideContext,
+  _ctx?: ApprovalsDecideContext,
 ): Promise<ApproveShoppingResult> {
   const order = resolvePendingOrder(approvalId);
   if (!order || order.status !== "pending_approval") {
@@ -108,11 +48,8 @@ export async function tryApproveShoppingOrder(
     return { status: "needs_budget", check, order };
   }
 
-  await decide(approvalId, "approved", ctx);
-  const approved = resolvePendingOrder(approvalId);
-  if (!approved || approved.status !== "approved") {
-    return { status: "declined" };
-  }
+  const approved = completeShoppingApproval(approvalId);
+  if (!approved) return { status: "declined" };
   return { status: "approved", order: approved };
 }
 
@@ -120,7 +57,7 @@ export async function tryApproveShoppingOrder(
 export async function approveShoppingOrderWithMonthlyBudgetCad(
   approvalId: string,
   monthlyCapCad: number,
-  ctx?: ApprovalsDecideContext,
+  _ctx?: ApprovalsDecideContext,
 ): Promise<ApproveShoppingResult> {
   const order = resolvePendingOrder(approvalId);
   if (!order || order.status !== "pending_approval") {
@@ -140,19 +77,16 @@ export async function approveShoppingOrderWithMonthlyBudgetCad(
     return { status: "needs_budget", check: recheck, order };
   }
 
-  await decide(approvalId, "approved", ctx);
-  const approved = resolvePendingOrder(approvalId);
-  if (!approved || approved.status !== "approved") {
-    return { status: "declined" };
-  }
+  const approved = completeShoppingApproval(approvalId);
+  if (!approved) return { status: "declined" };
   return { status: "approved", order: approved };
 }
 
 export async function declineShoppingApproval(
   approvalId: string,
-  ctx?: ApprovalsDecideContext,
+  _ctx?: ApprovalsDecideContext,
 ): Promise<void> {
-  await decide(approvalId, "declined", ctx);
+  declineShoppingApprovalInStore(approvalId);
 }
 
 export function suggestedMonthlyBudgetCad(check: BudgetCheck): number {
