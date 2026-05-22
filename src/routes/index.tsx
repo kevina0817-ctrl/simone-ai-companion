@@ -10,8 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
-import { ScheduleEventActions } from "@/components/ScheduleEventActions";
-import { SchedulePriorityIndicator, SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
+import { SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
+import { TodayScheduleTimeline } from "@/components/TodayScheduleTimeline";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
 import {
   backendAvailable,
@@ -251,38 +251,7 @@ function Home() {
           </div>
 
           <div className="relative rounded-3xl bg-card/60 p-4">
-            {events && events.length > 0 ? (
-              <>
-                <div className="absolute left-[42px] top-6 bottom-6 w-px bg-border" />
-                <ul className="space-y-4">
-                  {events.map((item) => (
-                    <li key={item.id} className="relative flex items-center gap-3">
-                      <span className="w-12 text-[11px] font-medium text-muted-foreground">
-                        {new Date(item.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      <SchedulePriorityIndicator
-                        level={item.level}
-                        title={item.title}
-                        variant="dot"
-                        className="relative z-10"
-                      />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium leading-tight">{item.title}</div>
-                        <div className="text-xs text-muted-foreground">{item.subtitle}</div>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <SchedulePriorityIndicator level={item.level} title={item.title} variant="chip" />
-                        <ScheduleEventActions event={item} userId={user!.id} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <div className="py-6 text-center text-xs text-muted-foreground">
-                No events yet. Load a sample day above or ask Simone to plan one.
-              </div>
-            )}
+            <TodayScheduleTimeline events={events ?? []} userId={user!.id} />
           </div>
         </div>
       </div>
