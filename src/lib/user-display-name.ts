@@ -8,6 +8,13 @@ function titleCaseWord(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }
 
+/** Build a display name from signup first / last name fields. */
+export function buildDisplayNameFromParts(firstName: string, lastName: string): string {
+  const parts = [firstName.trim(), lastName.trim()].filter(Boolean);
+  if (parts.length === 0) return "";
+  return parts.map(titleCaseWord).join(" ");
+}
+
 /** Turn email local-part / handle into a spaced display name (e.g. jordan.ross → Jordan Ross). */
 export function formatHandleToDisplayName(handle: string): string {
   const trimmed = handle.trim();
