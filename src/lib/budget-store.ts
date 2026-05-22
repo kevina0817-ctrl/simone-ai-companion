@@ -294,6 +294,40 @@ export function raiseMonthlyBudgetForProjectedSpend(projected: number) {
   notifyBudgetChanged();
 }
 
+/** User-entered monthly cap (CAD) from Approvals budget reset — applies to settings + this month. */
+export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
+  const rounded = Math.round(monthlyCapCad * 100) / 100;
+  const settings = readBudgetSettings();
+  writeBudgetSettings({
+    ...settings,
+    period: "Monthly",
+    amount: rounded,
+    alertAt: settings.alertAt ?? 90,
+  });
+  writeTracking({
+    monthKey: currentMonthKey(),
+    monthOnlyCap: rounded,
+    showExceededWarning: false,
+  });
+  notifyBudgetChanged();
+}
+
+export function validateMonthlyBudgetCad(
+  amount: number,
+  minimumCad: number,
+): { ok: true } | { ok: false; message: string } {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, message: "Enter a valid monthly budget in CAD." };
+  }
+  if (amount < minimumCad) {
+    return {
+      ok: false,
+      message: `Monthly budget must be at least CA$${minimumCad.toFixed(2)} to cover current spend plus this order.`,
+    };
+  }
+  return { ok: true };
+}
+
 export function dismissBudgetExceededWarning() {
   const t = readTracking();
   writeTracking({ ...t, showExceededWarning: false });

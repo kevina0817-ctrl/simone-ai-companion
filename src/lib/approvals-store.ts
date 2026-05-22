@@ -119,10 +119,11 @@ export async function decide(
     items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
   };
 
-  if (entry.item.orderId) {
-    setPendingOrderStatus(entry.item.orderId, status === "approved" ? "approved" : "declined");
+  const orderId = entry.item.orderId ?? (isShoppingApproval(entry.item) ? id : undefined);
+  if (orderId) {
+    setPendingOrderStatus(orderId, status === "approved" ? "approved" : "declined");
     if (status === "approved") {
-      const order = getPendingOrder(entry.item.orderId);
+      const order = getPendingOrder(orderId);
       if (order) recordApprovedOrderSpend(order);
     }
   }
@@ -226,4 +227,9 @@ export function isScheduleApproval(item: PendingItem): boolean {
 
 export function isShoppingApproval(item: PendingItem): boolean {
   return Boolean(item.orderId);
+}
+
+export function resolveOrderIdForApproval(approvalId: string): string | undefined {
+  const entry = state.items[approvalId];
+  return entry?.item.orderId ?? approvalId;
 }

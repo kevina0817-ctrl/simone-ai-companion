@@ -10,17 +10,21 @@ import {
   decide,
   isScheduleApproval,
   isShoppingApproval,
+  resolveOrderIdForApproval,
   usePending,
   useRecentDecisions,
   useStatus,
   type ApprovalsDecideContext,
   type PendingItem,
 } from "@/lib/approvals-store";
+import type { OrderCategory } from "@/lib/order-category";
 import type { BudgetCheck } from "@/lib/budget-store";
 import {
-  approveShoppingOrderAfterBudgetRaise,
+  approveShoppingOrderWithMonthlyBudgetCad,
   categoryLabel,
   declineShoppingApproval,
+  ordersTabForCategory,
+  suggestedMonthlyBudgetCad,
   tryApproveShoppingOrder,
 } from "@/lib/order-approval";
 import { backendAvailable, demoUser } from "@/lib/demo-mode";
@@ -220,14 +224,14 @@ function OrderBudgetPrompt({
   check,
   orderTotal,
   priceSymbol,
-  onRaise,
+  onStartRaise,
   onDecline,
   busy,
 }: {
   check: BudgetCheck;
   orderTotal: number;
   priceSymbol: string;
-  onRaise: () => void;
+  onStartRaise: () => void;
   onDecline: () => void;
   busy: boolean;
 }) {
@@ -253,7 +257,7 @@ function OrderBudgetPrompt({
         <button
           type="button"
           disabled={busy}
-          onClick={onRaise}
+          onClick={onStartRaise}
           className="flex-1 rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
         >
           Yes, raise this month
@@ -263,53 +267,128 @@ function OrderBudgetPrompt({
   );
 }
 
+function OrderBudgetRaiseForm({
+  check,
+  busy,
+  inputError,
+  onCancel,
+  onSave,
+}: {
+  check: BudgetCheck;
+  busy: boolean;
+  inputError: string | null;
+  onCancel: () => void;
+  onSave: (amountCad: number) => void;
+}) {
+  const [value, setValue] = useState(() => String(suggestedMonthlyBudgetCad(check)));
+
+  return (
+    <div className="mt-4 rounded-2xl border border-primary/30 bg-card/90 px-4 py-4 text-sm shadow-card">
+      <div className="text-sm font-medium">Set monthly budget (CAD)</div>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        Enter a new monthly cap for this month. The order will be approved only after you save a budget
+        of at least CA${check.projected.toFixed(2)} (current spend plus this order).
+      </p>
+      <label className="mt-3 block">
+        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Monthly budget (CAD)</span>
+        <div className="mt-1.5 flex items-center gap-2 rounded-2xl border border-border bg-background/60 px-3 py-2">
+          <span className="text-sm text-muted-foreground">CA$</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={busy}
+            className="w-full bg-transparent text-sm font-medium focus:outline-none disabled:opacity-50"
+            aria-label="New monthly budget in CAD"
+          />
+        </div>
+      </label>
+      {inputError && <p className="mt-2 text-xs text-risk-high">{inputError}</p>}
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onCancel}
+          className="flex-1 rounded-full border border-border bg-secondary/50 py-2 text-xs font-medium disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onSave(Number.parseFloat(value))}
+          className="flex-1 rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          Save budget & approve
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OrderActionButtons({ id }: { id: string }) {
   const ctx = useDecideContext();
   const [budgetCheck, setBudgetCheck] = useState<BudgetCheck | null>(null);
+  const [showBudgetInput, setShowBudgetInput] = useState(false);
+  const [inputError, setInputError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const order = usePendingOrders().find((o) => o.id === id);
+  const orders = usePendingOrders();
+  const orderId = resolveOrderIdForApproval(id) ?? id;
+  const order = orders.find((o) => o.id === orderId);
 
-  const finishApproved = () => {
-    const tab =
-      order?.category === "grocery"
-        ? "Grocery"
-        : order?.category === "amazon"
-          ? "Amazon"
-          : "Other";
-    toast.success(
-      tab === "Other"
-        ? `Order approved — see it under Orders → Other`
-        : `Order approved — see it under Orders → ${tab}`,
-    );
+  const finishApproved = (approved: { category: OrderCategory }) => {
+    const tab = ordersTabForCategory(approved.category);
+    toast.success(`Order approved — see it under Orders → ${tab}`);
+  };
+
+  const clearBudgetFlow = () => {
+    setBudgetCheck(null);
+    setShowBudgetInput(false);
+    setInputError(null);
   };
 
   const onApprove = async () => {
     if (!ctx) return;
     setBusy(true);
+    setInputError(null);
     try {
       const result = await tryApproveShoppingOrder(id, ctx);
       if (result.status === "needs_budget") {
         setBudgetCheck(result.check);
+        setShowBudgetInput(false);
         return;
       }
-      if (result.status === "approved") finishApproved();
+      if (result.status === "approved") {
+        clearBudgetFlow();
+        finishApproved(result.order);
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  const onRaiseAndApprove = async () => {
+  const onSaveBudgetAndApprove = async (amountCad: number) => {
     if (!ctx) return;
     setBusy(true);
+    setInputError(null);
     try {
-      const result = await approveShoppingOrderAfterBudgetRaise(id, ctx);
+      const result = await approveShoppingOrderWithMonthlyBudgetCad(id, amountCad, ctx);
+      if (result.status === "invalid_budget") {
+        setInputError(result.message);
+        return;
+      }
       if (result.status === "needs_budget") {
         setBudgetCheck(result.check);
+        setShowBudgetInput(false);
+        setInputError("That budget is still too low for this order. Try a higher amount.");
         return;
       }
       if (result.status === "approved") {
-        setBudgetCheck(null);
-        finishApproved();
+        clearBudgetFlow();
+        finishApproved(result.order);
       }
     } finally {
       setBusy(false);
@@ -321,23 +400,40 @@ function OrderActionButtons({ id }: { id: string }) {
     setBusy(true);
     try {
       await declineShoppingApproval(id, ctx);
-      setBudgetCheck(null);
+      clearBudgetFlow();
       toast.message("Order declined — it stays off your Orders page");
     } finally {
       setBusy(false);
     }
   };
 
+  const inBudgetFlow = Boolean(budgetCheck);
+
   return (
     <>
-      {budgetCheck && order && (
+      {budgetCheck && order && !showBudgetInput && (
         <OrderBudgetPrompt
           check={budgetCheck}
           orderTotal={order.totalEstimatedPrice}
           priceSymbol={order.amountCurrency === "CAD" ? "CA$" : "$"}
-          onRaise={() => void onRaiseAndApprove()}
+          onStartRaise={() => {
+            setShowBudgetInput(true);
+            setInputError(null);
+          }}
           onDecline={() => void onDeclineBudget()}
           busy={busy}
+        />
+      )}
+      {budgetCheck && showBudgetInput && (
+        <OrderBudgetRaiseForm
+          check={budgetCheck}
+          busy={busy}
+          inputError={inputError}
+          onCancel={() => {
+            setShowBudgetInput(false);
+            setInputError(null);
+          }}
+          onSave={(amount) => void onSaveBudgetAndApprove(amount)}
         />
       )}
       <div className="mt-4 flex gap-2">
@@ -351,7 +447,7 @@ function OrderActionButtons({ id }: { id: string }) {
         </button>
         <button
           type="button"
-          disabled={!ctx || busy || Boolean(budgetCheck)}
+          disabled={!ctx || busy || inBudgetFlow}
           onClick={() => void onApprove()}
           className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
         >
@@ -364,7 +460,8 @@ function OrderActionButtons({ id }: { id: string }) {
 
 function OrderApprovalCard({ id }: { id: string }) {
   const status = useStatus(id);
-  const order = usePendingOrders().find((o) => o.id === id);
+  const orderId = resolveOrderIdForApproval(id) ?? id;
+  const order = usePendingOrders().find((o) => o.id === orderId);
   if (!order) return null;
 
   return (
