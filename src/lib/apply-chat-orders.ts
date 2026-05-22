@@ -5,6 +5,7 @@ import {
   normalizeOrderFromToolArgs,
   parseOrderFromText,
 } from "@/lib/pending-order";
+import { isPurchaseOrderIntent } from "@/lib/chat-intent";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
 import { prepareOrderForApprovals } from "@/lib/order-approval";
 
@@ -37,17 +38,11 @@ export function applyChatOrderResult(
     }
   }
 
-  if (created.length === 0) {
+  if (created.length === 0 && isPurchaseOrderIntent(input.userMessage)) {
     const combined = `${input.userMessage}\n${input.assistantReply ?? ""}`;
     const parsed = parseOrderFromText(combined);
-    const scheduleIntent =
-      /\b(schedule|book|add|cancel|remove|delete|meeting|appointment|event|session)\b/i.test(
-        combined,
-      );
-    if (parsed && !scheduleIntent) {
-      const order = prepareOrderForApprovals(parsed);
-      addPendingOrderApproval(order);
-      created.push(order);
+    if (parsed) {
+      push(parsed);
     }
   }
 

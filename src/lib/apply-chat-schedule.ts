@@ -22,6 +22,10 @@ import {
   type CancelMatchCriteria,
 } from "@/lib/schedule-item";
 
+import {
+  shouldRunScheduleTextFallbacks,
+  shouldSuppressScheduleApprovals,
+} from "@/lib/chat-intent";
 import type { ChatScheduleAction } from "@/lib/chat-actions";
 
 export type { ChatScheduleAction } from "@/lib/chat-actions";
@@ -186,8 +190,11 @@ export async function applyChatScheduleResult(
   const today = new Date().toISOString().slice(0, 10);
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
+  const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
+
   for (const action of actions) {
     if (action.kind === "schedule_event") {
+      if (suppressSchedule) continue;
       const item = toScheduleItem(action);
       if (!isValidScheduleTitle(item.title)) continue;
       addPendingScheduleApproval(item);
@@ -224,28 +231,27 @@ export async function applyChatScheduleResult(
     }
   }
 
-  if (cancelled.length === 0) {
-    const orderIntent = /\b(buy|order|shop for|purchase|groceries|grocery)\b/i.test(combinedText);
+  if (!suppressSchedule && shouldRunScheduleTextFallbacks(userMessage)) {
     const bulk = wantsBulkScheduleApprovals(userMessage);
-    const fromReply = parseSchedulesFromText(assistantReply ?? "");
+    const fromReply = bulk ? parseSchedulesFromText(assistantReply ?? "") : [];
     const fromCombined = parseSchedulesFromText(combinedText);
 
     const candidates =
-      bulk || fromReply.length > 1
+      bulk && fromReply.length > 0
         ? fromReply
         : fromCombined.length > 1
           ? fromCombined
           : [];
 
-    if (candidates.length > 0 && !orderIntent) {
+    if (candidates.length > 0) {
       for (const item of candidates) {
         if (scheduled.some((s) => s.title.toLowerCase() === item.title.toLowerCase())) continue;
         addPendingScheduleApproval(item);
         scheduled.push(item);
       }
     } else if (scheduled.length === 0) {
-      const parsed = parseScheduleFromText(bulk ? (assistantReply ?? "") : combinedText);
-      if (parsed && !orderIntent) {
+      const parsed = parseScheduleFromText(bulk ? (assistantReply ?? "") : userMessage);
+      if (parsed) {
         addPendingScheduleApproval(parsed);
         scheduled.push(parsed);
       }

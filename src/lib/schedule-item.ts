@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+function looksLikeOrderOrProductLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  if (/\b(?:US\$|CA\$|CAD|USD|\$\d|approximately|price|priced|cost)\b/i.test(t)) return true;
+  if (/\b(?:sent to approvals?|pending approval|monthly budget)\b/i.test(t)) return true;
+  if (
+    /\b(?:tiffany|pendant|necklace|bag|shoes|grocery|groceries|amazon|jewelry|jewellery)\b/i.test(t) &&
+    !/\b(?:at|@)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export type ScheduleLevel = "High" | "Medium" | "Low";
 
 /** Shape used by the Homepage timeline and demo localStorage. */
@@ -161,6 +175,8 @@ export function parseSchedulesFromText(text: string, ref = new Date()): Schedule
     const bullet = line.match(/^[-*•]\s+(.+)$/);
     const numbered = line.match(/^\d+[.)]\s+(.+)$/);
     const content = (bullet?.[1] ?? numbered?.[1] ?? line).trim();
+
+    if (looksLikeOrderOrProductLine(content)) continue;
 
     const dayInLine = content.match(
       /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[,:]?\s+(.+)$/i,

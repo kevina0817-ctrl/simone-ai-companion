@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isPurchaseOrderIntent } from "@/lib/chat-intent";
 import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
 
 export type { OrderCategory } from "@/lib/order-category";
@@ -91,28 +92,37 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
 /** Fallback when the model does not call create_pending_order. */
 export function parseOrderFromText(text: string): PendingOrder | null {
   const trimmed = text.trim();
-  const buyIntent =
-    /\b(buy|order|shop for|get|pick up|purchase|add)\b/i.test(trimmed) &&
-    /\b(groceries|grocery|food|items|milk|eggs|bananas|salmon|spinach|amazon|supplies)\b/i.test(trimmed);
-  if (!buyIntent) return null;
+  if (!isPurchaseOrderIntent(trimmed)) return null;
 
   const titleMatch = trimmed.match(
-    /(?:buy|order|shop for|get)\s+(.+?)(?:\s+from\s+|\s+at\s+|$)/i,
+    /(?:buy|order|shop for|purchase|get)\s+(?:the\s+)?(.+?)(?:\s+from\s+|\s+at\s+|\.|,|$)/i,
   );
-  const title = titleMatch?.[1]?.trim().slice(0, 80) || "Grocery order";
+  const title =
+    titleMatch?.[1]?.trim().slice(0, 80) ||
+    (/\btiffany\b/i.test(trimmed) ? "Tiffany Signature Pendant" : "Shopping order");
 
-  const storeMatch = trimmed.match(/\b(?:from|at)\s+(whole foods|amazon|target|trader joe'?s?)\b/i);
+  const storeMatch = trimmed.match(
+    /\b(?:from|at)\s+(whole foods|amazon|target|trader joe'?s?|tiffany(?:\s+&\s+co)?)\b/i,
+  );
   const store = storeMatch?.[1]
     ? storeMatch[1].replace(/\b\w/g, (c) => c.toUpperCase())
-    : /amazon/i.test(trimmed)
-      ? "Amazon"
-      : "Whole Foods";
+    : /tiffany/i.test(trimmed)
+      ? "Tiffany"
+      : /amazon/i.test(trimmed)
+        ? "Amazon"
+        : "Online";
 
-  const defaults: OrderLineItem[] = [
-    { name: "Bananas (organic)", qty: 1, estimatedPrice: 2.49 },
-    { name: "Baby spinach", qty: 1, estimatedPrice: 4.5 },
-    { name: "Free-range eggs", qty: 1, estimatedPrice: 6.49 },
-  ];
+  const priceMatch = trimmed.match(/(?:US\$|USD|\$)\s*([\d,]+(?:\.\d{2})?)/i);
+  const unitPrice = priceMatch ? Number.parseFloat(priceMatch[1].replace(/,/g, "")) : 0;
+
+  const items: OrderLineItem[] =
+    unitPrice > 0
+      ? [{ name: title, qty: 1, estimatedPrice: unitPrice }]
+      : [
+          { name: "Bananas (organic)", qty: 1, estimatedPrice: 2.49 },
+          { name: "Baby spinach", qty: 1, estimatedPrice: 4.5 },
+          { name: "Free-range eggs", qty: 1, estimatedPrice: 6.49 },
+        ];
 
   const normalizedTitle = title.charAt(0).toUpperCase() + title.slice(1);
   return {
@@ -120,8 +130,8 @@ export function parseOrderFromText(text: string): PendingOrder | null {
     title: normalizedTitle,
     store,
     category: inferOrderCategory(store, normalizedTitle),
-    items: defaults,
-    totalEstimatedPrice: computeOrderTotal(defaults),
+    items,
+    totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
     amountCurrency: "USD",
     createdAt: new Date().toISOString(),
