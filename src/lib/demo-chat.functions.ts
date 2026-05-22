@@ -4,7 +4,11 @@ import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
-import { buildBoredomPlanningContextBlock, isBoredomOrFreeTimeIntent } from "@/lib/boredom-schedule";
+import {
+  buildBoredomPlanningContextBlock,
+  EVENING_PLAN_TIMEZONE,
+  isBoredomOrFreeTimeIntent,
+} from "@/lib/boredom-schedule";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
@@ -60,7 +64,7 @@ Quote prices as US dollars (e.g. "approximately US$950") — never call unconver
 For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
 Do NOT call a tool for general questions or chit-chat.
 
-BOREDOM / FREE TIME: When the user is bored or asks what to do now / rest of tonight — schedule activities for TODAY only, from the next quarter-hour after Now until bedtime (see planning context). Never use tomorrow unless they explicitly ask. Call schedule_event per activity with sequential ISO times on today's date.`;
+BOREDOM / EVENING: Use America/Toronto (Eastern) from planning context. Schedule TODAY only from the next quarter-hour until 11:00 PM — never past midnight or 11:15 PM–1:00 AM blocks unless they ask to stay up late. Light, short plans if it is almost bedtime.`;
 
 const tools = [
   {
@@ -174,7 +178,9 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
     const nowIso = data.nowIso ?? new Date().toISOString();
-    const tz = data.timezone ?? "UTC";
+    const tz = isBoredomOrFreeTimeIntent(data.message)
+      ? EVENING_PLAN_TIMEZONE
+      : (data.timezone ?? "UTC");
     const w = data.wellness;
 
     const wellnessLine = w
@@ -196,7 +202,11 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
         ? [
             {
               role: "system",
-              content: buildBoredomPlanningContextBlock({ nowIso, events: data.events }),
+              content: buildBoredomPlanningContextBlock({
+                nowIso,
+                events: data.events,
+                userMessage: data.message,
+              }),
             },
           ]
         : []),

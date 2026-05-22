@@ -155,6 +155,7 @@ function ChatPage() {
         userMessage: t,
         assistantReply: replyText,
         userId: user!.id,
+        nowIso,
       });
 
       const displayReply = applyScheduleReplyOutcome(replyText, {

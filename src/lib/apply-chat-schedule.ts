@@ -46,6 +46,8 @@ type ApplyInput = {
   userMessage: string;
   assistantReply?: string;
   userId: string;
+  /** Client clock — used for evening/boredom planning in America/Toronto. */
+  nowIso?: string;
 };
 
 
@@ -212,7 +214,7 @@ export type ApplyChatScheduleResult = {
  */
 export async function applyChatScheduleResult(
   qc: QueryClient,
-  { actions = [], userMessage, assistantReply, userId }: ApplyInput,
+  { actions = [], userMessage, assistantReply, userId, nowIso }: ApplyInput,
 ): Promise<ApplyChatScheduleResult> {
   const cancelled: ScheduleItem[] = [];
   const committed: ScheduleItem[] = [];
@@ -255,7 +257,8 @@ export async function applyChatScheduleResult(
       !userExplicitlyWantsTomorrow(userMessage)
     ) {
       events = coerceBoredomScheduleEvents(events, {
-        now: new Date(),
+        nowIso,
+        userMessage,
         todayEvents,
       });
     }
