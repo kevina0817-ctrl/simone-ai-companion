@@ -265,12 +265,12 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
 
   if (personaChanged || opts?.force) {
     replacePendingOrders(orders);
-    resetApprovalsPending(persona.approvals(orders));
+    resetApprovalsPending([]);
     clearUserMonthlyCapOverride();
     syncBudgetWithApprovedSpend(persona.budget);
   } else if (firstPersonaBind) {
     replacePendingOrders(orders);
-    resetApprovalsPending(persona.approvals(orders));
+    resetApprovalsPending([]);
     if (!hasUserMonthlyCapOverride()) {
       syncBudgetWithApprovedSpend(persona.budget);
     }

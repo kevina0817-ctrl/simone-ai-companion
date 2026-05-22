@@ -164,7 +164,7 @@ export function buildKevinZhangOrders(): PendingOrder[] {
     { name: "Eggs & tofu", qty: 1, estimatedPrice: 8.5 },
     { name: "Instant ramen variety", qty: 3, estimatedPrice: 3.29 },
   ]);
-  const o3 = ttOrder("kevin-tt-3", 0, "pending_approval", [
+  const o3 = ttOrder("kevin-tt-3", 0, "approved", [
     ...ttBasket,
     { name: "Matcha powder", qty: 1, estimatedPrice: 11.99 },
   ]);
@@ -195,33 +195,9 @@ export function buildKevinZhangOrders(): PendingOrder[] {
   return [o3, bubble, takeout, o2, o1];
 }
 
-export function buildKevinZhangApprovals(orders: PendingOrder[]): PendingItem[] {
-  const pendingTt = orders.find((o) => o.status === "pending_approval");
-  return [
-    ...(pendingTt
-      ? [
-          {
-            id: pendingTt.id,
-            kind: "order" as const,
-            title: `T&T grocery — $${pendingTt.totalEstimatedPrice.toFixed(2)}`,
-            detail: "Instant noodles, dumplings, protein · usual student stock-up",
-            orderId: pendingTt.id,
-          },
-        ]
-      : []),
-    {
-      id: "kz-ap-study",
-      kind: "calendar",
-      title: "Protect study block before gaming",
-      detail: "Today 3:30 PM · STA257 + CSC258 · High priority",
-    },
-    {
-      id: "kz-ap-gym",
-      kind: "calendar",
-      title: "Gym reminder — Goldring 6:30 PM",
-      detail: "Steps only 6.8k · evening session keeps weekly streak",
-    },
-  ];
+/** Approvals are added only via chat/schedule actions — not seeded on profile load. */
+export function buildKevinZhangApprovals(_orders: PendingOrder[]): PendingItem[] {
+  return [];
 }
 
 function hoursAgoIso(hours: number) {

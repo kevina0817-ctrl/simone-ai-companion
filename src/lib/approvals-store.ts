@@ -38,31 +38,18 @@ export type ApprovalsDecideContext = {
   queryClient: QueryClient;
 };
 
-const initialPending: PendingItem[] = [
-  {
-    id: "p-cal-1",
-    kind: "calendar",
-    title: "Calendar change: move client meeting",
-    detail: "Today 2 PM → Tomorrow 10 AM",
-  },
-  {
-    id: "p-gro-1",
-    kind: "grocery",
-    title: "Grocery budget over limit",
-    detail: "+$24.31 over monthly",
-  },
-];
-
-let state: {
+const emptyApprovalsState = (): {
   items: Record<
     string,
     { item: PendingItem; status: "pending" | "approved" | "declined"; decidedAt?: number }
   >;
   order: string[];
-} = {
-  items: Object.fromEntries(initialPending.map((i) => [i.id, { item: i, status: "pending" as const }])),
-  order: initialPending.map((i) => i.id),
-};
+} => ({
+  items: {},
+  order: [],
+});
+
+let state = emptyApprovalsState();
 
 let decideContext: ApprovalsDecideContext | null = null;
 
@@ -190,8 +177,8 @@ export function addPendingScheduleApproval(item: ScheduleItem) {
   emit();
 }
 
-/** Reset pending approvals (demo / sample personas). */
-export function resetApprovalsPending(items: PendingItem[]) {
+/** Reset approvals queue (e.g. persona switch). Pass [] for an empty queue on profile load. */
+export function resetApprovalsPending(items: PendingItem[] = []) {
   state = {
     items: Object.fromEntries(items.map((i) => [i.id, { item: i, status: "pending" as const }])),
     order: items.map((i) => i.id),
@@ -212,9 +199,9 @@ export function usePending() {
   return s.order.map((id) => s.items[id]).filter((e) => e.status === "pending").map((e) => e.item);
 }
 
-export function useStatus(id: string) {
+export function useStatus(id: string): "pending" | "approved" | "declined" | undefined {
   const s = useApprovalsSnapshot();
-  return s.items[id]?.status ?? "pending";
+  return s.items[id]?.status;
 }
 
 export function useRecentDecisions() {

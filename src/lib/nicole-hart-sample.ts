@@ -160,7 +160,7 @@ const premiumBasket = [
 
 export function buildNicoleHartOrders(): PendingOrder[] {
   const o1 = wholeFoodsOrder("nicole-wf-1", 5, "approved", premiumBasket);
-  const o2 = wholeFoodsOrder("nicole-wf-2", 0, "pending_approval", [
+  const o2 = wholeFoodsOrder("nicole-wf-2", 0, "approved", [
     ...premiumBasket,
     { name: "Organic lemon & ginger", qty: 1, estimatedPrice: 4.99 },
   ]);
@@ -189,27 +189,9 @@ export function buildNicoleHartOrders(): PendingOrder[] {
   return [o2, matchaCafe, o1];
 }
 
-export function buildNicoleHartApprovals(orders: PendingOrder[]): PendingItem[] {
-  const pendingWf = orders.find((o) => o.status === "pending_approval");
-  return [
-    ...(pendingWf
-      ? [
-          {
-            id: pendingWf.id,
-            kind: "order" as const,
-            title: `Whole Foods — $${pendingWf.totalEstimatedPrice.toFixed(2)}`,
-            detail: "Organic berries, salmon, supplements · curated ~$200 haul",
-            orderId: pendingWf.id,
-          },
-        ]
-      : []),
-    {
-      id: "nh-ap-yoga",
-      kind: "calendar",
-      title: "Evening yoga — recovery block",
-      detail: "Today 6:00 PM · candlelit flow · protect from late meetings",
-    },
-  ];
+/** Approvals are added only via chat/schedule actions — not seeded on profile load. */
+export function buildNicoleHartApprovals(_orders: PendingOrder[]): PendingItem[] {
+  return [];
 }
 
 function hoursAgoIso(hours: number) {

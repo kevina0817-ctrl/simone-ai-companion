@@ -168,7 +168,7 @@ export function buildJordanRossOrders(): PendingOrder[] {
     ...wfBasket.slice(0, 5),
     { name: "Magnesium & omega-3", qty: 2, estimatedPrice: 38.0 },
   ]);
-  const o3 = wholeFoodsOrder("jordan-wf-3", 0, "pending_approval", wfBasket);
+  const o3 = wholeFoodsOrder("jordan-wf-3", 0, "approved", wfBasket);
   // Normalize totals near $300
   for (const o of [o1, o2, o3]) {
     const target = 298 + (o.id.charCodeAt(o.id.length - 1) % 15);
@@ -182,26 +182,9 @@ export function buildJordanRossOrders(): PendingOrder[] {
   return [o3, o2, o1];
 }
 
-export function buildJordanRossApprovals(orders: PendingOrder[]): PendingItem[] {
-  const pendingWf = orders.find((o) => o.status === "pending_approval");
-  const items: PendingItem[] = [
-    {
-      id: "jr-ap-cal-1",
-      kind: "calendar",
-      title: "Move IC prep earlier",
-      detail: "Today 8:30 AM → 8:00 AM · High",
-    },
-  ];
-  if (pendingWf) {
-    items.unshift({
-      id: pendingWf.id,
-      kind: "order",
-      title: `${pendingWf.title} — $${pendingWf.totalEstimatedPrice.toFixed(2)}`,
-      detail: `Whole Foods · ${pendingWf.items.length} items · usual ~$300 trip`,
-      orderId: pendingWf.id,
-    });
-  }
-  return items;
+/** Approvals are added only via chat/schedule actions — not seeded on profile load. */
+export function buildJordanRossApprovals(_orders: PendingOrder[]): PendingItem[] {
+  return [];
 }
 
 export function isJordanRossEmail(email: string | undefined | null): boolean {
