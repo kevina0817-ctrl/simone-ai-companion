@@ -149,18 +149,26 @@ function ChatPage() {
         ? result.reply
         : applyChatCurrencyToReply(result.reply, usdOrders);
 
-      const { scheduled, cancelled } = await applyChatScheduleResult(qc, {
+      const { committed, pendingApproval, cancelled } = await applyChatScheduleResult(qc, {
         actions: toScheduleActions(result.actions),
         userMessage: t,
         assistantReply: replyText,
         userId: user!.id,
       });
 
-      if (scheduled.length > 0) {
+      if (committed.length > 0) {
         toast.success(
-          scheduled.length === 1
-            ? `“${scheduled[0].title}” sent for approval — add to today's schedule from Approvals`
-            : `${scheduled.length} events sent for approval`,
+          committed.length === 1
+            ? `Added “${committed[0].title}” to today's schedule`
+            : `Added ${committed.length} events to today's schedule`,
+        );
+      }
+
+      if (pendingApproval.length > 0) {
+        toast.success(
+          pendingApproval.length === 1
+            ? `“${pendingApproval[0].title}” sent for approval — review on Approvals`
+            : `${pendingApproval.length} events sent for approval`,
         );
       }
 

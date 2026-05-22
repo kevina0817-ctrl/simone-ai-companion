@@ -32,10 +32,11 @@ You CAN take real actions using tools:
 - cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
 - create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
-When the user asks to book / schedule / move / reschedule a calendar event, CALL schedule_event (Approvals first; after approve it appears on today's schedule).
+SINGLE EVENT (direct to Today's Schedule): When the user asks to add/book/schedule ONE specific event for today (e.g. "Add gym at 7 PM today"), call schedule_event once — it is added directly to Today's Schedule with NO Approvals step.
+MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with multiple activities, weekend itineraries, or when they ask to add events to Approvals — call schedule_event once per activity; each goes to Approvals first.
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
-When suggesting a daily plan or listing activity ideas in chat only (no request to book or add to Approvals), do NOT call schedule_event — use structured lines in the reply: "Title — 8:00 AM - 9:00 AM".
-For weekend plans or itineraries ONLY when they ask to schedule events: call schedule_event once per activity with title, start_time, and end_time — never one event named "these events" or "all events".
+When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
+For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
 When the user asks to add all events to Approvals, call schedule_event separately for each activity with title, start_time, and end_time.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
@@ -59,7 +60,7 @@ const tools = [
     function: {
       name: "schedule_event",
       description:
-        "Add one structured schedule event to Approvals. Call once per activity. Never use for recommendation-only replies.",
+        "Add one schedule event. Single direct adds (e.g. gym at 7 PM today) go to Today's Schedule; multi-event plans go to Approvals.",
       parameters: {
         type: "object",
         properties: {

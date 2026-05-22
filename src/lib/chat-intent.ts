@@ -145,6 +145,53 @@ export function shouldRunScheduleTextFallbacks(userMessage: string): boolean {
   return wantsBulkScheduleApprovals(userMessage) || isScheduleManagementIntent(userMessage);
 }
 
+const FULL_SCHEDULE_OR_PLAN =
+  /\b(?:full[\s-]?day|daily|entire|whole\s+day|itinerary|updated?\s+schedule|adjust(?:ing)?\s+(?:my\s+)?(?:schedule|plan|day)|revise\s+(?:my\s+)?(?:day|schedule)|replan|re-plan|weekend\s+plan|build\s+(?:my|your|a)\s+day)\b/i;
+
+/** User is adding one concrete event to today — skip Approvals. */
+export function isDirectSingleEventAddRequest(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t) return false;
+  if (wantsBulkScheduleApprovals(t)) return false;
+  if (FULL_SCHEDULE_OR_PLAN.test(t)) return false;
+  if (/\b(add|put|send|queue)\b/i.test(t) && /\bapprovals?\b/i.test(t)) return false;
+  if (/\b(?:all|every|each)\s+(?:event|events)\b/i.test(t)) return false;
+  if (!/\b(?:add|schedule|book|set\s+up|put|create)\b/i.test(t)) return false;
+  if (/\b(?:today|tonight|this\s+(?:morning|afternoon|evening))\b/i.test(t)) return true;
+  if (/\b(?:at|@)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Approvals required for multi-event plans or bulk changes; single direct adds go straight to timeline.
+ */
+export function shouldRequireScheduleApproval(
+  userMessage: string,
+  eventCount: number,
+  opts?: { assistantParsedCount?: number; toolCallCount?: number },
+): boolean {
+  if (eventCount === 0) return false;
+  if (eventCount > 1) return true;
+
+  const assistantParsed = opts?.assistantParsedCount ?? 0;
+  const toolCalls = opts?.toolCallCount ?? 0;
+
+  if (assistantParsed > 1 || toolCalls > 1) return true;
+  if (wantsBulkScheduleApprovals(userMessage)) return true;
+  if (FULL_SCHEDULE_OR_PLAN.test(userMessage)) return true;
+  if (/\b(add|put|send|queue)\b/i.test(userMessage) && /\bapprovals?\b/i.test(userMessage)) {
+    return true;
+  }
+  if (
+    assistantParsed > 0 &&
+    shouldParseStructuredScheduleFromReply(userMessage, toolCalls)
+  ) {
+    return true;
+  }
+  if (isDirectSingleEventAddRequest(userMessage)) return false;
+  return false;
+}
+
 /** Strict structured lines in assistant reply (Title — start - end), not loose prose. */
 export function shouldParseStructuredScheduleFromReply(
   userMessage: string,

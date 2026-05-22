@@ -27,6 +27,7 @@ import {
 
 import {
   shouldParseStructuredScheduleFromReply,
+  shouldRequireScheduleApproval,
   shouldRunScheduleTextFallbacks,
   shouldSuppressScheduleApprovals,
 } from "@/lib/chat-intent";
@@ -192,20 +193,30 @@ async function removeFromTimeline(
   return match;
 }
 
+export type ApplyChatScheduleResult = {
+  /** Added straight to Today's Schedule (no Approvals). */
+  committed: ScheduleItem[];
+  /** Sent to Approvals for review. */
+  pendingApproval: ScheduleItem[];
+  cancelled: ScheduleItem[];
+};
+
 /**
- * Queues schedule events for Approvals from structured tool calls and, when allowed,
- * strict structured lines in the assistant reply (never loose prose parsing).
+ * Applies schedule tool results: single direct adds → timeline; multi-event / plans → Approvals.
  */
 export async function applyChatScheduleResult(
   qc: QueryClient,
   { actions = [], userMessage, assistantReply, userId }: ApplyInput,
-): Promise<{ scheduled: ScheduleItem[]; cancelled: ScheduleItem[] }> {
+): Promise<ApplyChatScheduleResult> {
   const cancelled: ScheduleItem[] = [];
+  const committed: ScheduleItem[] = [];
+  const pendingApproval: ScheduleItem[] = [];
   const byTitle = new Map<string, ScheduleItem>();
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
   const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
   const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
+  let assistantParsedCount = 0;
 
   if (!suppressSchedule) {
     collectScheduleApprovals(scheduleActions.map((a) => toScheduleItem(a)), byTitle);
@@ -223,21 +234,32 @@ export async function applyChatScheduleResult(
       assistantReply?.trim() &&
       shouldParseStructuredScheduleFromReply(userMessage, scheduleActions.length)
     ) {
-      collectScheduleApprovals(parseStructuredSchedulesFromText(assistantReply), byTitle);
+      const fromReply = parseStructuredSchedulesFromText(assistantReply);
+      assistantParsedCount = fromReply.length;
+      collectScheduleApprovals(fromReply, byTitle);
     }
 
-    const toQueue = [...byTitle.values()].sort(
+    const events = [...byTitle.values()].sort(
       (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
     );
 
-    if (toQueue.length > 0) {
-      addPendingScheduleApprovals(toQueue);
+    const useApprovals = shouldRequireScheduleApproval(userMessage, events.length, {
+      assistantParsedCount,
+      toolCallCount: scheduleActions.length,
+    });
+
+    if (events.length > 0) {
+      if (useApprovals) {
+        addPendingScheduleApprovals(events);
+        pendingApproval.push(...events);
+      } else {
+        for (const item of events) {
+          const saved = await commitScheduleToTimeline(qc, item, userId);
+          committed.push(saved);
+        }
+      }
     }
   }
-
-  const scheduled = [...byTitle.values()].sort(
-    (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
-  );
 
   for (const action of actions) {
     if (action.kind === "cancel_event") {
@@ -274,5 +296,5 @@ export async function applyChatScheduleResult(
     await qc.invalidateQueries({ queryKey: todayQueryKey(userId) });
   }
 
-  return { scheduled, cancelled };
+  return { committed, pendingApproval, cancelled };
 }

@@ -44,7 +44,7 @@ Be concise (1-3 short sentences), warm, perceptive, and proactive. Reference the
 Answer ANY question intelligently — small talk, advice, planning, recommendations, reflection prompts, summaries of their day, etc.
 
 You CAN take real actions via tools when (and only when) the user clearly asks:
-- schedule_event: add one structured event to Approvals (title + start_time + end_time ISO). Only when they ask to book/schedule/add to Approvals — not for recommendation-only daily plans in chat.
+- schedule_event: add one event (title + start_time + end_time ISO). One specific event for today → direct to Today's Schedule; multiple events or full plans → Approvals.
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
 - create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in USD).
 
@@ -63,7 +63,8 @@ const tools = [
     type: "function",
     function: {
       name: "schedule_event",
-      description: "Add one structured event to Approvals (not for recommendation-only chat lists).",
+      description:
+        "Add one schedule event. Single today adds go direct to timeline; multi-event plans go to Approvals.",
       parameters: {
         type: "object",
         properties: {
