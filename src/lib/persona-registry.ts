@@ -1,5 +1,10 @@
 import type { User } from "@supabase/supabase-js";
-import { readBudgetSettings, syncBudgetWithApprovedSpend } from "@/lib/budget-store";
+import {
+  clearUserMonthlyCapOverride,
+  hasUserMonthlyCapOverride,
+  readBudgetSettings,
+  syncBudgetWithApprovedSpend,
+} from "@/lib/budget-store";
 import { resetApprovalsPending } from "@/lib/approvals-store";
 import { replacePendingOrders } from "@/lib/pending-orders-store";
 import type { DemoMessage } from "@/lib/demo-mode";
@@ -37,17 +42,28 @@ export const LIFESTYLE_STORAGE_KEY = "simone-persona-lifestyle";
 const LIFESTYLE_CONTENT_VERSION = 2;
 const ACTIVE_PERSONA_KEY = "simone-active-persona-id";
 
-function personaBudgetMatches(persona: PersonaBundle): boolean {
-  const saved = readBudgetSettings();
-  return saved.period === persona.budget.period && saved.amount === persona.budget.amount;
+function savedBudgetBelongsToAnotherPersona(
+  currentPersona: PersonaBundle,
+  saved = readBudgetSettings(),
+): boolean {
+  for (const p of PERSONAS) {
+    if (p.id === currentPersona.id) continue;
+    if (saved.period === p.budget.period && saved.amount === p.budget.amount) return true;
+  }
+  return false;
 }
 
-/** Always align Orders budget cap with the signed-in persona (e.g. Nicole $2200 not Kevin $850). */
+/**
+ * Align budget with signed-in persona only when another persona's cap is still stored.
+ * Never reset a user-raised monthly cap (e.g. after Approvals budget save).
+ */
 export function ensurePersonaBudgetForEmail(email: string | undefined | null): void {
   if (typeof window === "undefined") return;
   const persona = resolvePersonaByEmail(email);
   if (!persona) return;
-  if (!personaBudgetMatches(persona)) {
+  if (hasUserMonthlyCapOverride()) return;
+  if (savedBudgetBelongsToAnotherPersona(persona)) {
+    clearUserMonthlyCapOverride();
     syncBudgetWithApprovedSpend(persona.budget);
   }
 }
@@ -247,7 +263,10 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   localStorage.setItem(ACTIVE_PERSONA_KEY, persona.id);
   replacePendingOrders(orders);
   resetApprovalsPending(persona.approvals(orders));
-  syncBudgetWithApprovedSpend(persona.budget);
+  if (personaChanged) {
+    clearUserMonthlyCapOverride();
+    syncBudgetWithApprovedSpend(persona.budget);
+  }
 
   window.dispatchEvent(new Event("simone-demo-events-changed"));
   window.dispatchEvent(new Event("simone-persona-wellness-changed"));

@@ -21,6 +21,8 @@ type BudgetTracking = {
   showExceededWarning: boolean;
   /** This-month-only raised cap after user accepts bump */
   monthOnlyCap: number | null;
+  /** User raised monthly cap (Approvals / budget settings) — do not reset to persona default */
+  userCapOverride?: boolean;
 };
 
 const budgetListeners = new Set<() => void>();
@@ -100,7 +102,7 @@ export function refreshBudgetProgressFromSettings() {
 }
 
 /** Persist budget settings and refresh Orders threshold (drops stale month-only bump). */
-export function writeBudgetSettings(settings: BudgetSettings) {
+export function writeBudgetSettings(settings: BudgetSettings, options?: { userOverride?: boolean }) {
   if (typeof window === "undefined") return;
   localStorage.setItem(BUDGET_KEY, JSON.stringify(settings));
   const t = readTracking();
@@ -108,6 +110,7 @@ export function writeBudgetSettings(settings: BudgetSettings) {
     ...t,
     monthKey: currentMonthKey(),
     monthOnlyCap: null,
+    ...(options?.userOverride ? { userCapOverride: true } : {}),
   });
   refreshBudgetProgressFromSettings();
 }
@@ -370,10 +373,21 @@ export function saveSharedMonthlyBudgetCapCad(monthlyCapCad: number) {
         ...t,
         monthKey: currentMonthKey(),
         monthOnlyCap: null,
+        userCapOverride: true,
       }),
     );
   }
   notifyBudgetChanged();
+}
+
+export function hasUserMonthlyCapOverride(): boolean {
+  return Boolean(readTracking().userCapOverride);
+}
+
+export function clearUserMonthlyCapOverride() {
+  const t = readTracking();
+  if (!t.userCapOverride) return;
+  writeTracking({ ...t, userCapOverride: false });
 }
 
 /** User-entered monthly cap (CAD) — settings page and legacy callers. */
