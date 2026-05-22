@@ -1,5 +1,7 @@
 // Shared AI gateway helpers for server functions (OpenAI-compatible REST).
 
+import { getAgnicToken, getLovableApiKey } from "@/lib/ai-env";
+
 export const LOVABLE_AI_BASE = "https://ai.gateway.lovable.dev/v1";
 
 export function createLovableAiGatewayProvider(apiKey: string) {
@@ -81,8 +83,8 @@ export async function requestChatCompletion(
   messages: ChatCompletionMessage[],
   tools?: unknown[],
 ): Promise<ChatCompletionResult> {
-  const agnicToken = process.env.AGNIC_TOKEN;
-  const lovableKey = process.env.LOVABLE_API_KEY;
+  const agnicToken = getAgnicToken();
+  const lovableKey = getLovableApiKey();
 
   if (agnicToken) {
     try {
