@@ -2,7 +2,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import { clonePendingOrder, type PendingOrder } from "@/lib/pending-order";
 import { formatApprovalOrderDetail, prepareOrderForApprovals } from "@/lib/order-prepare";
-import { formatScheduleTimeRange, type ScheduleItem } from "@/lib/schedule-item";
+import {
+  dedupeScheduleEventsByTitle,
+  formatScheduleTimeRange,
+  normalizeScheduleEventTitle,
+  type ScheduleItem,
+} from "@/lib/schedule-item";
 import { toast } from "sonner";
 import { recordApprovedOrderSpend } from "@/lib/budget-store";
 import {
@@ -169,14 +174,26 @@ export function addPendingScheduleApproval(item: ScheduleItem) {
   addPendingScheduleApprovals([item]);
 }
 
-/** Append every valid schedule event as its own approval card (no overwrites). */
+/** Append schedule events — one pending approval per normalized title (latest wins). */
 export function addPendingScheduleApprovals(items: ScheduleItem[]) {
-  if (items.length === 0) return;
+  const deduped = dedupeScheduleEventsByTitle(items);
+  if (deduped.length === 0) return;
 
   const newOrderIds: string[] = [];
-  const nextItems = { ...state.items };
+  let nextItems = { ...state.items };
+  let order = [...state.order];
 
-  for (const item of items) {
+  for (const item of deduped) {
+    const titleKey = normalizeScheduleEventTitle(item.title);
+
+    for (const oid of [...order]) {
+      const entry = nextItems[oid];
+      if (!entry || entry.status !== "pending" || !entry.item.scheduleEvent) continue;
+      if (normalizeScheduleEventTitle(entry.item.scheduleEvent.title) !== titleKey) continue;
+      delete nextItems[oid];
+      order = order.filter((id) => id !== oid);
+    }
+
     const approvalId = `schedule-approval-${item.id}`;
     const pendingItem: PendingItem = {
       id: approvalId,
@@ -189,14 +206,11 @@ export function addPendingScheduleApprovals(items: ScheduleItem[]) {
     newOrderIds.push(approvalId);
   }
 
-  const mergedOrder = [
-    ...newOrderIds,
-    ...state.order.filter((oid) => !newOrderIds.includes(oid)),
-  ];
+  order = [...newOrderIds, ...order.filter((oid) => !newOrderIds.includes(oid))];
 
   state = {
     items: nextItems,
-    order: mergedOrder,
+    order,
   };
   emit();
 }

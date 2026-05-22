@@ -90,6 +90,31 @@ const DESCRIPTIVE_TITLE =
 const TITLE_WITH_EXPLANATION =
   /^([a-z][a-z\s]{0,30}):\s*(?:finish|start|wrap|wind|enjoy|have|take|end)\b/i;
 
+/** Lowercase, collapsed spaces, punctuation stripped — for duplicate event detection. */
+export function normalizeScheduleEventTitle(title: string): string {
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** One event per normalized title; later entries replace earlier (updated schedule wins). */
+export function dedupeScheduleEventsByTitle(items: ScheduleItem[]): ScheduleItem[] {
+  const lastByKey = new Map<string, ScheduleItem>();
+  const keyOrder: string[] = [];
+
+  for (const item of items) {
+    const key = normalizeScheduleEventTitle(item.title);
+    if (!key) continue;
+    if (!lastByKey.has(key)) keyOrder.push(key);
+    lastByKey.set(key, item);
+  }
+
+  return keyOrder.map((k) => lastByKey.get(k)!);
+}
+
 export function isValidScheduleTitle(title: string): boolean {
   const t = title.trim().replace(/[.:—–-]+$/g, "").trim();
   if (t.length < 2 || t.length > 80) return false;
@@ -242,17 +267,13 @@ function parseStructuredScheduleLine(
  * Format: Title — 8:00 AM - 9:00 AM (one event per line).
  */
 export function parseStructuredSchedulesFromText(text: string, ref = new Date()): ScheduleItem[] {
-  const results: ScheduleItem[] = [];
-  const seen = new Set<string>();
+  const parsed: ScheduleItem[] = [];
   let currentDay: Date | null = null;
   let index = 0;
 
   const push = (item: ScheduleItem | null) => {
     if (!item || !isValidStructuredScheduleEvent(item)) return;
-    const key = `${item.title.toLowerCase()}|${item.start_time}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    results.push(item);
+    parsed.push(item);
   };
 
   for (const rawLine of text.split(/\n/)) {
@@ -294,7 +315,9 @@ export function parseStructuredSchedulesFromText(text: string, ref = new Date())
     push(parseStructuredScheduleLine(content, currentDay ?? ref, ref, index++));
   }
 
-  return results.sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
+  return dedupeScheduleEventsByTitle(parsed).sort(
+    (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
+  );
 }
 
 /** @deprecated Use parseStructuredSchedulesFromText — never parse assistant prose. */

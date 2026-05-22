@@ -15,8 +15,10 @@ import {
   parseStructuredSchedulesFromText,
   parseCancelFromText,
   findScheduleEventForCancel,
+  dedupeScheduleEventsByTitle,
   generateScheduleId,
   isValidStructuredScheduleEvent,
+  normalizeScheduleEventTitle,
   wantsBulkScheduleApprovals,
   isSameCalendarDay,
   type ScheduleItem,
@@ -39,9 +41,6 @@ type ApplyInput = {
   userId: string;
 };
 
-function scheduleDedupeKey(item: ScheduleItem): string {
-  return `${item.title.toLowerCase()}|${item.start_time}|${item.end_time ?? ""}`;
-}
 
 function toScheduleItem(action: Extract<ChatScheduleAction, { kind: "schedule_event" }>): ScheduleItem {
   return {
@@ -65,19 +64,20 @@ function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_even
 
 function collectScheduleApprovals(
   items: ScheduleItem[],
-  seen: Set<string>,
-  out: ScheduleItem[],
+  byTitle: Map<string, ScheduleItem>,
 ): void {
+  const valid: ScheduleItem[] = [];
   for (const raw of items) {
     const item: ScheduleItem = {
       ...raw,
       id: raw.id || generateScheduleId(),
     };
     if (!isValidStructuredScheduleEvent(item)) continue;
-    const key = scheduleDedupeKey(item);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
+    valid.push(item);
+  }
+  for (const item of dedupeScheduleEventsByTitle(valid)) {
+    const key = normalizeScheduleEventTitle(item.title);
+    if (key) byTitle.set(key, item);
   }
 }
 
@@ -200,24 +200,22 @@ export async function applyChatScheduleResult(
   qc: QueryClient,
   { actions = [], userMessage, assistantReply, userId }: ApplyInput,
 ): Promise<{ scheduled: ScheduleItem[]; cancelled: ScheduleItem[] }> {
-  const scheduled: ScheduleItem[] = [];
   const cancelled: ScheduleItem[] = [];
-  const seen = new Set<string>();
+  const byTitle = new Map<string, ScheduleItem>();
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
   const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
   const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
 
   if (!suppressSchedule) {
-    const fromActions = scheduleActions.map((a) => toScheduleItem(a));
-    collectScheduleApprovals(fromActions, seen, scheduled);
+    collectScheduleApprovals(scheduleActions.map((a) => toScheduleItem(a)), byTitle);
 
     if (shouldRunScheduleTextFallbacks(userMessage)) {
       if (wantsBulkScheduleApprovals(userMessage)) {
-        collectScheduleApprovals(parseStructuredSchedulesFromText(userMessage), seen, scheduled);
-      } else if (scheduled.length === 0) {
+        collectScheduleApprovals(parseStructuredSchedulesFromText(userMessage), byTitle);
+      } else if (byTitle.size === 0) {
         const parsed = parseScheduleFromText(userMessage);
-        if (parsed) collectScheduleApprovals([parsed], seen, scheduled);
+        if (parsed) collectScheduleApprovals([parsed], byTitle);
       }
     }
 
@@ -225,13 +223,21 @@ export async function applyChatScheduleResult(
       assistantReply?.trim() &&
       shouldParseStructuredScheduleFromReply(userMessage, scheduleActions.length)
     ) {
-      collectScheduleApprovals(parseStructuredSchedulesFromText(assistantReply), seen, scheduled);
+      collectScheduleApprovals(parseStructuredSchedulesFromText(assistantReply), byTitle);
     }
 
-    if (scheduled.length > 0) {
-      addPendingScheduleApprovals(scheduled);
+    const toQueue = [...byTitle.values()].sort(
+      (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
+    );
+
+    if (toQueue.length > 0) {
+      addPendingScheduleApprovals(toQueue);
     }
   }
+
+  const scheduled = [...byTitle.values()].sort(
+    (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
+  );
 
   for (const action of actions) {
     if (action.kind === "cancel_event") {
