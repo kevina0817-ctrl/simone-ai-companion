@@ -138,6 +138,32 @@ export function getReadinessRingMeta(wellness: PersonaWellness | null | undefine
   };
 }
 
+export function personaToStoredLifestyle(persona: PersonaBundle): StoredPersonaLifestyle {
+  return {
+    personaId: persona.id,
+    wellness: persona.wellness,
+    insight: persona.insight,
+    recommendations: persona.recommendations,
+    notifications: persona.notifications,
+    preferences: persona.preferences,
+    weekOverview: persona.weekOverview,
+  };
+}
+
+export function writePersonaLifestyleStore(persona: PersonaBundle): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LIFESTYLE_STORAGE_KEY, JSON.stringify(personaToStoredLifestyle(persona)));
+}
+
+/** Home lifestyle sections — stored snapshot or live persona bundle. */
+export function getHomePersonaLifestyle(email: string | undefined | null): StoredPersonaLifestyle | null {
+  const persona = resolvePersonaByEmail(email);
+  if (!persona) return null;
+  const stored = readStoredPersonaLifestyle();
+  if (stored?.personaId === persona.id) return stored;
+  return personaToStoredLifestyle(persona);
+}
+
 export function readStoredPersonaLifestyle(): StoredPersonaLifestyle | null {
   if (typeof window === "undefined") return null;
   try {
@@ -159,22 +185,12 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   const skipContentSeed =
     !opts?.force && !personaChanged && Boolean(localStorage.getItem(persona.seededFlagKey));
 
+  writePersonaLifestyleStore(persona);
+
   if (!skipContentSeed) {
     const events = persona.scheduleToday();
     localStorage.setItem("simone-demo-events", JSON.stringify(events));
     localStorage.setItem(persona.seededFlagKey, new Date().toISOString());
-    localStorage.setItem(
-      LIFESTYLE_STORAGE_KEY,
-      JSON.stringify({
-        personaId: persona.id,
-        wellness: persona.wellness,
-        insight: persona.insight,
-        recommendations: persona.recommendations,
-        notifications: persona.notifications,
-        preferences: persona.preferences,
-        weekOverview: persona.weekOverview,
-      } satisfies StoredPersonaLifestyle),
-    );
     localStorage.setItem("simone-demo-messages", JSON.stringify(persona.chatMessages()));
   }
 

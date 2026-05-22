@@ -4,7 +4,7 @@ import type { PendingItem } from "@/lib/approvals-store";
 import type { DemoEvent } from "@/lib/demo-mode";
 import type { PendingOrder } from "@/lib/pending-order";
 import { computeOrderTotal } from "@/lib/pending-order";
-import type { PersonaBundle } from "@/lib/persona-types";
+import type { PersonaBundle, PersonaNotification, PersonaWellness } from "@/lib/persona-types";
 
 export const JORDAN_ROSS_EMAIL = "jordanross@wolfcapital.ai";
 export const JORDAN_ROSS_ID = "demo-jordan-ross";
@@ -22,14 +22,80 @@ export const jordanRossUser = {
 
 export const jordanRossProfile = { display_name: "Jordan Ross" };
 
-export const jordanRossWellness = {
+export const jordanRossWellness: PersonaWellness = {
   sleep_score: 88,
   readiness_score: 92,
   sleep_duration_min: 402,
+  recovery_score: 89,
+  hrv_ms: 68,
+  stress_level: "low",
+  resting_hr: 52,
+  steps_today: 11840,
+  screen_time_hours: 2.8,
+  caffeine_mg: 95,
+  hydration_oz: 84,
+  notes: "Strong recovery after early gym and cold plunge. Protect evening focus before dinner date.",
 };
 
 export const jordanRossInsight =
   "You're in peak readiness for a dense deal day. Protect the 6 AM gym block, stack recovery before your dinner date, and keep Whole Foods runs predictable — your last three trips averaged about $300.";
+
+export const jordanRossRecommendations = [
+  "Keep the 6:00 AM gym block — HRV supports heavy compound work before market open.",
+  "Approve today's Whole Foods restock (~$298) before leaving for the IC prep block.",
+  "15-minute walk between 1–3 PM before portfolio sync — clears cortisol from back-to-back calls.",
+  "Cold plunge after gym tomorrow if sleep stays above 85 — recovery score has room to climb.",
+];
+
+export const jordanRossNotifications: PersonaNotification[] = [
+  {
+    id: "jr-n1",
+    title: "Readiness in top 10% this week",
+    body: "Sleep 88 · readiness 92 · recovery 89%. You're primed for the IC review at 8:30 AM.",
+    hoursAgo: 1,
+    kind: "wellness",
+  },
+  {
+    id: "jr-n2",
+    title: "Whole Foods order awaiting approval",
+    body: "Usual ~$300 organic haul · salmon, greens, supplements · fits monthly grocery cap.",
+    hoursAgo: 4,
+    kind: "budget",
+  },
+  {
+    id: "jr-n3",
+    title: "LP call at 10:00 AM",
+    body: "Zoom link ready · deck v4 attached · block 9:30–9:55 for final skim.",
+    hoursAgo: 6,
+    kind: "study",
+  },
+  {
+    id: "jr-n4",
+    title: "Dinner reservation confirmed",
+    body: "Alo · 7:00 PM · leave desk by 6:15 PM for a calm transition.",
+    hoursAgo: 3,
+    kind: "social",
+  },
+];
+
+export const jordanRossWeekOverview = [
+  { day: "Mon", highlight: "6 AM gym · IC prep · Whole Foods ~$302 · in bed by 10:45 PM" },
+  { day: "Tue", highlight: "LP roadshow calls · sauna + cold plunge · light dinner" },
+  { day: "Wed", highlight: "Due diligence deep dive · meal prep Sunday carryover" },
+  { day: "Thu", highlight: "Portfolio reviews · dinner date · meditation 10:30 PM" },
+  { day: "Fri", highlight: "Market close debrief · recovery walk · sleep score 90+" },
+  { day: "Sat", highlight: "Long run + Equinox · brunch · low screen time" },
+  { day: "Sun", highlight: "Meal prep · fund letter draft · early night" },
+];
+
+export const jordanRossPreferences = {
+  meal_style: ["High-protein", "Organic", "Meal prep Sundays", "Desk lunches"],
+  caffeine: "Single espresso · 7:15 AM · no afternoon coffee",
+  fitness_focus: ["Strength AM", "Cold plunge", "Zone 2 weekends"],
+  gaming: "Minimal weekday screen time · Bloomberg + Calm only",
+  groceries: "Whole Foods Yorkville · ~$300 per trip",
+  hydration_goal_oz: 100,
+};
 
 const todayAt = (hour: number, minute: number) => {
   const date = new Date();
@@ -142,27 +208,43 @@ export function isJordanRossEmail(email: string | undefined | null): boolean {
   return email?.trim().toLowerCase() === JORDAN_ROSS_EMAIL;
 }
 
+function hoursAgoIso(hours: number) {
+  return new Date(Date.now() - hours * 3600_000).toISOString();
+}
+
+export function buildJordanRossChatMessages() {
+  return [
+    {
+      id: "jr-chat-1",
+      role: "user" as const,
+      content: "Can you protect my morning gym and line up Whole Foods before the IC block?",
+      created_at: hoursAgoIso(6),
+    },
+    {
+      id: "jr-chat-2",
+      role: "assistant" as const,
+      content:
+        "Done — 6 AM strength is locked, and your ~$298 Whole Foods order is queued for approval. Readiness is 92 with sleep at 88; I left a 15-minute reset before your 2 PM portfolio sync.",
+      created_at: hoursAgoIso(5.8),
+    },
+  ];
+}
+
 export const jordanRossPersona: PersonaBundle = {
   id: JORDAN_ROSS_ID,
   user: jordanRossUser,
   profile: jordanRossProfile,
   wellness: jordanRossWellness,
   insight: jordanRossInsight,
-  recommendations: [],
-  notifications: [],
-  preferences: {
-    meal_style: ["High-protein", "Organic", "Meal prep"],
-    caffeine: "Single espresso · 7:15 AM",
-    fitness_focus: ["Strength", "Cold plunge", "Zone 2"],
-    gaming: "Minimal weekday screen time",
-    groceries: "Whole Foods · ~$300 per trip",
-  },
+  recommendations: jordanRossRecommendations,
+  notifications: jordanRossNotifications,
+  preferences: jordanRossPreferences,
   budget: jordanRossBudget,
   scheduleToday: buildJordanRossSchedule,
-  weekOverview: [],
+  weekOverview: jordanRossWeekOverview,
   orders: buildJordanRossOrders,
   approvals: buildJordanRossApprovals,
-  chatMessages: () => [],
+  chatMessages: buildJordanRossChatMessages,
   seededFlagKey: SEEDED_FLAG,
 };
 

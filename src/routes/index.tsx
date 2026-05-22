@@ -21,9 +21,9 @@ import {
 } from "@/lib/demo-mode";
 import { PersonaLifestyleCard } from "@/components/PersonaLifestyleCard";
 import {
+  getHomePersonaLifestyle,
   getReadinessRingMeta,
   getSleepRingMeta,
-  readStoredPersonaLifestyle,
   resolveHomeWellness,
   resolvePersonaByEmail,
 } from "@/lib/persona-registry";
@@ -150,9 +150,9 @@ function Home() {
 
   const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
   const persona = resolvePersonaByEmail(user?.email);
-  const insight = getDemoInsightForUser(user?.email);
-  const lifestyle = readStoredPersonaLifestyle();
-  const showLifestyle = lifestyle && lifestyle.personaId === persona?.id;
+  const lifestyle = getHomePersonaLifestyle(user?.email);
+  const insight = lifestyle?.insight ?? getDemoInsightForUser(user?.email);
+  const showLifestyle = Boolean(persona && lifestyle);
   const sleepRing = getSleepRingMeta(wellness);
   const readinessRing = getReadinessRingMeta(wellness);
   const showWellnessRings = Boolean(wellness?.sleep_score != null || wellness?.readiness_score != null);
@@ -224,7 +224,7 @@ function Home() {
           </p>
         </div>
 
-        {showLifestyle && lifestyle && <PersonaLifestyleCard lifestyle={lifestyle} />}
+        {showLifestyle && <PersonaLifestyleCard lifestyle={lifestyle!} />}
 
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between gap-2">
