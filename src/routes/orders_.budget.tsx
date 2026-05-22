@@ -97,12 +97,15 @@ function BudgetPage() {
   const total = Object.values(cats).reduce((a, b) => a + b, 0);
 
   const save = () => {
-    writeBudgetSettings({
-      period,
-      amount: amount === Infinity ? "unlimited" : amount,
-      alertAt,
-      cats,
-    });
+    writeBudgetSettings(
+      {
+        period,
+        amount: amount === Infinity ? "unlimited" : amount,
+        alertAt,
+        cats,
+      },
+      { userOverride: true },
+    );
     notifyBudgetChanged();
     setSaved(true);
     setTimeout(() => navigate({ to: "/orders" }), 900);

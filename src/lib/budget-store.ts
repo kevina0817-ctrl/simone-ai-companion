@@ -14,6 +14,8 @@ export type BudgetSettings = {
   amount: number | "unlimited";
   alertAt?: number;
   cats?: Record<string, number>;
+  /** User-set cap (Approvals / budget settings) — never revert to persona demo default */
+  userCapOverride?: boolean;
 };
 
 type BudgetTracking = {
@@ -104,7 +106,10 @@ export function refreshBudgetProgressFromSettings() {
 /** Persist budget settings and refresh Orders threshold (drops stale month-only bump). */
 export function writeBudgetSettings(settings: BudgetSettings, options?: { userOverride?: boolean }) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(BUDGET_KEY, JSON.stringify(settings));
+  const payload: BudgetSettings = options?.userOverride
+    ? { ...settings, userCapOverride: true }
+    : settings;
+  localStorage.setItem(BUDGET_KEY, JSON.stringify(payload));
   const t = readTracking();
   writeTracking({
     ...t,
@@ -234,7 +239,9 @@ function getBudgetSnapshotView(): BudgetSnapshotView {
 /** After persona seed or order replace — align warning state with spend vs cap. */
 export function syncBudgetWithApprovedSpend(settings?: BudgetSettings) {
   if (typeof window === "undefined") return;
-  if (settings) writeBudgetSettings(settings);
+  if (settings && !hasUserMonthlyCapOverride()) {
+    writeBudgetSettings(settings);
+  }
   const cap = getEffectiveMonthlyCap();
   const spent = getApprovedSpendTotal();
   const alertAt = (settings ?? readBudgetSettings()).alertAt ?? 90;
@@ -364,6 +371,7 @@ export function saveSharedMonthlyBudgetCapCad(monthlyCapCad: number) {
         period: "Monthly",
         amount: rounded,
         alertAt: settings.alertAt ?? 90,
+        userCapOverride: true,
       }),
     );
     const t = readTracking();
@@ -381,10 +389,16 @@ export function saveSharedMonthlyBudgetCapCad(monthlyCapCad: number) {
 }
 
 export function hasUserMonthlyCapOverride(): boolean {
-  return Boolean(readTracking().userCapOverride);
+  const settings = readBudgetSettings();
+  return Boolean(settings.userCapOverride) || Boolean(readTracking().userCapOverride);
 }
 
 export function clearUserMonthlyCapOverride() {
+  const settings = readBudgetSettings();
+  if (typeof window !== "undefined") {
+    const { userCapOverride: _removed, ...rest } = settings;
+    localStorage.setItem(BUDGET_KEY, JSON.stringify(rest));
+  }
   const t = readTracking();
   if (!t.userCapOverride) return;
   writeTracking({ ...t, userCapOverride: false });
@@ -395,10 +409,13 @@ export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
   saveSharedMonthlyBudgetCapCad(monthlyCapCad);
   const rounded = Math.round(monthlyCapCad * 100) / 100;
   const spent = getApprovedSpendTotal();
+  const t = readTracking();
   writeTracking({
+    ...t,
     monthKey: currentMonthKey(),
     monthOnlyCap: null,
     showExceededWarning: spent > rounded,
+    userCapOverride: true,
   });
   refreshBudgetProgressFromSettings();
 }

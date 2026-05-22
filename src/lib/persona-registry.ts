@@ -247,9 +247,10 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
 
   const orders = persona.orders();
   const prevActive = localStorage.getItem(ACTIVE_PERSONA_KEY);
-  const personaChanged = prevActive !== persona.id;
+  const personaChanged = prevActive !== null && prevActive !== persona.id;
+  const firstPersonaBind = prevActive === null;
   const skipContentSeed =
-    !opts?.force && !personaChanged && Boolean(localStorage.getItem(persona.seededFlagKey));
+    !opts?.force && !personaChanged && !firstPersonaBind && Boolean(localStorage.getItem(persona.seededFlagKey));
 
   writePersonaLifestyleStore(persona);
 
@@ -261,11 +262,18 @@ export function applyPersonaSampleData(email: string, opts?: { force?: boolean }
   }
 
   localStorage.setItem(ACTIVE_PERSONA_KEY, persona.id);
-  replacePendingOrders(orders);
-  resetApprovalsPending(persona.approvals(orders));
-  if (personaChanged) {
+
+  if (personaChanged || opts?.force) {
+    replacePendingOrders(orders);
+    resetApprovalsPending(persona.approvals(orders));
     clearUserMonthlyCapOverride();
     syncBudgetWithApprovedSpend(persona.budget);
+  } else if (firstPersonaBind) {
+    replacePendingOrders(orders);
+    resetApprovalsPending(persona.approvals(orders));
+    if (!hasUserMonthlyCapOverride()) {
+      syncBudgetWithApprovedSpend(persona.budget);
+    }
   }
 
   window.dispatchEvent(new Event("simone-demo-events-changed"));
