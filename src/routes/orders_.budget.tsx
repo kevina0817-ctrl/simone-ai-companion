@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import {
   BUDGET_CHANGED_EVENT,
+  notifyBudgetChanged,
   readBudgetSettings,
   writeBudgetSettings,
   type BudgetPeriod,
@@ -102,6 +103,7 @@ function BudgetPage() {
       alertAt,
       cats,
     });
+    notifyBudgetChanged();
     setSaved(true);
     setTimeout(() => navigate({ to: "/orders" }), 900);
   };

@@ -71,16 +71,45 @@ export function readBudgetSettings(): BudgetSettings {
   }
 }
 
+/** Monthly cap used for progress bar: actualSpent / this value. */
+export function getMonthlyBudgetForProgress(settings = readBudgetSettings()): number | "unlimited" {
+  return getMonthlyBudgetCap(settings);
+}
+
+function calcPercentUsed(spent: number, monthlyBudget: number): number {
+  if (monthlyBudget <= 0) return 0;
+  return Math.round((spent / monthlyBudget) * 10000) / 100;
+}
+
+/** Recompute warning + notify UI after settings or spend change. */
+export function refreshBudgetProgressFromSettings() {
+  if (typeof window === "undefined") return;
+  const monthlyBudget = getMonthlyBudgetForProgress();
+  const spent = getApprovedSpendTotal();
+  const t = readTracking();
+  if (monthlyBudget === "unlimited") {
+    writeTracking({ ...t, monthKey: currentMonthKey(), showExceededWarning: false });
+  } else {
+    writeTracking({
+      ...t,
+      monthKey: currentMonthKey(),
+      showExceededWarning: spent > monthlyBudget,
+    });
+  }
+  notifyBudgetChanged();
+}
+
 /** Persist budget settings and refresh Orders threshold (drops stale month-only bump). */
 export function writeBudgetSettings(settings: BudgetSettings) {
   if (typeof window === "undefined") return;
   localStorage.setItem(BUDGET_KEY, JSON.stringify(settings));
   const t = readTracking();
-  if (t.monthOnlyCap != null) {
-    writeTracking({ ...t, monthKey: currentMonthKey(), monthOnlyCap: null });
-  }
-  cachedBudgetKey = "";
-  emitBudget();
+  writeTracking({
+    ...t,
+    monthKey: currentMonthKey(),
+    monthOnlyCap: null,
+  });
+  refreshBudgetProgressFromSettings();
 }
 
 /** Normalize saved budget to a monthly spending cap. */
@@ -169,24 +198,23 @@ let cachedBudgetView: BudgetSnapshotView = {
 function getBudgetSnapshotView(): BudgetSnapshotView {
   const settings = readBudgetSettings();
   const spent = getApprovedSpendTotal();
-  const cap = getEffectiveMonthlyCap();
+  const monthlyBudget = getMonthlyBudgetForProgress(settings);
   const showWarning = getBudgetExceededWarning();
   const monthOnlyCap = readTracking().monthOnlyCap;
   const alertAt = settings.alertAt ?? 90;
-  const unlimited = cap === "unlimited";
-  const monthly = unlimited ? 0 : Math.max(0, cap);
-  const percentUsed =
-    unlimited || monthly <= 0 ? 0 : Math.min(100, Math.round((spent / monthly) * 100));
+  const unlimited = monthlyBudget === "unlimited";
+  const monthly = unlimited ? 0 : Math.max(0, monthlyBudget);
+  const percentUsed = unlimited || monthly <= 0 ? 0 : calcPercentUsed(spent, monthly);
   const nearAlert = !unlimited && monthly > 0 && percentUsed >= alertAt && spent <= monthly;
   const remaining = unlimited ? null : Math.round((monthly - spent) * 100) / 100;
   const spentByCategory = getApprovedSpendByCategory();
 
-  const key = `${spent}|${cap}|${showWarning}|${monthOnlyCap ?? ""}|${settings.period}|${settings.amount}|${alertAt}|${spentByCategory.grocery}|${spentByCategory.other}`;
+  const key = `${spent}|${monthly}|${showWarning}|${monthOnlyCap ?? ""}|${settings.period}|${settings.amount}|${alertAt}|${spentByCategory.grocery}|${spentByCategory.other}`;
   if (key === cachedBudgetKey) return cachedBudgetView;
   cachedBudgetKey = key;
   cachedBudgetView = {
     spent,
-    cap,
+    cap: unlimited ? "unlimited" : monthly,
     showWarning,
     monthOnlyCap,
     period: settings.period,
@@ -270,7 +298,7 @@ export function computeAutoAdjustedMonthlyCapCad(spent: number): number {
  */
 export function autoAdjustMonthlyBudgetToCoverSpend(): number | null {
   const spent = getApprovedSpendTotal();
-  const cap = getEffectiveMonthlyCap();
+  const cap = getMonthlyBudgetForProgress();
   if (cap === "unlimited") return null;
 
   if (spent <= cap) {
@@ -294,9 +322,9 @@ export function recordApprovedOrderSpend(_order: PendingOrder) {
 
 export function getBudgetExceededWarning(): boolean {
   const t = readTracking();
-  const cap = getEffectiveMonthlyCap();
-  if (cap === "unlimited") return false;
-  return t.showExceededWarning && getApprovedSpendTotal() > cap;
+  const monthlyBudget = getMonthlyBudgetForProgress();
+  if (monthlyBudget === "unlimited") return false;
+  return t.showExceededWarning && getApprovedSpendTotal() > monthlyBudget;
 }
 
 /** User chose to raise cap for this calendar month only. */
@@ -322,18 +350,24 @@ export function raiseMonthlyBudgetForProjectedSpend(projected: number) {
 export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
   const rounded = Math.round(monthlyCapCad * 100) / 100;
   const settings = readBudgetSettings();
-  writeBudgetSettings({
-    ...settings,
-    period: "Monthly",
-    amount: rounded,
-    alertAt: settings.alertAt ?? 90,
-  });
+  if (typeof window !== "undefined") {
+    localStorage.setItem(
+      BUDGET_KEY,
+      JSON.stringify({
+        ...settings,
+        period: "Monthly",
+        amount: rounded,
+        alertAt: settings.alertAt ?? 90,
+      }),
+    );
+  }
+  const spent = getApprovedSpendTotal();
   writeTracking({
     monthKey: currentMonthKey(),
-    monthOnlyCap: rounded,
-    showExceededWarning: false,
+    monthOnlyCap: null,
+    showExceededWarning: spent > rounded,
   });
-  notifyBudgetChanged();
+  refreshBudgetProgressFromSettings();
 }
 
 export function validateMonthlyBudgetCad(

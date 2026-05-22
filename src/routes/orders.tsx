@@ -83,6 +83,7 @@ function BudgetCard() {
   const unlimited = cap === "unlimited";
   const monthly = unlimited ? 0 : Math.max(0, cap);
   const pct = unlimited || monthly <= 0 ? 0 : percentUsed;
+  const barWidthPct = unlimited || monthly <= 0 ? 0 : Math.min(100, percentUsed);
 
   useEffect(() => {
     const refresh = () => notifyBudgetChanged();
@@ -140,7 +141,7 @@ function BudgetCard() {
               pct,
               !unlimited && spent > monthly,
             )}`}
-            style={{ width: unlimited ? "20%" : `${Math.min(100, pct)}%` }}
+            style={{ width: unlimited ? "20%" : `${barWidthPct}%` }}
           />
         </div>
         {!unlimited && (
