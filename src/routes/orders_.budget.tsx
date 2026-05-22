@@ -10,6 +10,7 @@ import {
   BUDGET_CHANGED_EVENT,
   notifyBudgetChanged,
   readBudgetSettings,
+  setBudgetAlertAtPercent,
   writeBudgetSettings,
   type BudgetPeriod,
 } from "@/lib/budget-store";
@@ -247,7 +248,11 @@ function BudgetPage() {
             min={50}
             max={100}
             step={5}
-            onValueChange={(v) => setAlertAt(v[0])}
+            onValueChange={(v) => {
+              const next = v[0];
+              setAlertAt(next);
+              setBudgetAlertAtPercent(next);
+            }}
           />
           <p className="mt-2 text-[11px] text-muted-foreground">
             Simone will ping you when spending reaches this share of your budget.

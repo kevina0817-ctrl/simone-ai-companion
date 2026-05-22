@@ -25,9 +25,6 @@ export const Route = createFileRoute("/orders")({
 const tabs = ["All", "Grocery", "Amazon", "Other"] as const;
 type Tab = (typeof tabs)[number];
 
-/** Alert zone / red warning band begins at 67% of monthly budget spent. */
-const ALERT_ZONE_PERCENT = 67;
-
 function budgetProgressBarColor(percentUsed: number, overMonthlyCap: boolean): string {
   if (overMonthlyCap) return "bg-risk-high";
   if (percentUsed <= 33) return "bg-success";
@@ -78,6 +75,7 @@ function BudgetCard() {
     periodAmount,
     remaining,
     percentUsed,
+    alertAt,
     spentByCategory,
   } = useBudgetSnapshot();
   const unlimited = cap === "unlimited";
@@ -115,15 +113,15 @@ function BudgetCard() {
           <div className="text-sm font-medium">Budget threshold</div>
           <div className="text-[11px] text-muted-foreground">
             {periodLabel}
-            {!unlimited && ` · alert zone from ${ALERT_ZONE_PERCENT}%`}
+            {!unlimited && ` · alert at ${alertAt}%`}
           </div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">
             {unlimited
               ? "Unlimited monthly budget — track spending freely."
               : spent > monthly
                 ? `Over monthly cap by $${(spent - monthly).toFixed(2)}.`
-                : pct >= ALERT_ZONE_PERCENT
-                  ? `At ${pct}% — in alert zone (${ALERT_ZONE_PERCENT}%+).`
+                : pct >= alertAt
+                  ? `At ${pct}% — at or past your ${alertAt}% alert.`
                   : remaining != null && remaining >= 0
                     ? `$${remaining.toFixed(2)} left this month.`
                     : `You've spent ${pct}% of your monthly budget.`}
@@ -147,9 +145,9 @@ function BudgetCard() {
         {!unlimited && (
           <div
             className="pointer-events-none absolute top-0 z-10 h-full w-px -translate-x-1/2 bg-foreground/45 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-            style={{ left: `${ALERT_ZONE_PERCENT}%` }}
+            style={{ left: `${alertAt}%` }}
             aria-hidden
-            title={`Alert zone starts at ${ALERT_ZONE_PERCENT}%`}
+            title={`Alert at ${alertAt}% of monthly budget`}
           />
         )}
       </div>

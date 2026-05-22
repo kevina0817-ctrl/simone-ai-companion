@@ -103,6 +103,15 @@ export function refreshBudgetProgressFromSettings() {
   notifyBudgetChanged();
 }
 
+/** Update alert threshold only — keeps cap/period/categories; refreshes Orders marker immediately. */
+export function setBudgetAlertAtPercent(alertAt: number) {
+  if (typeof window === "undefined") return;
+  const clamped = Math.min(100, Math.max(50, Math.round(alertAt)));
+  const settings = readBudgetSettings();
+  localStorage.setItem(BUDGET_KEY, JSON.stringify({ ...settings, alertAt: clamped }));
+  refreshBudgetProgressFromSettings();
+}
+
 /** Persist budget settings and refresh Orders threshold (drops stale month-only bump). */
 export function writeBudgetSettings(settings: BudgetSettings, options?: { userOverride?: boolean }) {
   if (typeof window === "undefined") return;
