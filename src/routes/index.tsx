@@ -144,9 +144,9 @@ function Home() {
 
   const greeting = (() => {
     const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
+    if (h < 12) return "Good Morning";
+    if (h < 18) return "Good Afternoon";
+    return "Good Evening";
   })();
 
   const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
