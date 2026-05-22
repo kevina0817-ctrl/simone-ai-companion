@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { backendAvailable, getDemoEvents, addScheduleItem, removeScheduleItem } from "@/lib/demo-mode";
-import { addPendingScheduleApproval } from "@/lib/approvals-store";
+import { addPendingScheduleApprovals } from "@/lib/approvals-store";
 import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   prepareScheduleForToday,
@@ -15,6 +15,7 @@ import {
   parseStructuredSchedulesFromText,
   parseCancelFromText,
   findScheduleEventForCancel,
+  generateScheduleId,
   isValidStructuredScheduleEvent,
   wantsBulkScheduleApprovals,
   isSameCalendarDay,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/schedule-item";
 
 import {
+  shouldParseStructuredScheduleFromReply,
   shouldRunScheduleTextFallbacks,
   shouldSuppressScheduleApprovals,
 } from "@/lib/chat-intent";
@@ -37,9 +39,13 @@ type ApplyInput = {
   userId: string;
 };
 
+function scheduleDedupeKey(item: ScheduleItem): string {
+  return `${item.title.toLowerCase()}|${item.start_time}|${item.end_time ?? ""}`;
+}
+
 function toScheduleItem(action: Extract<ChatScheduleAction, { kind: "schedule_event" }>): ScheduleItem {
   return {
-    id: action.id ?? `schedule-${Date.now()}`,
+    id: action.id ?? generateScheduleId(),
     title: action.title,
     subtitle: action.subtitle ?? null,
     start_time: new Date(action.start_time).toISOString(),
@@ -57,11 +63,22 @@ function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_even
   };
 }
 
-function queueScheduleApproval(item: ScheduleItem, scheduled: ScheduleItem[]) {
-  if (!isValidStructuredScheduleEvent(item)) return;
-  if (scheduled.some((s) => s.title.toLowerCase() === item.title.toLowerCase())) return;
-  addPendingScheduleApproval(item);
-  scheduled.push(item);
+function collectScheduleApprovals(
+  items: ScheduleItem[],
+  seen: Set<string>,
+  out: ScheduleItem[],
+): void {
+  for (const raw of items) {
+    const item: ScheduleItem = {
+      ...raw,
+      id: raw.id || generateScheduleId(),
+    };
+    if (!isValidStructuredScheduleEvent(item)) continue;
+    const key = scheduleDedupeKey(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
 }
 
 async function fetchTodayTimelineEvents(userId: string): Promise<ScheduleItem[]> {
@@ -176,24 +193,48 @@ async function removeFromTimeline(
 }
 
 /**
- * Queues schedule events for Approvals from structured tool calls only.
- * Never parses assistant chat prose into approval cards.
+ * Queues schedule events for Approvals from structured tool calls and, when allowed,
+ * strict structured lines in the assistant reply (never loose prose parsing).
  */
 export async function applyChatScheduleResult(
   qc: QueryClient,
-  { actions = [], userMessage, userId }: ApplyInput,
+  { actions = [], userMessage, assistantReply, userId }: ApplyInput,
 ): Promise<{ scheduled: ScheduleItem[]; cancelled: ScheduleItem[] }> {
   const scheduled: ScheduleItem[] = [];
   const cancelled: ScheduleItem[] = [];
+  const seen = new Set<string>();
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
   const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
+  const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
+
+  if (!suppressSchedule) {
+    const fromActions = scheduleActions.map((a) => toScheduleItem(a));
+    collectScheduleApprovals(fromActions, seen, scheduled);
+
+    if (shouldRunScheduleTextFallbacks(userMessage)) {
+      if (wantsBulkScheduleApprovals(userMessage)) {
+        collectScheduleApprovals(parseStructuredSchedulesFromText(userMessage), seen, scheduled);
+      } else if (scheduled.length === 0) {
+        const parsed = parseScheduleFromText(userMessage);
+        if (parsed) collectScheduleApprovals([parsed], seen, scheduled);
+      }
+    }
+
+    if (
+      assistantReply?.trim() &&
+      shouldParseStructuredScheduleFromReply(userMessage, scheduleActions.length)
+    ) {
+      collectScheduleApprovals(parseStructuredSchedulesFromText(assistantReply), seen, scheduled);
+    }
+
+    if (scheduled.length > 0) {
+      addPendingScheduleApprovals(scheduled);
+    }
+  }
 
   for (const action of actions) {
-    if (action.kind === "schedule_event") {
-      if (suppressSchedule) continue;
-      queueScheduleApproval(toScheduleItem(action), scheduled);
-    } else if (action.kind === "cancel_event") {
+    if (action.kind === "cancel_event") {
       const alreadyHandled = Boolean(action.id && backendAvailable);
       let removed = alreadyHandled
         ? todayEvents.find((e) => e.id === action.id) ?? null
@@ -215,24 +256,11 @@ export async function applyChatScheduleResult(
     }
   }
 
-  const combinedText = userMessage;
-
   if (cancelled.length === 0) {
-    const cancelCriteriaParsed = parseCancelFromText(combinedText);
+    const cancelCriteriaParsed = parseCancelFromText(userMessage);
     if (cancelCriteriaParsed) {
       const removed = await removeFromTimeline(cancelCriteriaParsed, userId, userMessage, todayEvents);
       if (removed) cancelled.push(removed);
-    }
-  }
-
-  if (!suppressSchedule && shouldRunScheduleTextFallbacks(userMessage)) {
-    if (wantsBulkScheduleApprovals(userMessage)) {
-      for (const item of parseStructuredSchedulesFromText(userMessage)) {
-        queueScheduleApproval(item, scheduled);
-      }
-    } else if (scheduled.length === 0) {
-      const parsed = parseScheduleFromText(userMessage);
-      if (parsed) queueScheduleApproval(parsed, scheduled);
     }
   }
 

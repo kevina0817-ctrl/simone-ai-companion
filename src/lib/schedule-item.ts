@@ -16,6 +16,11 @@ function looksLikeOrderOrProductLine(line: string): boolean {
 
 export type ScheduleLevel = "High" | "Medium" | "Low";
 
+/** Unique id per event — avoids Approvals overwriting when many events are queued at once. */
+export function generateScheduleId(): string {
+  return `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 /** Shape used by the Homepage timeline and demo localStorage. */
 export type ScheduleItem = {
   id: string;
@@ -55,7 +60,7 @@ export function normalizeScheduleFromToolArgs(
   const description = parsed.data.subtitle ?? parsed.data.description ?? null;
 
   const item: ScheduleItem = {
-    id: id ?? `schedule-${Date.now()}`,
+    id: id ?? generateScheduleId(),
     title: parsed.data.title.trim(),
     subtitle: description?.trim() || null,
     start_time: startDate.toISOString(),
@@ -221,7 +226,7 @@ function parseStructuredScheduleLine(
   if (endDate.getTime() <= start.getTime()) return null;
 
   const item: ScheduleItem = {
-    id: `schedule-${ref.getTime()}-${index}`,
+    id: generateScheduleId(),
     title: title.slice(0, 120),
     subtitle: null,
     start_time: start.toISOString(),
@@ -379,7 +384,7 @@ export function parseScheduleFromText(text: string, ref = new Date()): ScheduleI
   end.setHours(hour + 1, minute, 0, 0);
 
   const item: ScheduleItem = {
-    id: `schedule-${Date.now()}`,
+    id: generateScheduleId(),
     title,
     subtitle,
     start_time: day.toISOString(),

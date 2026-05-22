@@ -145,6 +145,25 @@ export function shouldRunScheduleTextFallbacks(userMessage: string): boolean {
   return wantsBulkScheduleApprovals(userMessage) || isScheduleManagementIntent(userMessage);
 }
 
+/** Strict structured lines in assistant reply (Title — start - end), not loose prose. */
+export function shouldParseStructuredScheduleFromReply(
+  userMessage: string,
+  scheduleActionCount: number,
+): boolean {
+  if (shouldSuppressScheduleApprovals(userMessage)) return false;
+  if (wantsBulkScheduleApprovals(userMessage)) return true;
+  if (scheduleActionCount > 0 && isScheduleManagementIntent(userMessage)) return true;
+  if (
+    isScheduleManagementIntent(userMessage) &&
+    /\b(?:full[\s-]?day|daily|today'?s?)\s+(?:plan|schedule)|(?:plan|schedule|build)\s+(?:my|your|a)\s+(?:day|today)\b/i.test(
+      userMessage,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Line looks like order/product copy, not a calendar event. */
 export function looksLikeOrderOrProductLine(line: string): boolean {
   const t = line.trim();

@@ -147,28 +147,38 @@ export function addPendingOrderApproval(order: PendingOrder) {
 
 /** Schedule event → Approvals first; Homepage timeline only after approve. */
 export function addPendingScheduleApproval(item: ScheduleItem) {
-  const approvalId = `schedule-approval-${item.id}`;
-  const pendingItem: PendingItem = {
-    id: approvalId,
-    kind: "calendar",
-    title: item.title,
-    detail: formatScheduleDetail(item),
-    scheduleEvent: item,
-  };
-  if (state.items[approvalId]) {
-    state = {
-      ...state,
-      items: {
-        ...state.items,
-        [approvalId]: { item: pendingItem, status: "pending" as const },
-      },
+  addPendingScheduleApprovals([item]);
+}
+
+/** Append every valid schedule event as its own approval card (no overwrites). */
+export function addPendingScheduleApprovals(items: ScheduleItem[]) {
+  if (items.length === 0) return;
+
+  const newOrderIds: string[] = [];
+  const nextItems = { ...state.items };
+
+  for (const item of items) {
+    const approvalId = `schedule-approval-${item.id}`;
+    const pendingItem: PendingItem = {
+      id: approvalId,
+      kind: "calendar",
+      title: item.title,
+      detail: formatScheduleDetail(item),
+      scheduleEvent: item,
     };
-  } else {
-    state = {
-      items: { ...state.items, [approvalId]: { item: pendingItem, status: "pending" as const } },
-      order: [approvalId, ...state.order.filter((oid) => oid !== approvalId)],
-    };
+    nextItems[approvalId] = { item: pendingItem, status: "pending" as const };
+    newOrderIds.push(approvalId);
   }
+
+  const mergedOrder = [
+    ...newOrderIds,
+    ...state.order.filter((oid) => !newOrderIds.includes(oid)),
+  ];
+
+  state = {
+    items: nextItems,
+    order: mergedOrder,
+  };
   emit();
 }
 
