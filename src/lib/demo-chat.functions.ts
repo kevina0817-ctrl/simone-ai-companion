@@ -42,9 +42,11 @@ Answer ANY question intelligently — small talk, advice, planning, recommendati
 You CAN take real actions via tools when (and only when) the user clearly asks:
 - schedule_event: propose one event for Approvals (call once per activity; specific titles, never 'these events').
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
-- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price).
+- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in USD).
 
 When the user asks to buy groceries or order products, CALL create_pending_order.
+Quote prices as US dollars (e.g. "approximately US$950") — never call unconverted tool estimates CAD.
+For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
 Do NOT call a tool for general questions or chit-chat.`;
 
 const tools = [
@@ -82,7 +84,7 @@ const tools = [
               properties: {
                 name: { type: "string" },
                 qty: { type: "number" },
-                estimated_price: { type: "number" },
+                estimated_price: { type: "number", description: "Unit price in USD" },
               },
               required: ["name"],
             },

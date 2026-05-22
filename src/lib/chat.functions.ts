@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs, findScheduleEventForCancel } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
+import { applyChatCurrencyToReply, collectUsdOrdersFromChatResult } from "@/lib/chat-order-currency";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 
@@ -34,6 +35,8 @@ When the user asks to cancel / remove / drop / skip a meeting or event, CALL can
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
 (name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
+Always quote tool prices in US dollars (e.g. "approximately US$950") — never label unconverted estimates as CAD.
+For luxury / non-grocery / non-Amazon orders, you may note that CAD conversion happens when they approve.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
@@ -267,6 +270,9 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     if (!reply) reply = "Done.";
+
+    const usdOrders = collectUsdOrdersFromChatResult({ pendingOrders, actions });
+    reply = applyChatCurrencyToReply(reply, usdOrders);
 
     await supabase.from("chat_messages").insert({
       user_id: userId,

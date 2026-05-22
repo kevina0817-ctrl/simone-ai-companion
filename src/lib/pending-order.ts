@@ -83,6 +83,7 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
     items,
     totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
+    amountCurrency: "USD",
     createdAt: new Date().toISOString(),
   };
 }
@@ -122,11 +123,13 @@ export function parseOrderFromText(text: string): PendingOrder | null {
     items: defaults,
     totalEstimatedPrice: computeOrderTotal(defaults),
     status: "pending_approval",
+    amountCurrency: "USD",
     createdAt: new Date().toISOString(),
   };
 }
 
 export function formatOrderDetail(order: PendingOrder): string {
-  const symbol = order.amountCurrency === "CAD" ? "CA$" : "$";
+  const symbol =
+    order.amountCurrency === "CAD" ? "CA$" : order.amountCurrency === "USD" ? "US$" : "$";
   return `${symbol}${order.totalEstimatedPrice.toFixed(2)} • ${order.items.length} items • ${order.store}`;
 }

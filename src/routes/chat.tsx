@@ -16,6 +16,10 @@ import { toast } from "sonner";
 import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
+import {
+  applyChatCurrencyToReply,
+  collectUsdOrdersFromChatResult,
+} from "@/lib/chat-order-currency";
 import { filterEventsForToday, getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   addDemoMessage,
@@ -140,10 +144,15 @@ function ChatPage() {
         addDemoMessage({ role: "user", content: t });
       }
 
+      const usdOrders = collectUsdOrdersFromChatResult(result);
+      const replyText = backendAvailable
+        ? result.reply
+        : applyChatCurrencyToReply(result.reply, usdOrders);
+
       const { scheduled, cancelled } = await applyChatScheduleResult(qc, {
         actions: toScheduleActions(result.actions),
         userMessage: t,
-        assistantReply: result.reply,
+        assistantReply: replyText,
         userId: user!.id,
       });
 
@@ -167,7 +176,7 @@ function ChatPage() {
         pendingOrders: result.pendingOrders,
         actions: result.actions,
         userMessage: t,
-        assistantReply: result.reply,
+        assistantReply: replyText,
       });
 
       if (orders.length > 0) {
@@ -181,12 +190,12 @@ function ChatPage() {
       const aiMessage = {
         id: `ai-${Date.now()}`,
         role: "assistant",
-        content: result.reply,
+        content: replyText,
         created_at: new Date().toISOString(),
       };
 
       if (!backendAvailable) {
-        addDemoMessage({ role: "assistant", content: result.reply });
+        addDemoMessage({ role: "assistant", content: replyText });
       }
 
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
