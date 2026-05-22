@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, Sparkles, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -15,6 +16,13 @@ import {
   type ApprovalsDecideContext,
   type PendingItem,
 } from "@/lib/approvals-store";
+import type { BudgetCheck } from "@/lib/budget-store";
+import {
+  approveShoppingOrderAfterBudgetRaise,
+  categoryLabel,
+  declineShoppingApproval,
+  tryApproveShoppingOrder,
+} from "@/lib/order-approval";
 import { backendAvailable, demoUser } from "@/lib/demo-mode";
 import { usePendingOrders } from "@/lib/pending-orders-store";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
@@ -208,6 +216,152 @@ function ScheduleApprovalCard({ id, item }: { id: string; item: PendingItem }) {
   );
 }
 
+function OrderBudgetPrompt({
+  check,
+  orderTotal,
+  priceSymbol,
+  onRaise,
+  onDecline,
+  busy,
+}: {
+  check: BudgetCheck;
+  orderTotal: number;
+  priceSymbol: string;
+  onRaise: () => void;
+  onDecline: () => void;
+  busy: boolean;
+}) {
+  const cap = check.monthlyCap === "unlimited" ? 0 : check.monthlyCap;
+  const overBy = check.overBy;
+
+  return (
+    <div className="mt-4 rounded-2xl border border-risk-medium/40 bg-risk-medium/10 px-4 py-3 text-sm">
+      <p className="leading-relaxed text-foreground">
+        {overBy > 0
+          ? `Approving this order (${priceSymbol}${orderTotal.toFixed(2)}) would put you $${overBy.toFixed(2)} over your $${cap.toFixed(0)} monthly budget. Raise your cap for this month only?`
+          : `This order would exceed your $${cap.toFixed(0)} monthly budget threshold. Raise your cap for this month only?`}
+      </p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onDecline}
+          className="flex-1 rounded-full border border-border bg-secondary/50 py-2 text-xs font-medium disabled:opacity-50"
+        >
+          Not now
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRaise}
+          className="flex-1 rounded-full bg-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+        >
+          Yes, raise this month
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OrderActionButtons({ id }: { id: string }) {
+  const ctx = useDecideContext();
+  const [budgetCheck, setBudgetCheck] = useState<BudgetCheck | null>(null);
+  const [busy, setBusy] = useState(false);
+  const order = usePendingOrders().find((o) => o.id === id);
+
+  const finishApproved = () => {
+    const tab =
+      order?.category === "grocery"
+        ? "Grocery"
+        : order?.category === "amazon"
+          ? "Amazon"
+          : "Other";
+    toast.success(
+      tab === "Other"
+        ? `Order approved — see it under Orders → Other`
+        : `Order approved — see it under Orders → ${tab}`,
+    );
+  };
+
+  const onApprove = async () => {
+    if (!ctx) return;
+    setBusy(true);
+    try {
+      const result = await tryApproveShoppingOrder(id, ctx);
+      if (result.status === "needs_budget") {
+        setBudgetCheck(result.check);
+        return;
+      }
+      if (result.status === "approved") finishApproved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRaiseAndApprove = async () => {
+    if (!ctx) return;
+    setBusy(true);
+    try {
+      const result = await approveShoppingOrderAfterBudgetRaise(id, ctx);
+      if (result.status === "needs_budget") {
+        setBudgetCheck(result.check);
+        return;
+      }
+      if (result.status === "approved") {
+        setBudgetCheck(null);
+        finishApproved();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDeclineBudget = async () => {
+    if (!ctx) return;
+    setBusy(true);
+    try {
+      await declineShoppingApproval(id, ctx);
+      setBudgetCheck(null);
+      toast.message("Order declined — it stays off your Orders page");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      {budgetCheck && order && (
+        <OrderBudgetPrompt
+          check={budgetCheck}
+          orderTotal={order.totalEstimatedPrice}
+          priceSymbol={order.amountCurrency === "CAD" ? "CA$" : "$"}
+          onRaise={() => void onRaiseAndApprove()}
+          onDecline={() => void onDeclineBudget()}
+          busy={busy}
+        />
+      )}
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void declineShoppingApproval(id, ctx ?? undefined)}
+          className="flex-1 rounded-full border border-border bg-secondary/50 py-2.5 text-sm font-medium disabled:opacity-50"
+        >
+          Decline
+        </button>
+        <button
+          type="button"
+          disabled={!ctx || busy || Boolean(budgetCheck)}
+          onClick={() => void onApprove()}
+          className="flex-1 rounded-full bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+        >
+          Approve
+        </button>
+      </div>
+    </>
+  );
+}
+
 function OrderApprovalCard({ id }: { id: string }) {
   const status = useStatus(id);
   const order = usePendingOrders().find((o) => o.id === id);
@@ -222,19 +376,18 @@ function OrderApprovalCard({ id }: { id: string }) {
         <div className="flex-1">
           <div className="text-base font-medium leading-tight">{order.title}</div>
           <div className="text-[11px] text-muted-foreground">
-            {order.store} • {order.category === "amazon" ? "Amazon" : order.category === "grocery" ? "Grocery" : "Online"} • Pending approval
+            {order.store} • {categoryLabel(order.category)} • Pending approval
+            {order.amountCurrency === "CAD" ? " · priced in CAD" : ""}
           </div>
         </div>
-        {order.exceedsBudget && (
-          <span className="rounded-full border border-risk-medium/40 bg-risk-medium/10 px-2.5 py-1 text-[10px] font-medium text-risk-medium">
-            Over budget
-          </span>
-        )}
       </div>
       <div className="mt-3">
         <PendingOrderCard order={order} compact />
       </div>
-      {status === "pending" ? <ActionButtons id={id} /> : <StatusBanner status={status} />}
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Monthly budget is checked when you approve. Other-category orders appear under Orders → Other after approval.
+      </p>
+      {status === "pending" ? <OrderActionButtons id={id} /> : <StatusBanner status={status} />}
     </article>
   );
 }

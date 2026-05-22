@@ -20,7 +20,11 @@ export type PendingOrder = {
   totalEstimatedPrice: number;
   status: PendingOrderStatus;
   createdAt: string;
-  /** Set when this purchase would exceed the monthly budget */
+  /** Display currency after FX normalization (other-category orders → CAD). */
+  amountCurrency?: "USD" | "CAD";
+  /** Pre-conversion USD total for other-category orders. */
+  originalTotalUsd?: number;
+  /** Set at approve time when purchase would exceed monthly budget */
   exceedsBudget?: boolean;
   budgetOverBy?: number;
 };
@@ -110,5 +114,6 @@ export function parseOrderFromText(text: string): PendingOrder | null {
 }
 
 export function formatOrderDetail(order: PendingOrder): string {
-  return `$${order.totalEstimatedPrice.toFixed(2)} • ${order.items.length} items • ${order.store}`;
+  const symbol = order.amountCurrency === "CAD" ? "CA$" : "$";
+  return `${symbol}${order.totalEstimatedPrice.toFixed(2)} • ${order.items.length} items • ${order.store}`;
 }

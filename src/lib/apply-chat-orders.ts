@@ -1,8 +1,8 @@
 import type { ChatAction } from "@/lib/chat-actions";
 import type { PendingOrder } from "@/lib/pending-order";
 import { normalizeOrderFromToolArgs, parseOrderFromText } from "@/lib/pending-order";
-import { orderWithBudgetFlags } from "@/lib/budget-store";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
+import { prepareOrderForApprovals } from "@/lib/order-approval";
 
 export function applyChatOrderResult(
   input: {
@@ -16,7 +16,7 @@ export function applyChatOrderResult(
   const seen = new Set<string>();
 
   const push = (raw: PendingOrder) => {
-    const order = orderWithBudgetFlags(raw);
+    const order = prepareOrderForApprovals(raw);
     if (seen.has(order.id)) return;
     seen.add(order.id);
     addPendingOrderApproval(order);
@@ -41,8 +41,9 @@ export function applyChatOrderResult(
         combined,
       );
     if (parsed && !scheduleIntent) {
-      addPendingOrderApproval(parsed);
-      created.push(parsed);
+      const order = prepareOrderForApprovals(parsed);
+      addPendingOrderApproval(order);
+      created.push(order);
     }
   }
 

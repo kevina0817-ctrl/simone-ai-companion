@@ -34,7 +34,7 @@ When the user asks to cancel / remove / drop / skip a meeting or event, CALL can
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
 When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
 (name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
-If the purchase would exceed their monthly budget, still call create_pending_order — it goes to Approvals flagged as over budget.
+If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
 const tools = [

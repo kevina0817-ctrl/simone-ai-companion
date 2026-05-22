@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import type { PendingOrder } from "@/lib/pending-order";
-import { formatOrderDetail } from "@/lib/pending-order";
+import { formatApprovalOrderDetail } from "@/lib/order-approval";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
 import { recordApprovedOrderSpend } from "@/lib/budget-store";
@@ -130,19 +130,14 @@ export async function decide(
   emit();
 }
 
-/** Shopping order → Approvals only until approved, then Orders page. */
+/** Shopping order → Approvals only until approved; budget checked on Approve. */
 export function addPendingOrderApproval(order: PendingOrder) {
-  const detail = order.exceedsBudget
-    ? `${formatOrderDetail(order)} • Over budget by $${(order.budgetOverBy ?? 0).toFixed(2)}`
-    : formatOrderDetail(order);
   const item: PendingItem = {
     id: order.id,
-    kind: order.exceedsBudget ? "grocery" : "order",
-    title: order.exceedsBudget ? `${order.title} (over budget)` : order.title,
-    detail,
+    kind: "order",
+    title: order.title,
+    detail: formatApprovalOrderDetail(order),
     orderId: order.id,
-    exceedsBudget: order.exceedsBudget,
-    budgetOverBy: order.budgetOverBy,
   };
   addPendingOrder(order);
   if (state.items[order.id]) {

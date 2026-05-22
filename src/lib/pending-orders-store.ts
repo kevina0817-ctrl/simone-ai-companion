@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { inferOrderCategory, isShoppingOrderCategory } from "@/lib/order-category";
+import { prepareOrderForApprovals } from "@/lib/order-approval";
 import type { PendingOrder, PendingOrderStatus } from "@/lib/pending-order";
 
 const STORAGE_KEY = "simone-pending-orders";
@@ -53,13 +54,15 @@ function getSnapshot() {
 }
 
 export function addPendingOrder(order: PendingOrder): PendingOrder {
-  orders = [order, ...orders.filter((o) => o.id !== order.id)];
+  const normalized =
+    order.status === "pending_approval" ? prepareOrderForApprovals(order) : order;
+  orders = [normalized, ...orders.filter((o) => o.id !== normalized.id)];
   persist();
   emit();
   if (typeof window !== "undefined") {
     void import("@/lib/budget-store").then((m) => m.notifyBudgetChanged());
   }
-  return order;
+  return normalized;
 }
 
 export function getPendingOrder(id: string): PendingOrder | undefined {
@@ -110,9 +113,10 @@ export function replacePendingOrders(next: PendingOrder[]) {
   if (typeof window !== "undefined") {
     sessionStorage.setItem(SESSION_FLAG, "1");
   }
-  orders = next.map((o) =>
-    o.category ? o : { ...o, category: inferOrderCategory(o.store, o.title) },
-  );
+  orders = next.map((o) => {
+    const withCat = o.category ? o : { ...o, category: inferOrderCategory(o.store, o.title) };
+    return withCat.status === "pending_approval" ? prepareOrderForApprovals(withCat) : withCat;
+  });
   persist();
   emit();
   if (typeof window !== "undefined") {

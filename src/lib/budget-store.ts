@@ -278,12 +278,20 @@ export function getBudgetExceededWarning(): boolean {
 /** User chose to raise cap for this calendar month only. */
 export function applyMonthOnlyBudgetIncrease() {
   const spent = getApprovedSpendTotal();
+  raiseMonthlyBudgetForProjectedSpend(spent);
+}
+
+/** Raise this month's cap so projected spend (incl. pending approval) fits. */
+export function raiseMonthlyBudgetForProjectedSpend(projected: number) {
+  const base = getMonthlyBudgetCap();
+  const baseNum = base === "unlimited" ? projected : base;
   const t = readTracking();
   writeTracking({
     monthKey: currentMonthKey(),
-    monthOnlyCap: Math.max(Math.ceil(spent), getMonthlyBudgetCap() as number) + 50,
+    monthOnlyCap: Math.max(Math.ceil(projected), baseNum) + 50,
     showExceededWarning: false,
   });
+  notifyBudgetChanged();
 }
 
 export function dismissBudgetExceededWarning() {
