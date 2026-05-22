@@ -46,6 +46,19 @@ export function computeOrderTotal(items: OrderLineItem[]): number {
   return Math.round(items.reduce((sum, i) => sum + i.estimatedPrice * i.qty, 0) * 100) / 100;
 }
 
+/** Unique id per order — avoids collisions when multiple orders are created in the same millisecond. */
+export function generateOrderId(): string {
+  return `order-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Deep copy so approved orders are never mutated when a new pending order is added. */
+export function clonePendingOrder(order: PendingOrder): PendingOrder {
+  return {
+    ...order,
+    items: order.items.map((item) => ({ ...item })),
+  };
+}
+
 export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
   const parsed = orderToolSchema.safeParse(args);
   if (!parsed.success) return null;
@@ -63,7 +76,7 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
   const title = parsed.data.title.trim();
   const store = parsed.data.store?.trim() || "Whole Foods";
   return {
-    id: `order-${Date.now()}`,
+    id: generateOrderId(),
     title,
     store,
     category: inferOrderCategory(store, title),
@@ -102,7 +115,7 @@ export function parseOrderFromText(text: string): PendingOrder | null {
 
   const normalizedTitle = title.charAt(0).toUpperCase() + title.slice(1);
   return {
-    id: `order-${Date.now()}`,
+    id: generateOrderId(),
     title: normalizedTitle,
     store,
     category: inferOrderCategory(store, normalizedTitle),

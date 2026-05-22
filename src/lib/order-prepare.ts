@@ -1,5 +1,6 @@
 import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
 import {
+  clonePendingOrder,
   computeOrderTotal,
   formatOrderDetail,
   type PendingOrder,
@@ -39,9 +40,10 @@ export function convertOtherOrderToCad(order: PendingOrder): PendingOrder {
 
 /** Queue in Approvals — no budget flags until the user taps Approve. */
 export function prepareOrderForApprovals(order: PendingOrder): PendingOrder {
-  const withCategory = order.category
-    ? order
-    : { ...order, category: inferOrderCategory(order.store, order.title) };
+  const base = clonePendingOrder(order);
+  const withCategory = base.category
+    ? base
+    : { ...base, category: inferOrderCategory(base.store, base.title) };
   const normalized =
     withCategory.category === "grocery" || withCategory.category === "amazon"
       ? stripBudgetFlags(withCategory)

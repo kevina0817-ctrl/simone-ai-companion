@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
-import type { PendingOrder } from "@/lib/pending-order";
-import { formatApprovalOrderDetail } from "@/lib/order-prepare";
+import { clonePendingOrder, type PendingOrder } from "@/lib/pending-order";
+import { formatApprovalOrderDetail, prepareOrderForApprovals } from "@/lib/order-prepare";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
 import { recordApprovedOrderSpend } from "@/lib/budget-store";
@@ -138,26 +138,26 @@ export async function decide(
 
 /** Shopping order → Approvals only until approved; budget checked on Approve. */
 export function addPendingOrderApproval(order: PendingOrder) {
+  const stored = addPendingOrder(prepareOrderForApprovals(clonePendingOrder(order)));
+  const approvalId = shoppingApprovalId(stored.id);
   const item: PendingItem = {
-    id: order.id,
+    id: approvalId,
     kind: "order",
-    title: order.title,
-    detail: formatApprovalOrderDetail(order),
-    orderId: order.id,
+    title: stored.title,
+    detail: formatApprovalOrderDetail(stored),
+    orderId: stored.id,
   };
-  addPendingOrder(order);
-  if (state.items[order.id]) {
+
+  const existing = state.items[approvalId];
+  if (existing?.status === "pending") {
     state = {
       ...state,
-      items: {
-        ...state.items,
-        [order.id]: { item, status: "pending" as const },
-      },
+      items: { ...state.items, [approvalId]: { item, status: "pending" as const } },
     };
   } else {
     state = {
-      items: { ...state.items, [order.id]: { item, status: "pending" as const } },
-      order: [order.id, ...state.order.filter((oid) => oid !== order.id)],
+      items: { ...state.items, [approvalId]: { item, status: "pending" as const } },
+      order: [approvalId, ...state.order.filter((oid) => oid !== approvalId)],
     };
   }
   emit();
@@ -234,6 +234,17 @@ export function isShoppingApproval(item: PendingItem): boolean {
   return Boolean(item.orderId);
 }
 
+function shoppingApprovalId(orderId: string): string {
+  return `approval-${orderId}`;
+}
+
+function removeFromPendingApprovalQueue(approvalId: string) {
+  state = {
+    ...state,
+    order: state.order.filter((oid) => oid !== approvalId),
+  };
+}
+
 export function resolveOrderIdForApproval(approvalId: string): string | undefined {
   const entry = state.items[approvalId];
   return entry?.item.orderId ?? approvalId;
@@ -276,6 +287,7 @@ export function completeShoppingApproval(approvalId: string): PendingOrder | nul
   if (!approved) return null;
 
   markShoppingApprovalDecided(approvalId, "approved", approved);
+  removeFromPendingApprovalQueue(approvalId);
   recordApprovedOrderSpend(approved);
   return approved;
 }
@@ -284,4 +296,5 @@ export function declineShoppingApproval(approvalId: string): void {
   const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
   setPendingOrderStatus(orderId, "declined");
   markShoppingApprovalDecided(approvalId, "declined", getPendingOrder(orderId));
+  removeFromPendingApprovalQueue(approvalId);
 }

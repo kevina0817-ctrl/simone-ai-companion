@@ -28,7 +28,7 @@ import {
   tryApproveShoppingOrder,
 } from "@/lib/order-approval";
 import { backendAvailable, demoUser } from "@/lib/demo-mode";
-import { usePendingOrders } from "@/lib/pending-orders-store";
+import { getPendingApprovalOrder } from "@/lib/pending-orders-store";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
 
 export const Route = createFileRoute("/approvals")({
@@ -335,9 +335,8 @@ function OrderActionButtons({ id }: { id: string }) {
   const [showBudgetInput, setShowBudgetInput] = useState(false);
   const [inputError, setInputError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const orders = usePendingOrders();
   const orderId = resolveOrderIdForApproval(id) ?? id;
-  const order = orders.find((o) => o.id === orderId);
+  const order = getPendingApprovalOrder(orderId);
 
   const finishApproved = (approved: { category: OrderCategory }) => {
     const tab = ordersTabForCategory(approved.category);
@@ -461,7 +460,7 @@ function OrderActionButtons({ id }: { id: string }) {
 function OrderApprovalCard({ id }: { id: string }) {
   const status = useStatus(id);
   const orderId = resolveOrderIdForApproval(id) ?? id;
-  const order = usePendingOrders().find((o) => o.id === orderId);
+  const order = getPendingApprovalOrder(orderId);
   if (!order) return null;
 
   return (

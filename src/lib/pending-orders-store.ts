@@ -1,7 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { inferOrderCategory, isShoppingOrderCategory } from "@/lib/order-category";
 import { prepareOrderForApprovals } from "@/lib/order-prepare";
-import type { PendingOrder, PendingOrderStatus } from "@/lib/pending-order";
+import {
+  clonePendingOrder,
+  generateOrderId,
+  type PendingOrder,
+  type PendingOrderStatus,
+} from "@/lib/pending-order";
 
 const STORAGE_KEY = "simone-pending-orders";
 const SESSION_FLAG = "simone-orders-session";
@@ -54,8 +59,20 @@ function getSnapshot() {
 }
 
 export function addPendingOrder(order: PendingOrder): PendingOrder {
-  const normalized =
-    order.status === "pending_approval" ? prepareOrderForApprovals(order) : order;
+  let normalized =
+    order.status === "pending_approval"
+      ? prepareOrderForApprovals(clonePendingOrder(order))
+      : clonePendingOrder(order);
+
+  const existing = orders.find((o) => o.id === normalized.id);
+  if (existing && existing.status !== "pending_approval") {
+    normalized = { ...normalized, id: generateOrderId() };
+    if (normalized.status === "pending_approval") {
+      normalized = prepareOrderForApprovals(normalized);
+    }
+  }
+
+  normalized = clonePendingOrder(normalized);
   orders = [normalized, ...orders.filter((o) => o.id !== normalized.id)];
   persist();
   emit();
@@ -66,7 +83,14 @@ export function addPendingOrder(order: PendingOrder): PendingOrder {
 }
 
 export function getPendingOrder(id: string): PendingOrder | undefined {
-  return orders.find((o) => o.id === id);
+  const found = orders.find((o) => o.id === id);
+  return found ? clonePendingOrder(found) : undefined;
+}
+
+/** Approvals UI — only the current pending order payload (never approved/declined). */
+export function getPendingApprovalOrder(id: string): PendingOrder | undefined {
+  const found = orders.find((o) => o.id === id && o.status === "pending_approval");
+  return found ? clonePendingOrder(found) : undefined;
 }
 
 export function getOrdersSnapshot(): PendingOrder[] {
@@ -91,7 +115,7 @@ export function commitApprovedShoppingOrder(orderId: string): PendingOrder | und
 
   const category = existing.category ?? inferOrderCategory(existing.store, existing.title);
   const approved: PendingOrder = {
-    ...existing,
+    ...clonePendingOrder(existing),
     category,
     status: "approved",
     exceedsBudget: undefined,
@@ -139,8 +163,13 @@ export function replacePendingOrders(next: PendingOrder[]) {
     sessionStorage.setItem(SESSION_FLAG, "1");
   }
   orders = next.map((o) => {
-    const withCat = o.category ? o : { ...o, category: inferOrderCategory(o.store, o.title) };
-    return withCat.status === "pending_approval" ? prepareOrderForApprovals(withCat) : withCat;
+    const cloned = clonePendingOrder(o);
+    const withCat = cloned.category
+      ? cloned
+      : { ...cloned, category: inferOrderCategory(cloned.store, cloned.title) };
+    return withCat.status === "pending_approval"
+      ? prepareOrderForApprovals(withCat)
+      : clonePendingOrder(withCat);
   });
   persist();
   emit();
