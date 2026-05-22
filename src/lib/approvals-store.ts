@@ -4,8 +4,13 @@ import type { PendingOrder } from "@/lib/pending-order";
 import { formatApprovalOrderDetail } from "@/lib/order-approval";
 import type { ScheduleItem } from "@/lib/schedule-item";
 import { toast } from "sonner";
-import { recordApprovedOrderSpend } from "@/lib/budget-store";
-import { addPendingOrder, getPendingOrder, setPendingOrderStatus } from "@/lib/pending-orders-store";
+import { recordApprovedOrderSpend, syncBudgetAfterOrderApproved } from "@/lib/budget-store";
+import {
+  addPendingOrder,
+  approveOrderInStore,
+  getPendingOrder,
+  setPendingOrderStatus,
+} from "@/lib/pending-orders-store";
 
 export type PendingItemKind = "calendar" | "grocery" | "order";
 
@@ -232,4 +237,53 @@ export function isShoppingApproval(item: PendingItem): boolean {
 export function resolveOrderIdForApproval(approvalId: string): string | undefined {
   const entry = state.items[approvalId];
   return entry?.item.orderId ?? approvalId;
+}
+
+function markApprovalDecided(
+  approvalId: string,
+  status: "approved" | "declined",
+  order?: PendingOrder,
+) {
+  const decidedAt = Date.now();
+  const entry = state.items[approvalId];
+  if (entry && entry.status === "pending") {
+    state = {
+      ...state,
+      items: { ...state.items, [approvalId]: { ...entry, status, decidedAt } },
+    };
+  } else if (order) {
+    const item: PendingItem = {
+      id: approvalId,
+      kind: "order",
+      title: order.title,
+      detail: formatApprovalOrderDetail(order),
+      orderId: order.id,
+    };
+    state = {
+      items: { ...state.items, [approvalId]: { item, status, decidedAt } },
+      order: state.order.includes(approvalId) ? state.order : [approvalId, ...state.order],
+    };
+  }
+  emit();
+}
+
+/** Approve shopping order: update store, remove from pending Approvals, refresh budget. */
+export function finalizeShoppingOrderApproval(approvalId: string): PendingOrder | null {
+  const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
+  const pending = getPendingOrder(orderId);
+  if (!pending || pending.status !== "pending_approval") return null;
+
+  const approved = approveOrderInStore(orderId);
+  if (!approved) return null;
+
+  markApprovalDecided(approvalId, "approved", approved);
+  recordApprovedOrderSpend(approved);
+  syncBudgetAfterOrderApproved();
+  return approved;
+}
+
+export function finalizeShoppingOrderDecline(approvalId: string): void {
+  const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
+  setPendingOrderStatus(orderId, "declined");
+  markApprovalDecided(approvalId, "declined", getPendingOrder(orderId));
 }

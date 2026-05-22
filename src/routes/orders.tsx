@@ -12,9 +12,9 @@ import {
   notifyBudgetChanged,
   useBudgetSnapshot,
 } from "@/lib/budget-store";
-import { useApprovedOrders } from "@/lib/pending-orders-store";
+import { ORDERS_CHANGED_EVENT, useApprovedOrders } from "@/lib/pending-orders-store";
 import { useAuth } from "@/hooks/useAuth";
-import { applyPersonaForUser, ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
+import { ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -78,12 +78,14 @@ function BudgetCard() {
   useEffect(() => {
     const refresh = () => notifyBudgetChanged();
     window.addEventListener(BUDGET_CHANGED_EVENT, refresh);
+    window.addEventListener(ORDERS_CHANGED_EVENT, refresh);
     window.addEventListener("simone-persona-wellness-changed", refresh);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     refresh();
     return () => {
       window.removeEventListener(BUDGET_CHANGED_EVENT, refresh);
+      window.removeEventListener(ORDERS_CHANGED_EVENT, refresh);
       window.removeEventListener("simone-persona-wellness-changed", refresh);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("focus", refresh);
@@ -221,7 +223,6 @@ function OrdersPage() {
   const { user } = useAuth();
 
   useEffect(() => {
-    applyPersonaForUser(user);
     ensurePersonaBudgetForEmail(user?.email);
     notifyBudgetChanged();
   }, [user?.id, user?.email]);

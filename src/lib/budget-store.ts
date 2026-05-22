@@ -298,17 +298,35 @@ export function raiseMonthlyBudgetForProjectedSpend(projected: number) {
 export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
   const rounded = Math.round(monthlyCapCad * 100) / 100;
   const settings = readBudgetSettings();
-  writeBudgetSettings({
-    ...settings,
-    period: "Monthly",
-    amount: rounded,
-    alertAt: settings.alertAt ?? 90,
-  });
+  if (typeof window !== "undefined") {
+    localStorage.setItem(
+      BUDGET_KEY,
+      JSON.stringify({
+        ...settings,
+        period: "Monthly",
+        amount: rounded,
+        alertAt: settings.alertAt ?? 90,
+      }),
+    );
+  }
   writeTracking({
     monthKey: currentMonthKey(),
     monthOnlyCap: rounded,
     showExceededWarning: false,
   });
+  cachedBudgetKey = "";
+  notifyBudgetChanged();
+}
+
+/** Refresh threshold UI after budget save + order approval (spent, cap, remaining). */
+export function syncBudgetAfterOrderApproved() {
+  cachedBudgetKey = "";
+  const cap = getEffectiveMonthlyCap();
+  const spent = getApprovedSpendTotal();
+  if (cap !== "unlimited" && spent <= cap) {
+    const t = readTracking();
+    writeTracking({ ...t, showExceededWarning: false });
+  }
   notifyBudgetChanged();
 }
 

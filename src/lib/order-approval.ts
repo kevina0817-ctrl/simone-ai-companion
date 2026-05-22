@@ -5,7 +5,8 @@ import {
   validateMonthlyBudgetCad,
 } from "@/lib/budget-store";
 import {
-  decide,
+  finalizeShoppingOrderApproval,
+  finalizeShoppingOrderDecline,
   resolveOrderIdForApproval,
   type ApprovalsDecideContext,
 } from "@/lib/approvals-store";
@@ -108,11 +109,8 @@ export async function tryApproveShoppingOrder(
     return { status: "needs_budget", check, order };
   }
 
-  await decide(approvalId, "approved", ctx);
-  const approved = resolvePendingOrder(approvalId);
-  if (!approved || approved.status !== "approved") {
-    return { status: "declined" };
-  }
+  const approved = finalizeShoppingOrderApproval(approvalId);
+  if (!approved) return { status: "declined" };
   return { status: "approved", order: approved };
 }
 
@@ -140,19 +138,16 @@ export async function approveShoppingOrderWithMonthlyBudgetCad(
     return { status: "needs_budget", check: recheck, order };
   }
 
-  await decide(approvalId, "approved", ctx);
-  const approved = resolvePendingOrder(approvalId);
-  if (!approved || approved.status !== "approved") {
-    return { status: "declined" };
-  }
+  const approved = finalizeShoppingOrderApproval(approvalId);
+  if (!approved) return { status: "declined" };
   return { status: "approved", order: approved };
 }
 
 export async function declineShoppingApproval(
   approvalId: string,
-  ctx?: ApprovalsDecideContext,
+  _ctx?: ApprovalsDecideContext,
 ): Promise<void> {
-  await decide(approvalId, "declined", ctx);
+  finalizeShoppingOrderDecline(approvalId);
 }
 
 export function suggestedMonthlyBudgetCad(check: BudgetCheck): number {
