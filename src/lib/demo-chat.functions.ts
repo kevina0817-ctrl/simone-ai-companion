@@ -4,6 +4,7 @@ import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
+import { buildBoredomPlanningContextBlock, isBoredomOrFreeTimeIntent } from "@/lib/boredom-schedule";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
@@ -57,7 +58,9 @@ Never create multiple pending orders for multiple recommended options in one tur
 Order title and item names must be real products only — never assistant filler phrases.
 Quote prices as US dollars (e.g. "approximately US$950") — never call unconverted tool estimates CAD.
 For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
-Do NOT call a tool for general questions or chit-chat.`;
+Do NOT call a tool for general questions or chit-chat.
+
+BOREDOM / FREE TIME: When the user is bored or asks what to do now / rest of tonight — schedule activities for TODAY only, from the next quarter-hour after Now until bedtime (see planning context). Never use tomorrow unless they explicitly ask. Call schedule_event per activity with sequential ISO times on today's date.`;
 
 const tools = [
   {
@@ -189,6 +192,14 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
+      ...(isBoredomOrFreeTimeIntent(data.message)
+        ? [
+            {
+              role: "system",
+              content: buildBoredomPlanningContextBlock({ nowIso, events: data.events }),
+            },
+          ]
+        : []),
       ...data.history.map((m) => ({ role: m.role, content: m.content })),
       { role: "user", content: data.message },
     ];

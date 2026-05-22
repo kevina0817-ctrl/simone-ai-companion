@@ -27,6 +27,11 @@ import {
 import { resolveScheduleLevel } from "@/lib/schedule-priority";
 
 import {
+  coerceBoredomScheduleEvents,
+  isBoredomOrFreeTimeIntent,
+  userExplicitlyWantsTomorrow,
+} from "@/lib/boredom-schedule";
+import {
   shouldParseStructuredScheduleFromReply,
   shouldRequireScheduleApproval,
   shouldRunScheduleTextFallbacks,
@@ -240,9 +245,20 @@ export async function applyChatScheduleResult(
       collectScheduleApprovals(fromReply, byTitle);
     }
 
-    const events = [...byTitle.values()].sort(
+    let events = [...byTitle.values()].sort(
       (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
     );
+
+    if (
+      events.length > 0 &&
+      isBoredomOrFreeTimeIntent(userMessage) &&
+      !userExplicitlyWantsTomorrow(userMessage)
+    ) {
+      events = coerceBoredomScheduleEvents(events, {
+        now: new Date(),
+        todayEvents,
+      });
+    }
 
     const useApprovals = shouldRequireScheduleApproval(userMessage, events.length, {
       assistantParsedCount,

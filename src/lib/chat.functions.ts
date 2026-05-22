@@ -6,6 +6,7 @@ import { normalizeScheduleFromToolArgs, findScheduleEventForCancel } from "@/lib
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { applyChatCurrencyToReply, collectUsdOrdersFromChatResult } from "@/lib/chat-order-currency";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
+import { buildBoredomPlanningContextBlock, isBoredomOrFreeTimeIntent } from "@/lib/boredom-schedule";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
@@ -38,6 +39,7 @@ MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with mul
 When the schedule_event tool returns added_to_today_schedule: true, the event is already live — use past-tense direct confirmation only.
 When the tool returns pending_approval: true, the event is waiting in Approvals — you may mention reviewing or confirming there.
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
+BOREDOM / FREE TIME: When the user says they are bored, asks what to do now, or wants the rest of tonight planned — schedule activities ONLY for TODAY from the next quarter-hour after Now until bedtime (see planning context). Never use tomorrow's date unless they explicitly ask for tomorrow. First block starts at the rounded quarter-hour (e.g. 7:05 PM → 7:15 PM). Call schedule_event per activity with sequential times within that window.
 When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
 For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
 When the user asks to add all events to Approvals, call schedule_event separately for each activity with title, start_time, and end_time.
@@ -207,6 +209,14 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
+      ...(isBoredomOrFreeTimeIntent(data.message)
+        ? [
+            {
+              role: "system",
+              content: buildBoredomPlanningContextBlock({ nowIso, events }),
+            },
+          ]
+        : []),
       ...thread,
     ];
 

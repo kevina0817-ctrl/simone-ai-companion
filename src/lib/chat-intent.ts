@@ -1,3 +1,4 @@
+import { isBoredomOrFreeTimeIntent } from "@/lib/boredom-schedule";
 import { wantsBulkScheduleApprovals } from "@/lib/schedule-item";
 import type { PendingOrder } from "@/lib/pending-order";
 
@@ -127,6 +128,8 @@ export function isScheduleManagementIntent(userMessage: string): boolean {
 
   if (wantsBulkScheduleApprovals(t)) return true;
 
+  if (isBoredomOrFreeTimeIntent(t)) return true;
+
   if (/\b(add|put|send|queue)\b/i.test(t) && /\b(approvals?)\b/i.test(t)) {
     return /\b(event|events|schedule|calendar|itinerary|plan)\b/i.test(t);
   }
@@ -142,7 +145,11 @@ export function shouldSuppressScheduleApprovals(userMessage: string): boolean {
 /** Text fallback only when the user explicitly asked to book/queue events — never from assistant replies. */
 export function shouldRunScheduleTextFallbacks(userMessage: string): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
-  return wantsBulkScheduleApprovals(userMessage) || isScheduleManagementIntent(userMessage);
+  return (
+    wantsBulkScheduleApprovals(userMessage) ||
+    isScheduleManagementIntent(userMessage) ||
+    isBoredomOrFreeTimeIntent(userMessage)
+  );
 }
 
 const FULL_SCHEDULE_OR_PLAN =
@@ -179,6 +186,7 @@ export function shouldRequireScheduleApproval(
   if (assistantParsed > 1 || toolCalls > 1) return true;
   if (wantsBulkScheduleApprovals(userMessage)) return true;
   if (FULL_SCHEDULE_OR_PLAN.test(userMessage)) return true;
+  if (isBoredomOrFreeTimeIntent(userMessage) && eventCount > 1) return true;
   if (/\b(add|put|send|queue)\b/i.test(userMessage) && /\bapprovals?\b/i.test(userMessage)) {
     return true;
   }
@@ -199,6 +207,7 @@ export function shouldParseStructuredScheduleFromReply(
 ): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
   if (wantsBulkScheduleApprovals(userMessage)) return true;
+  if (isBoredomOrFreeTimeIntent(userMessage)) return true;
   if (scheduleActionCount > 0 && isScheduleManagementIntent(userMessage)) return true;
   if (
     isScheduleManagementIntent(userMessage) &&
