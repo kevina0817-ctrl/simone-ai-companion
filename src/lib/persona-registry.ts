@@ -33,6 +33,8 @@ import {
 import type { PersonaBundle, PersonaWellness } from "@/lib/persona-types";
 
 export const LIFESTYLE_STORAGE_KEY = "simone-persona-lifestyle";
+/** Bump when persona lifestyle sections change so stale localStorage is refreshed. */
+const LIFESTYLE_CONTENT_VERSION = 2;
 const ACTIVE_PERSONA_KEY = "simone-active-persona-id";
 
 function personaBudgetMatches(persona: PersonaBundle): boolean {
@@ -69,6 +71,13 @@ export function resolvePersonaByEmail(email: string | undefined | null): Persona
   if (isKevinZhangEmail(e)) return kevinZhangPersona;
   if (isNicoleHartEmail(e)) return nicoleHartPersona;
   return PERSONAS.find((p) => p.user.email?.toLowerCase() === e) ?? null;
+}
+
+export function resolvePersonaByUser(
+  user: Pick<User, "id" | "email"> | null | undefined,
+): PersonaBundle | null {
+  if (!user) return null;
+  return resolvePersonaByEmail(user.email) ?? PERSONAS.find((p) => p.id === user.id) ?? null;
 }
 
 export function getInsightForEmail(email: string | undefined | null): string | null {
@@ -150,18 +159,59 @@ export function personaToStoredLifestyle(persona: PersonaBundle): StoredPersonaL
   };
 }
 
-export function writePersonaLifestyleStore(persona: PersonaBundle): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(LIFESTYLE_STORAGE_KEY, JSON.stringify(personaToStoredLifestyle(persona)));
+type StoredPersonaLifestyleEnvelope = StoredPersonaLifestyle & { contentVersion?: number };
+
+function storedLifestyleIsStale(stored: StoredPersonaLifestyle | null, persona: PersonaBundle): boolean {
+  if (!stored || stored.personaId !== persona.id) return true;
+  const env = stored as StoredPersonaLifestyleEnvelope;
+  if ((env.contentVersion ?? 0) < LIFESTYLE_CONTENT_VERSION) return true;
+  const live = personaToStoredLifestyle(persona);
+  const liveHasSections =
+    live.recommendations.length > 0 &&
+    live.notifications.length > 0 &&
+    live.weekOverview.length > 0;
+  const storedMissingSections =
+    stored.recommendations.length === 0 ||
+    stored.notifications.length === 0 ||
+    stored.weekOverview.length === 0;
+  return liveHasSections && storedMissingSections;
 }
 
-/** Home lifestyle sections — stored snapshot or live persona bundle. */
-export function getHomePersonaLifestyle(email: string | undefined | null): StoredPersonaLifestyle | null {
-  const persona = resolvePersonaByEmail(email);
+/** Merge live persona bundle with stored wellness (Home always shows full sections from code). */
+export function mergeHomePersonaLifestyle(
+  persona: PersonaBundle,
+  stored: StoredPersonaLifestyle | null,
+): StoredPersonaLifestyle {
+  const live = personaToStoredLifestyle(persona);
+  if (!stored || stored.personaId !== persona.id) return live;
+  return {
+    ...live,
+    wellness: { ...live.wellness, ...stored.wellness },
+  };
+}
+
+export function writePersonaLifestyleStore(persona: PersonaBundle): void {
+  if (typeof window === "undefined") return;
+  const payload: StoredPersonaLifestyleEnvelope = {
+    ...personaToStoredLifestyle(persona),
+    contentVersion: LIFESTYLE_CONTENT_VERSION,
+  };
+  localStorage.setItem(LIFESTYLE_STORAGE_KEY, JSON.stringify(payload));
+}
+
+/** Home lifestyle sections — live persona content merged with stored wellness. */
+export function getHomePersonaLifestyle(
+  email: string | undefined | null,
+  userId?: string | null,
+): StoredPersonaLifestyle | null {
+  const persona = resolvePersonaByEmail(email) ?? (userId ? PERSONAS.find((p) => p.id === userId) : null);
   if (!persona) return null;
   const stored = readStoredPersonaLifestyle();
-  if (stored?.personaId === persona.id) return stored;
-  return personaToStoredLifestyle(persona);
+  const merged = mergeHomePersonaLifestyle(persona, stored);
+  if (typeof window !== "undefined" && storedLifestyleIsStale(stored, persona)) {
+    writePersonaLifestyleStore(persona);
+  }
+  return merged;
 }
 
 export function readStoredPersonaLifestyle(): StoredPersonaLifestyle | null {

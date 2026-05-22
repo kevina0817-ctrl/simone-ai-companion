@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ScheduleEventActions } from "@/components/ScheduleEventActions";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
 import {
@@ -21,11 +21,13 @@ import {
 } from "@/lib/demo-mode";
 import { PersonaLifestyleCard } from "@/components/PersonaLifestyleCard";
 import {
+  applyPersonaForUser,
   getHomePersonaLifestyle,
   getReadinessRingMeta,
   getSleepRingMeta,
   resolveHomeWellness,
-  resolvePersonaByEmail,
+  resolvePersonaByUser,
+  type StoredPersonaLifestyle,
 } from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/")({
@@ -66,12 +68,21 @@ function Home() {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  const [lifestyle, setLifestyle] = useState<StoredPersonaLifestyle | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    applyPersonaForUser(user);
+    setLifestyle(getHomePersonaLifestyle(user.email, user.id));
+  }, [user?.id, user?.email]);
+
   useEffect(() => {
     const refreshTimeline = () => {
       void qc.invalidateQueries({ queryKey: todayQueryKey(user!.id) });
     };
     const refreshWellness = () => {
       void qc.invalidateQueries({ queryKey: ["wellness", user!.id, today] });
+      setLifestyle(getHomePersonaLifestyle(user?.email, user?.id));
     };
     window.addEventListener(DEMO_EVENTS_CHANGED, refreshTimeline);
     window.addEventListener("simone-persona-wellness-changed", refreshWellness);
@@ -149,10 +160,10 @@ function Home() {
   })();
 
   const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
-  const persona = resolvePersonaByEmail(user?.email);
-  const lifestyle = getHomePersonaLifestyle(user?.email);
-  const insight = lifestyle?.insight ?? getDemoInsightForUser(user?.email);
-  const showLifestyle = Boolean(persona && lifestyle);
+  const persona = resolvePersonaByUser(user);
+  const resolvedLifestyle = lifestyle ?? getHomePersonaLifestyle(user?.email, user?.id);
+  const insight = resolvedLifestyle?.insight ?? getDemoInsightForUser(user?.email);
+  const showLifestyle = Boolean(persona && resolvedLifestyle);
   const sleepRing = getSleepRingMeta(wellness);
   const readinessRing = getReadinessRingMeta(wellness);
   const showWellnessRings = Boolean(wellness?.sleep_score != null || wellness?.readiness_score != null);
@@ -224,7 +235,7 @@ function Home() {
           </p>
         </div>
 
-        {showLifestyle && <PersonaLifestyleCard lifestyle={lifestyle!} />}
+        {showLifestyle && <PersonaLifestyleCard lifestyle={resolvedLifestyle!} />}
 
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between gap-2">
