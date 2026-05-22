@@ -2,7 +2,7 @@ import type { BudgetCheck } from "@/lib/budget-store";
 import {
   computeAutoAdjustedMonthlyCapCad,
   evaluateOrderBudget,
-  setMonthlyBudgetCapCad,
+  saveSharedMonthlyBudgetCapCad,
   validateMonthlyBudgetCad,
 } from "@/lib/budget-store";
 import {
@@ -71,7 +71,7 @@ export async function approveShoppingOrderWithMonthlyBudgetCad(
     return { status: "invalid_budget", message: validation.message };
   }
 
-  setMonthlyBudgetCapCad(monthlyCapCad);
+  saveSharedMonthlyBudgetCapCad(monthlyCapCad);
 
   const recheck = evaluateOrderBudget(order);
   if (recheck.exceeds) {

@@ -346,8 +346,11 @@ export function raiseMonthlyBudgetForProjectedSpend(projected: number) {
   notifyBudgetChanged();
 }
 
-/** User-entered monthly cap (CAD) from Approvals budget reset — applies to settings + this month. */
-export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
+/**
+ * Persist monthly cap to shared budget state (`simone:budget`) and notify subscribers.
+ * Used by Approvals so Orders Budget Threshold reads the new cap without a page refresh.
+ */
+export function saveSharedMonthlyBudgetCapCad(monthlyCapCad: number) {
   const rounded = Math.round(monthlyCapCad * 100) / 100;
   const settings = readBudgetSettings();
   if (typeof window !== "undefined") {
@@ -360,7 +363,23 @@ export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
         alertAt: settings.alertAt ?? 90,
       }),
     );
+    const t = readTracking();
+    localStorage.setItem(
+      TRACKING_KEY,
+      JSON.stringify({
+        ...t,
+        monthKey: currentMonthKey(),
+        monthOnlyCap: null,
+      }),
+    );
   }
+  notifyBudgetChanged();
+}
+
+/** User-entered monthly cap (CAD) — settings page and legacy callers. */
+export function setMonthlyBudgetCapCad(monthlyCapCad: number) {
+  saveSharedMonthlyBudgetCapCad(monthlyCapCad);
+  const rounded = Math.round(monthlyCapCad * 100) / 100;
   const spent = getApprovedSpendTotal();
   writeTracking({
     monthKey: currentMonthKey(),
