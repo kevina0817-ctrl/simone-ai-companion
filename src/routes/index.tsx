@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, Calendar, Cloud, Sparkles, Sprout } from "lucide-react";
+import { Bell, Sparkles, Sprout } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { MobileFrame } from "@/components/MobileFrame";
@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { HomeStatusChips } from "@/components/HomeStatusChips";
 import { SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
 import { TodayScheduleTimeline } from "@/components/TodayScheduleTimeline";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
@@ -174,15 +175,7 @@ function Home() {
           </Link>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-card/60 px-3 py-1.5">
-            <Calendar className="h-3 w-3" />
-            {new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-card/60 px-3 py-1.5">
-            <Cloud className="h-3 w-3" /> 18°C Partly cloudy
-          </span>
-        </div>
+        <HomeStatusChips />
 
         {!showWellnessRings && (
           <button
