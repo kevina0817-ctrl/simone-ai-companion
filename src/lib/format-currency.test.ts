@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { applyChatCurrencyToReply, formatChatOrderPriceSummary } from "@/lib/chat-order-currency";
-import { formatCurrency, normalizeCurrencyInText, stripChatPriceBlocks } from "@/lib/format-currency";
+import {
+  containsUsdCurrencyMarkers,
+  formatCurrency,
+  normalizeCurrencyInText,
+  sanitizeCadShoppingText,
+  stripChatPriceBlocks,
+} from "@/lib/format-currency";
 import type { PendingOrder } from "@/lib/pending-order";
 
 function sampleOrder(overrides: Partial<PendingOrder>): PendingOrder {
@@ -68,7 +74,50 @@ describe("applyChatCurrencyToReply", () => {
       title: "AirPods",
       totalEstimatedPrice: 349.99,
     });
-    expect(formatChatOrderPriceSummary(order)).toBe("Price estimate: CA$349.99");
+    expect(formatChatOrderPriceSummary(order)).toBe("Amazon order total: CA$349.99");
+  });
+
+  it("sanitizes grocery proposal with US$ labels", () => {
+    const messy =
+      "Weekly groceries:\n\n" +
+      "1. Eggs — US$6.99 (USD)\n" +
+      "Estimated Price: US$12.00\n" +
+      "Converted to CA$15.00 at today's exchange rate.\n\n" +
+      "Shall I create the order?";
+    const out = applyChatCurrencyToReply(messy, [], {
+      userMessage: "What groceries should I get?",
+    });
+    expect(containsUsdCurrencyMarkers(out)).toBe(false);
+    expect(out).toContain("CA$");
+    expect(out).not.toMatch(/Converted to/i);
+  });
+
+  it("sanitizes Amazon order reply", () => {
+    const order = sampleOrder({
+      category: "amazon",
+      store: "Amazon",
+      title: "AirPods Pro",
+      items: [{ name: "AirPods Pro", qty: 1, estimatedPrice: 349.99 }],
+      totalEstimatedPrice: 349.99,
+    });
+    const out = applyChatCurrencyToReply(
+      "Price estimate: approximately US$349.99 (USD).\n\nShall I add this to Approvals?",
+      [order],
+      { userMessage: "Order AirPods from Amazon" },
+    );
+    expect(containsUsdCurrencyMarkers(out)).toBe(false);
+    expect(out).toContain("Amazon order total: CA$349.99");
+    expect(out).toContain("(CA$349.99)");
+  });
+});
+
+describe("sanitizeCadShoppingText", () => {
+  it("rewrites US$ and strips conversion copy", () => {
+    const out = sanitizeCadShoppingText(
+      "Estimated Price: US$12.00 (USD). Converted to CA$16.00.",
+    );
+    expect(containsUsdCurrencyMarkers(out)).toBe(false);
+    expect(out).toContain("CA$12.00");
   });
 });
 

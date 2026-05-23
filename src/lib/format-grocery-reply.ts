@@ -1,15 +1,23 @@
-import { inferOrderCategory } from "@/lib/order-category";
+import { inferOrderCategory, isCadDefaultOrderCategory } from "@/lib/order-category";
 import { formatCurrency } from "@/lib/format-currency";
 import type { OrderLineItem, PendingOrder } from "@/lib/pending-order";
 
-/** One grocery line from numeric unit price — format at display time only. */
-export function formatGroceryItemLine(index: number, item: OrderLineItem): string {
+/** One shopping line from numeric unit price — format at display time only. */
+export function formatShoppingItemLine(index: number, item: OrderLineItem): string {
   const qtyLabel = item.qty > 1 ? ` — ${item.qty}×` : "";
   return `${index}. ${item.name}${qtyLabel} (${formatCurrency(item.estimatedPrice)})`;
 }
 
+export function formatGroceryItemLine(index: number, item: OrderLineItem): string {
+  return formatShoppingItemLine(index, item);
+}
+
 export function formatGroceryListBlock(items: OrderLineItem[]): string {
-  return items.map((item, i) => formatGroceryItemLine(i + 1, item)).join("\n");
+  return formatShoppingListBlock(items);
+}
+
+export function formatShoppingListBlock(items: OrderLineItem[]): string {
+  return items.map((item, i) => formatShoppingItemLine(i + 1, item)).join("\n");
 }
 
 function isGroceryListLine(line: string): boolean {
@@ -52,6 +60,12 @@ export function extractTrailingPrompt(text: string): string {
   return last && !isGroceryListLine(last) ? last : "";
 }
 
+export function cadDefaultOrdersFromPending(orders: PendingOrder[]): PendingOrder[] {
+  return orders.filter((o) =>
+    isCadDefaultOrderCategory(o.category ?? inferOrderCategory(o.store, o.title)),
+  );
+}
+
 export function groceryOrdersFromPending(orders: PendingOrder[]): PendingOrder[] {
   return orders.filter((o) => (o.category ?? inferOrderCategory(o.store, o.title)) === "grocery");
 }
@@ -60,13 +74,21 @@ export function collectGroceryLineItems(orders: PendingOrder[]): OrderLineItem[]
   return groceryOrdersFromPending(orders).flatMap((o) => o.items);
 }
 
+export function collectCadShoppingLineItems(orders: PendingOrder[]): OrderLineItem[] {
+  return cadDefaultOrdersFromPending(orders).flatMap((o) => o.items);
+}
+
 /** Replace LLM list copy with a list built from structured numeric prices. */
 export function rebuildReplyWithGroceryItems(reply: string, items: OrderLineItem[]): string {
+  return rebuildReplyWithCadShoppingItems(reply, items);
+}
+
+export function rebuildReplyWithCadShoppingItems(reply: string, items: OrderLineItem[]): string {
   if (items.length === 0) return reply.trim();
 
   const intro = extractLeadingIntro(reply);
   const prompt = extractTrailingPrompt(reply);
-  const listBlock = formatGroceryListBlock(items);
+  const listBlock = formatShoppingListBlock(items);
 
   return [intro, listBlock, prompt].filter(Boolean).join("\n\n").trim();
 }

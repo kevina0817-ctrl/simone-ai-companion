@@ -79,7 +79,8 @@ For create_pending_order: title and item names must be real product names only (
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
 (name, qty, estimated_price as numbers in CAD — e.g. 12.99, not "CA$12.99"). The app formats prices for display; do not put currency symbols in tool arguments.
 GROCERY LIST (first response): list item names and quantities in chat; put each unit price only in create_pending_order line items as estimated_price numbers. Do NOT write CA$, US$, or dollar amounts in the chat body for groceries — the app renders prices. No grand total on the first pass — ask if they want a pending grocery order. Only the full order total appears after they agree to create the order.
-For non-grocery shopping: you may mention a single price estimate in prose when not using line items; never US$, USD, or conversion text.
+AMAZON ORDERS: always CAD. Use numeric estimated_price in tools; the app shows CA$ only. Never US$, USD, US dollars, or conversion text in chat.
+For luxury/other retailers outside grocery and Amazon: you may mention one price estimate in prose when not using line items — still use CA$ only, never US$ or conversion text.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 

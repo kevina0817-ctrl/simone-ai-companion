@@ -175,6 +175,24 @@ export function isShoppingOrOrderChatIntent(userMessage: string): boolean {
   return false;
 }
 
+/** Amazon product / order chat — prices must display as CAD only. */
+export function isAmazonShoppingIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || !/\bamazon\b/i.test(t)) return false;
+  if (isScheduleManagementIntent(t)) return false;
+  return (
+    isPurchaseOrderIntent(t) ||
+    isProductRecommendationRequest(t) ||
+    PRICE_HINT.test(t) ||
+    /\b(?:order|buy|purchase|cart|checkout|prime)\b/i.test(t)
+  );
+}
+
+/** Grocery or Amazon shopping — enforce CAD in all user-facing copy. */
+export function isGroceryOrAmazonShoppingIntent(userMessage: string): boolean {
+  return isGroceryListIntent(userMessage) || isAmazonShoppingIntent(userMessage);
+}
+
 /** User is asking for a grocery list / proposal — not yet confirming order creation. */
 export function isGroceryListIntent(userMessage: string): boolean {
   const t = userMessage.trim();

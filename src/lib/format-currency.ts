@@ -95,6 +95,52 @@ export function normalizeCurrencyInText(text: string): string {
   return out;
 }
 
+/** Currency markers that must not appear in grocery / Amazon user-facing copy. */
+export function containsUsdCurrencyMarkers(text: string): boolean {
+  return (
+    /\bUS\$/i.test(text) ||
+    /\bUSD\b/i.test(text) ||
+    /\bUS\s+dollars?\b/i.test(text) ||
+    /\(\s*USD\s*\)/i.test(text) ||
+    /\bconverted\s+(?:to|from)\b/i.test(text) ||
+    /\bexchange\s+rate\b/i.test(text)
+  );
+}
+
+/**
+ * Final sanitizer for grocery and Amazon chat — strips US labels and conversion copy.
+ * Always run before returning assistant text for CAD-default order flows.
+ */
+export function sanitizeCadShoppingText(text: string): string {
+  let out = normalizeCurrencyInText(text);
+
+  const labelFixes: [RegExp, string][] = [
+    [/\bEstimated\s+Price:\s*US\$/gi, "Estimated Price: CA$"],
+    [/\bEstimated\s+Price:\s*(?!CA)\$/gi, "Estimated Price: CA$"],
+    [/\bPrice\s+estimate:\s*approximately\s*US\$/gi, "Price estimate: approximately CA$"],
+    [/\bPrice\s+estimate:\s*US\$/gi, "Price estimate: CA$"],
+    [/\bAmazon\s+order\s+total:\s*US\$/gi, "Amazon order total: CA$"],
+  ];
+  for (const [pattern, replacement] of labelFixes) {
+    out = out.replace(pattern, replacement);
+  }
+
+  out = out.replace(/(?<![A-Z])\$\s*([\d,]+(?:\.\d{2})?)/g, (_, n) =>
+    formatCurrency(Number.parseFloat(String(n).replace(/,/g, ""))),
+  );
+  out = out.replace(/\s*\(\s*USD\s*\)/gi, "");
+  out = out.replace(/\s*\(\s*in\s+USD\s*\)/gi, "");
+  out = out.replace(/\bconverted\s+to\s+CA\$[\d,.]+/gi, "");
+  out = out.replace(/\bconverted\s+from\s+US\$[\d,.]+/gi, "");
+  out = out.replace(/\b(?:at|using)\s+(?:the\s+)?(?:current\s+)?exchange\s+rate[^.\n]*/gi, "");
+  out = out.replace(/\bUnited\s+States\s+dollars?\b/gi, "Canadian dollars");
+  out = out.replace(/\bUS dollars?\b/gi, "Canadian dollars");
+  out = out.replace(/\bUSD\b/gi, "CAD");
+  out = out.replace(/\bUS\$/gi, "CA$");
+
+  return repairCorruptedCurrency(out).trim();
+}
+
 export function collectAmountsFromOrder(order: {
   totalEstimatedPrice: number;
   items: { estimatedPrice: number; qty: number }[];

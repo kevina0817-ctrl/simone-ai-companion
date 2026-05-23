@@ -1,15 +1,20 @@
-import { inferOrderCategory } from "@/lib/order-category";
+import { inferOrderCategory, isCadDefaultOrderCategory } from "@/lib/order-category";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
-import { isGroceryOrderConfirmTurn, isInitialGroceryProposalTurn } from "@/lib/chat-intent";
 import {
-  collectGroceryLineItems,
+  isGroceryOrderConfirmTurn,
+  isGroceryOrAmazonShoppingIntent,
+  isInitialGroceryProposalTurn,
+} from "@/lib/chat-intent";
+import {
+  collectCadShoppingLineItems,
   groceryOrdersFromPending,
-  rebuildReplyWithGroceryItems,
+  rebuildReplyWithCadShoppingItems,
 } from "@/lib/format-grocery-reply";
 import {
   formatCurrency,
   normalizeCurrencyInText,
   repairCorruptedCurrency,
+  sanitizeCadShoppingText,
   stripChatPriceBlocks,
   stripGroceryTotalFromReply,
 } from "@/lib/format-currency";
@@ -22,6 +27,9 @@ export function formatChatOrderPriceSummary(order: PendingOrder): string {
 
   if (category === "grocery") {
     return `Estimated grocery total: ${total}`;
+  }
+  if (category === "amazon") {
+    return `Amazon order total: ${total}`;
   }
   return `Price estimate: ${total}`;
 }
@@ -47,6 +55,17 @@ export function collectUsdOrdersFromChatResult(
     }
   }
   return orders;
+}
+
+function ordersIncludeCadDefault(orders: PendingOrder[]): boolean {
+  return orders.some((o) =>
+    isCadDefaultOrderCategory(o.category ?? inferOrderCategory(o.store, o.title)),
+  );
+}
+
+function shouldApplyCadShoppingSanitizer(userMessage: string, orders: PendingOrder[]): boolean {
+  if (ordersIncludeCadDefault(orders)) return true;
+  return isGroceryOrAmazonShoppingIntent(userMessage);
 }
 
 function summaryAlreadyPresent(text: string, summary: string): boolean {
@@ -84,9 +103,21 @@ function appendOrderSummaries(
   return `${text}\n\n${summaries.join("\n")}`.trim();
 }
 
+function finalizeCadShoppingReply(
+  text: string,
+  orders: PendingOrder[],
+  userMessage: string,
+): string {
+  let out = appendOrderSummaries(text, orders, userMessage);
+  if (shouldApplyCadShoppingSanitizer(userMessage, orders)) {
+    out = sanitizeCadShoppingText(out);
+  }
+  return out;
+}
+
 /**
  * Format chat reply prices from structured order numbers — never re-format CA$ strings in prose.
- * Grocery line items are rendered once via formatCurrency(estimatedPrice).
+ * Grocery and Amazon line items render once via formatCurrency(estimatedPrice).
  */
 export function applyChatCurrencyToReply(
   reply: string,
@@ -95,28 +126,29 @@ export function applyChatCurrencyToReply(
 ): string {
   const userMessage = opts?.userMessage ?? "";
   const initialGroceryProposal = isInitialGroceryProposalTurn(userMessage);
+  const cadShopping = shouldApplyCadShoppingSanitizer(userMessage, orders);
 
   let text = repairCorruptedCurrency(stripChatPriceBlocks(reply.trim()));
 
-  const groceryItems = collectGroceryLineItems(orders);
+  const cadItems = collectCadShoppingLineItems(orders);
 
-  if (groceryItems.length > 0) {
-    text = rebuildReplyWithGroceryItems(text, groceryItems);
+  if (cadItems.length > 0) {
+    text = rebuildReplyWithCadShoppingItems(text, cadItems);
     if (initialGroceryProposal) {
       text = stripGroceryTotalFromReply(text);
     }
-    return appendOrderSummaries(text, orders, userMessage);
+    return finalizeCadShoppingReply(text, orders, userMessage);
   }
 
   if (initialGroceryProposal) {
     text = stripGroceryTotalFromReply(text);
-    return repairCorruptedCurrency(text);
+    return cadShopping ? sanitizeCadShoppingText(text) : repairCorruptedCurrency(text);
   }
 
   if (orders.length > 0) {
-    text = normalizeCurrencyInText(text);
-    return appendOrderSummaries(text, orders, userMessage);
+    text = cadShopping ? sanitizeCadShoppingText(text) : normalizeCurrencyInText(text);
+    return finalizeCadShoppingReply(text, orders, userMessage);
   }
 
-  return normalizeCurrencyInText(text);
+  return cadShopping ? sanitizeCadShoppingText(text) : text;
 }
