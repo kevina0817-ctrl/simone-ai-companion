@@ -1,7 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { backendAvailable, getDemoEvents, addScheduleItem, removeScheduleItem } from "@/lib/demo-mode";
-import { addPendingScheduleApprovals } from "@/lib/approvals-store";
+import {
+  addPendingRoutineProposal,
+  addPendingScheduleApprovals,
+  removePendingRoutineProposalApprovals,
+} from "@/lib/approvals-store";
 import { getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   prepareScheduleForToday,
@@ -20,8 +24,23 @@ import {
 import type { FoodBedtimeEnforcementResult } from "@/lib/boredom-schedule";
 import type { ProposedRoutine } from "@/lib/proposed-routine";
 import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
-import { shouldSuppressScheduleApprovals } from "@/lib/chat-intent";
+import {
+  isAffirmativeRoutineConfirmText,
+  isTiredEveningRoutineProposalRequest,
+  shouldSuppressScheduleApprovals,
+} from "@/lib/chat-intent";
 import type { ChatScheduleAction } from "@/lib/chat-actions";
+import type { RoutineProposal } from "@/lib/routine-proposal";
+import {
+  buildTiredEveningProposalReply,
+  buildTiredEveningRoutineProposal,
+  buildPhase2RoutineFromProposal,
+} from "@/lib/routine-proposal-flow";
+import {
+  clearPendingRoutineProposal,
+  getPendingRoutineProposal,
+  setPendingRoutineProposal,
+} from "@/lib/routine-proposal-store";
 
 export type { ChatScheduleAction } from "@/lib/chat-actions";
 
@@ -32,8 +51,11 @@ type ApplyInput = {
   userId: string;
   /** Client clock — used for evening/boredom planning in America/Toronto. */
   nowIso?: string;
+  /** Server phase-1 tired routine (no times). */
+  routineProposal?: RoutineProposal;
+  /** Server already ran phase-2 scheduling. */
+  routineScheduleConfirmed?: boolean;
 };
-
 
 function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_event" }>): CancelMatchCriteria {
   return {
@@ -166,6 +188,10 @@ export type ApplyChatScheduleResult = {
   foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">;
   /** Canonical bedtime routine — same times in chat and Approvals. */
   proposedRoutine?: ProposedRoutine;
+  /** Phase-1 tired routine stored for "sure" / Approvals confirm. */
+  routineProposal?: RoutineProposal;
+  /** Use this reply instead of raw assistant text (proposal has no times). */
+  displayReplyOverride?: string;
 };
 
 /**
@@ -173,7 +199,15 @@ export type ApplyChatScheduleResult = {
  */
 export async function applyChatScheduleResult(
   qc: QueryClient,
-  { actions = [], userMessage, assistantReply, userId, nowIso }: ApplyInput,
+  {
+    actions = [],
+    userMessage,
+    assistantReply,
+    userId,
+    nowIso,
+    routineProposal: serverProposal,
+    routineScheduleConfirmed,
+  }: ApplyInput,
 ): Promise<ApplyChatScheduleResult> {
   const cancelled: ScheduleItem[] = [];
   const committed: ScheduleItem[] = [];
@@ -181,15 +215,123 @@ export async function applyChatScheduleResult(
   let removedFood: ScheduleItem[] = [];
   let foodBedtime: ApplyChatScheduleResult["foodBedtime"];
   let proposedRoutine: ProposedRoutine | undefined;
+  let routineProposal: RoutineProposal | undefined;
+  let displayReplyOverride: string | undefined;
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
-  if (!shouldSuppressScheduleApprovals(userMessage)) {
+  const pendingStored = getPendingRoutineProposal(userId);
+  const isPhase1Tired =
+    Boolean(serverProposal) || isTiredEveningRoutineProposalRequest(userMessage);
+  const isPhase2Confirm =
+    routineScheduleConfirmed ||
+    (isAffirmativeRoutineConfirmText(userMessage) && Boolean(pendingStored));
+
+  if (isPhase1Tired && !isPhase2Confirm) {
+    routineProposal = serverProposal ?? buildTiredEveningRoutineProposal();
+    setPendingRoutineProposal(userId, routineProposal);
+    addPendingRoutineProposal(routineProposal);
+    displayReplyOverride = buildTiredEveningProposalReply(routineProposal);
+    return {
+      committed,
+      pendingApproval,
+      cancelled,
+      removedFood,
+      foodBedtime,
+      proposedRoutine,
+      routineProposal,
+      displayReplyOverride,
+    };
+  }
+
+  if (isPhase2Confirm && pendingStored) {
+    clearPendingRoutineProposal(userId);
+    removePendingRoutineProposalApprovals();
+
+    const { resolved } = buildPhase2RoutineFromProposal(pendingStored, {
+      userMessage,
+      nowIso,
+      todayEvents,
+    });
+
+    const { events } = resolved;
+    proposedRoutine = resolved.proposedRoutine;
+    removedFood = resolved.removedFood;
+    foodBedtime = resolved.foodBedtime;
+
+    if (events.length > 0 && resolved.useApprovals) {
+      addPendingScheduleApprovals(events);
+      pendingApproval.push(...events);
+    } else if (events.length > 0) {
+      for (const item of events) {
+        const saved = await commitScheduleToTimeline(qc, item, userId);
+        committed.push(saved);
+      }
+    }
+
+    return {
+      committed,
+      pendingApproval,
+      cancelled,
+      removedFood,
+      foodBedtime,
+      proposedRoutine,
+      routineProposal: undefined,
+    };
+  }
+
+  if (routineScheduleConfirmed && actions.some((a) => a.kind === "schedule_event")) {
+    removePendingRoutineProposalApprovals();
+    clearPendingRoutineProposal(userId);
+
     const resolved = resolveChatScheduleEvents({
       actions,
       userMessage,
       assistantReply,
       nowIso,
       todayEvents,
+      skipAssistantReplyParse: true,
+      skipUserMessageFallbacks: true,
+      forceRoutinePipeline: true,
+    });
+
+    const { events } = resolved;
+    proposedRoutine = resolved.proposedRoutine;
+    removedFood = resolved.removedFood;
+    foodBedtime = resolved.foodBedtime;
+
+    if (events.length > 0 && resolved.useApprovals) {
+      addPendingScheduleApprovals(events);
+      pendingApproval.push(...events);
+    } else if (events.length > 0) {
+      for (const item of events) {
+        const saved = await commitScheduleToTimeline(qc, item, userId);
+        committed.push(saved);
+      }
+    }
+
+    return {
+      committed,
+      pendingApproval,
+      cancelled,
+      removedFood,
+      foodBedtime,
+      proposedRoutine,
+      routineProposal: undefined,
+    };
+  }
+
+  if (!shouldSuppressScheduleApprovals(userMessage)) {
+    const skipTextParse = isPhase2Confirm || routineScheduleConfirmed;
+
+    const resolved = resolveChatScheduleEvents({
+      actions,
+      userMessage,
+      assistantReply,
+      nowIso,
+      todayEvents,
+      skipAssistantReplyParse: skipTextParse,
+      skipUserMessageFallbacks: skipTextParse,
+      forceRoutinePipeline: skipTextParse,
     });
 
     let { events } = resolved;
@@ -245,5 +387,5 @@ export async function applyChatScheduleResult(
     await qc.invalidateQueries({ queryKey: todayQueryKey(userId) });
   }
 
-  return { committed, pendingApproval, cancelled, removedFood, foodBedtime, proposedRoutine };
+  return { committed, pendingApproval, cancelled, removedFood, foodBedtime, proposedRoutine, routineProposal };
 }

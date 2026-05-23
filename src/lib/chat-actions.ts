@@ -1,4 +1,5 @@
 import type { PendingOrder } from "@/lib/pending-order";
+import type { RoutineProposal } from "@/lib/routine-proposal";
 
 export type ScheduleEventAction = {
   kind: "schedule_event";
@@ -37,6 +38,10 @@ export type ChatResponse = {
   reply: string;
   actions: ChatAction[];
   pendingOrders: PendingOrder[];
+  /** Phase 1 tired routine — activity names only, no clock times. */
+  routineProposal?: RoutineProposal;
+  /** Phase 2 — deterministic times were generated server-side. */
+  routineScheduleConfirmed?: boolean;
 };
 
 export function isScheduleAction(action: ChatAction): action is ChatScheduleAction {

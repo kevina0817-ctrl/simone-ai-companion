@@ -1,4 +1,5 @@
 import { isBoredomOrFreeTimeIntent, isEveningPlanIntent } from "@/lib/boredom-schedule";
+import { getPendingRoutineProposal } from "@/lib/routine-proposal-store";
 import { wantsBulkScheduleApprovals } from "@/lib/schedule-item";
 import type { PendingOrder } from "@/lib/pending-order";
 
@@ -145,6 +146,7 @@ export function shouldSuppressScheduleApprovals(userMessage: string): boolean {
 /** Text fallback only when the user explicitly asked to book/queue events — never from assistant replies. */
 export function shouldRunScheduleTextFallbacks(userMessage: string): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
+  if (isTiredEveningRoutineProposalRequest(userMessage)) return false;
   return (
     wantsBulkScheduleApprovals(userMessage) ||
     isScheduleManagementIntent(userMessage) ||
@@ -206,6 +208,8 @@ export function shouldParseStructuredScheduleFromReply(
   scheduleActionCount: number,
 ): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
+  if (isTiredEveningRoutineProposalRequest(userMessage)) return false;
+  if (isAffirmativeRoutineConfirmText(userMessage)) return false;
   if (scheduleActionCount > 0 && isEveningPlanIntent(userMessage)) return false;
   if (wantsBulkScheduleApprovals(userMessage)) return true;
   if (isEveningPlanIntent(userMessage)) return true;
@@ -219,6 +223,41 @@ export function shouldParseStructuredScheduleFromReply(
     return true;
   }
   return false;
+}
+
+const TIRED_OR_EXHAUSTED = /\b(?:i\s*(?:'m|am)\s+)?(?:tired|exhausted|wiped|drained)\b/i;
+
+const AFFIRMATIVE_SHORT =
+  /^(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|do\s+it|schedule\s+(?:it|them|this)|sounds\s+good|that\s+works|let'?s\s+do\s+it)[!.?\s]*$/i;
+
+const AFFIRMATIVE_SCHEDULE =
+  /\b(?:yes|yeah|yep|sure|ok(?:ay)?|please|go\s+ahead|do\s+it|schedule\s+(?:it|them|this)|sounds\s+good|that\s+works|let'?s\s+do\s+it)\b/i;
+
+/**
+ * User is tired/exhausted — phase 1 is a flexible proposal without clock times.
+ * Excludes immediate "schedule now" bulk requests that already carry explicit intent.
+ */
+export function isTiredEveningRoutineProposalRequest(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || !TIRED_OR_EXHAUSTED.test(t)) return false;
+  if (wantsBulkScheduleApprovals(t)) return false;
+  if (/\b(?:add|put|send)\b/i.test(t) && /\bapprovals?\b/i.test(t)) return false;
+  return true;
+}
+
+export function isAffirmativeRoutineConfirmText(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t) return false;
+  return AFFIRMATIVE_SHORT.test(t) || AFFIRMATIVE_SCHEDULE.test(t);
+}
+
+/** User confirmed a pending tired-evening routine (e.g. "sure") — client store. */
+export function isRoutineProposalConfirmMessage(
+  userMessage: string,
+  userId?: string,
+): boolean {
+  if (!isAffirmativeRoutineConfirmText(userMessage) || !userId) return false;
+  return Boolean(getPendingRoutineProposal(userId));
 }
 
 /** Line looks like order/product copy, not a calendar event. */

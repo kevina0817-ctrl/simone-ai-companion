@@ -16,6 +16,8 @@ import {
 import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
+  isAffirmativeRoutineConfirmText,
+  isTiredEveningRoutineProposalRequest,
   pickSingleOrderForApproval,
   shouldCreateOrderApproval,
   shouldRequireScheduleApproval,
@@ -23,6 +25,16 @@ import {
 import { buildDeterministicRoutineReply } from "@/lib/proposed-routine";
 import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
 import type { ScheduleItem } from "@/lib/schedule-item";
+import {
+  buildPhase2RoutineFromProposal,
+  buildTiredEveningProposalReply,
+  buildTiredEveningRoutineProposal,
+} from "@/lib/routine-proposal-flow";
+import {
+  clearServerPendingRoutineProposal,
+  getServerPendingRoutineProposal,
+  setServerPendingRoutineProposal,
+} from "@/lib/routine-proposal-store";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -161,6 +173,24 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     });
 
     const nowIso = data.nowIso ?? new Date().toISOString();
+
+    if (isTiredEveningRoutineProposalRequest(data.message)) {
+      const proposal = buildTiredEveningRoutineProposal();
+      setServerPendingRoutineProposal(userId, proposal);
+      const reply = buildTiredEveningProposalReply(proposal);
+      await supabase.from("chat_messages").insert({
+        user_id: userId,
+        role: "assistant",
+        content: reply,
+      });
+      return {
+        reply,
+        actions: [],
+        pendingOrders: [],
+        routineProposal: proposal,
+      } satisfies ChatResponse;
+    }
+
     const eveningPlan = isRestOfNightBedtimePlanIntent(data.message);
     const priorityContext = buildSchedulePriorityContext(data.message);
     const tz = eveningPlan ? EVENING_PLAN_TIMEZONE : (data.timezone ?? "UTC");
@@ -204,6 +234,34 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .order("created_at", { ascending: false })
         .limit(12),
     ]);
+
+    const serverPendingRoutine = getServerPendingRoutineProposal(userId);
+    if (serverPendingRoutine && isAffirmativeRoutineConfirmText(data.message)) {
+      clearServerPendingRoutineProposal(userId);
+      const todayForRoutine: ScheduleItem[] = events.map((row) => ({
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        start_time: row.start_time,
+        level: (row.level ?? "Low") as ScheduleItem["level"],
+      }));
+      const phase2 = buildPhase2RoutineFromProposal(serverPendingRoutine, {
+        userMessage: data.message,
+        nowIso,
+        todayEvents: todayForRoutine,
+      });
+      await supabase.from("chat_messages").insert({
+        user_id: userId,
+        role: "assistant",
+        content: phase2.reply,
+      });
+      return {
+        reply: phase2.reply,
+        actions: phase2.actions,
+        pendingOrders: [],
+        routineScheduleConfirmed: true,
+      } satisfies ChatResponse;
+    }
 
     const wellnessLine = wellness
       ? `Sleep ${wellness.sleep_score ?? "?"}/100 (${wellness.sleep_duration_min ?? "?"} min), readiness ${wellness.readiness_score ?? "?"}/100.`
@@ -260,6 +318,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       }));
 
     const tryDeterministicBedtimeReply = (llmDraft?: string | null): boolean => {
+      if (isTiredEveningRoutineProposalRequest(data.message)) return false;
       if (!isRestOfNightBedtimePlanIntent(data.message)) return false;
       const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
       if (scheduleActions.length === 0) return false;
@@ -294,6 +353,19 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           try {
             const args = JSON.parse(tc.function.arguments || "{}");
             if (tc.function.name === "schedule_event") {
+              if (isTiredEveningRoutineProposalRequest(data.message)) {
+                result = {
+                  ok: false,
+                  error:
+                    "Tired routine: describe activities in chat only — do not call schedule_event until the user confirms.",
+                };
+                messages.push({
+                  role: "tool",
+                  tool_call_id: tc.id,
+                  content: JSON.stringify(result),
+                });
+                continue;
+              }
               const item = normalizeScheduleFromToolArgs(args, undefined, priorityContext ?? undefined);
               if (!item) throw new Error("Invalid schedule fields");
               const [leveled] = applySchedulePriorityToItems([item], priorityContext ?? undefined);
@@ -390,7 +462,11 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     if (!reply) reply = "Done.";
 
-    if (isRestOfNightBedtimePlanIntent(data.message) && actions.some((a) => a.kind === "schedule_event")) {
+    if (
+      !isTiredEveningRoutineProposalRequest(data.message) &&
+      isRestOfNightBedtimePlanIntent(data.message) &&
+      actions.some((a) => a.kind === "schedule_event")
+    ) {
       tryDeterministicBedtimeReply(reply);
     }
 

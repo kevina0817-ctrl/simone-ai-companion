@@ -70,6 +70,12 @@ export type ResolveChatScheduleInput = {
   assistantReply?: string;
   nowIso?: string;
   todayEvents?: ScheduleItem[];
+  /** Do not parse times from assistant prose (tired routine confirm phase). */
+  skipAssistantReplyParse?: boolean;
+  /** Do not parse times from user message text. */
+  skipUserMessageFallbacks?: boolean;
+  /** Always run bedtime coercion + ProposedRoutine pipeline. */
+  forceRoutinePipeline?: boolean;
 };
 
 export type ResolveChatScheduleResult = {
@@ -85,7 +91,16 @@ export type ResolveChatScheduleResult = {
  * Single source of truth before chat copy and Approvals.
  */
 export function resolveChatScheduleEvents(input: ResolveChatScheduleInput): ResolveChatScheduleResult {
-  const { actions, userMessage, assistantReply, nowIso, todayEvents = [] } = input;
+  const {
+    actions,
+    userMessage,
+    assistantReply,
+    nowIso,
+    todayEvents = [],
+    skipAssistantReplyParse = false,
+    skipUserMessageFallbacks = false,
+    forceRoutinePipeline = false,
+  } = input;
   const empty: ResolveChatScheduleResult = {
     events: [],
     removedFood: [],
@@ -104,7 +119,7 @@ export function resolveChatScheduleEvents(input: ResolveChatScheduleInput): Reso
     byTitle,
   );
 
-  if (shouldRunScheduleTextFallbacks(userMessage)) {
+  if (!skipUserMessageFallbacks && shouldRunScheduleTextFallbacks(userMessage)) {
     if (wantsBulkScheduleApprovals(userMessage)) {
       collectScheduleApprovals(parseStructuredSchedulesFromText(userMessage), byTitle);
     } else if (byTitle.size === 0) {
@@ -114,6 +129,7 @@ export function resolveChatScheduleEvents(input: ResolveChatScheduleInput): Reso
   }
 
   if (
+    !skipAssistantReplyParse &&
     assistantReply?.trim() &&
     shouldParseStructuredScheduleFromReply(userMessage, scheduleActions.length)
   ) {
@@ -153,7 +169,8 @@ export function resolveChatScheduleEvents(input: ResolveChatScheduleInput): Reso
   });
 
   const useRoutinePipeline =
-    events.length > 0 && (isRestOfNightBedtimePlanIntent(userMessage) || eveningPlan);
+    events.length > 0 &&
+    (forceRoutinePipeline || isRestOfNightBedtimePlanIntent(userMessage) || eveningPlan);
 
   let proposedRoutine: ProposedRoutine | undefined;
   if (useRoutinePipeline) {
@@ -165,4 +182,48 @@ export function resolveChatScheduleEvents(input: ResolveChatScheduleInput): Reso
   }
 
   return { events, proposedRoutine, removedFood, foodBedtime, useApprovals };
+}
+
+/** Build schedule_event actions from activity names only — times come from coercion. */
+export function buildScheduleActionsFromActivityNames(
+  activities: string[],
+): Extract<ChatScheduleAction, { kind: "schedule_event" }>[] {
+  const startMs = Date.now();
+  return activities.map((title, index) => {
+    const start = new Date(startMs + index * 60_000).toISOString();
+    const end = new Date(startMs + (index + 1) * 60_000).toISOString();
+    return {
+      kind: "schedule_event",
+      title,
+      subtitle: "Wind-down",
+      start_time: start,
+      end_time: end,
+      level: "Low" as const,
+    };
+  });
+}
+
+/** Phase 2: deterministic times from a stored routine proposal (no LLM time parsing). */
+export function resolveChatScheduleFromRoutineProposal(
+  activities: string[],
+  opts: {
+    userMessage?: string;
+    nowIso?: string;
+    todayEvents?: ScheduleItem[];
+  },
+): ResolveChatScheduleResult {
+  const confirmMessage =
+    opts.userMessage?.trim() && !/^(?:yes|yeah|yep|sure|ok(?:ay)?)[!.?\s]*$/i.test(opts.userMessage.trim())
+      ? opts.userMessage.trim()
+      : "I'm exhausted — schedule a light wind-down for the 3 hours before bedtime tonight.";
+
+  return resolveChatScheduleEvents({
+    actions: buildScheduleActionsFromActivityNames(activities),
+    userMessage: confirmMessage,
+    nowIso: opts.nowIso,
+    todayEvents: opts.todayEvents,
+    skipAssistantReplyParse: true,
+    skipUserMessageFallbacks: true,
+    forceRoutinePipeline: true,
+  });
 }

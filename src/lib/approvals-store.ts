@@ -8,6 +8,12 @@ import {
   normalizeScheduleEventTitle,
   type ScheduleItem,
 } from "@/lib/schedule-item";
+import {
+  buildRoutineProposalApprovalDetail,
+  type RoutineProposal,
+} from "@/lib/routine-proposal";
+import { buildPhase2RoutineFromProposal } from "@/lib/routine-proposal-flow";
+import { clearPendingRoutineProposal } from "@/lib/routine-proposal-store";
 import { toast } from "sonner";
 import { recordApprovedOrderSpend } from "@/lib/budget-store";
 import {
@@ -17,7 +23,7 @@ import {
   setPendingOrderStatus,
 } from "@/lib/pending-orders-store";
 
-export type PendingItemKind = "calendar" | "grocery" | "order";
+export type PendingItemKind = "calendar" | "grocery" | "order" | "routine_proposal";
 
 export type PendingItem = {
   id: string;
@@ -28,6 +34,8 @@ export type PendingItem = {
   orderId?: string;
   /** Schedule event payload — Approvals → Homepage after approve (never Orders) */
   scheduleEvent?: ScheduleItem;
+  /** Tired evening routine — activity names only until approved */
+  routineProposal?: RoutineProposal;
   /** Purchase would exceed monthly budget */
   exceedsBudget?: boolean;
   budgetOverBy?: number;
@@ -123,6 +131,32 @@ export async function decide(
 
   const activeCtx = ctx ?? decideContext;
 
+  if (status === "approved" && entry.item.kind === "routine_proposal" && entry.item.routineProposal) {
+    if (!activeCtx) {
+      toast.error("Could not schedule routine — try again");
+      return;
+    }
+    const proposal = entry.item.routineProposal;
+    const { resolved } = buildPhase2RoutineFromProposal(proposal, {
+      nowIso: new Date().toISOString(),
+    });
+    clearPendingRoutineProposal(activeCtx.userId);
+    removePendingRoutineProposalApprovals(proposal.createdAt);
+    if (resolved.events.length > 0) {
+      addPendingScheduleApprovals(resolved.events);
+      toast.success(
+        resolved.events.length === 1
+          ? `“${resolved.events[0]!.title}” sent for approval with scheduled times`
+          : `${resolved.events.length} wind-down blocks sent for approval with scheduled times`,
+      );
+    } else {
+      toast.error("Could not build a schedule for this routine");
+    }
+    markApprovalDecided(id, status);
+    emit();
+    return;
+  }
+
   if (status === "approved" && entry.item.scheduleEvent) {
     if (!activeCtx) {
       toast.error("Could not update today's schedule — try again");
@@ -177,6 +211,62 @@ export function addPendingOrderApproval(order: PendingOrder) {
 /** Schedule event → Approvals first; Homepage timeline only after approve. */
 export function addPendingScheduleApproval(item: ScheduleItem) {
   addPendingScheduleApprovals([item]);
+}
+
+function routineProposalApprovalId(createdAt: string): string {
+  return `routine-proposal-${createdAt}`;
+}
+
+/** Phase-1 tired routine — names only, no clock times on the card. */
+export function addPendingRoutineProposal(proposal: RoutineProposal) {
+  const approvalId = routineProposalApprovalId(proposal.createdAt);
+  const pendingItem: PendingItem = {
+    id: approvalId,
+    kind: "routine_proposal",
+    title: "Wind-down routine for tonight",
+    detail: buildRoutineProposalApprovalDetail(proposal),
+    routineProposal: proposal,
+  };
+
+  let nextItems = { ...state.items };
+  let order = [...state.order];
+
+  for (const oid of [...order]) {
+    const entry = nextItems[oid];
+    if (!entry || entry.status !== "pending" || entry.item.kind !== "routine_proposal") continue;
+    delete nextItems[oid];
+    order = order.filter((id) => id !== oid);
+  }
+
+  nextItems[approvalId] = { item: pendingItem, status: "pending" as const };
+  order = [approvalId, ...order.filter((oid) => oid !== approvalId)];
+
+  state = { items: nextItems, order };
+  emit();
+}
+
+export function removePendingRoutineProposalApprovals(exceptCreatedAt?: string) {
+  let nextItems = { ...state.items };
+  let order = [...state.order];
+  let changed = false;
+
+  for (const oid of [...order]) {
+    const entry = nextItems[oid];
+    if (!entry || entry.status !== "pending" || entry.item.kind !== "routine_proposal") continue;
+    if (exceptCreatedAt && entry.item.routineProposal?.createdAt === exceptCreatedAt) continue;
+    delete nextItems[oid];
+    order = order.filter((id) => id !== oid);
+    changed = true;
+  }
+
+  if (changed) {
+    state = { items: nextItems, order };
+    emit();
+  }
+}
+
+export function isRoutineProposalApproval(item: PendingItem): boolean {
+  return item.kind === "routine_proposal" && Boolean(item.routineProposal);
 }
 
 /** Append schedule events — one pending approval per normalized title (latest wins). */

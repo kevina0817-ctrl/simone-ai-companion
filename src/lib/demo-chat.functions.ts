@@ -13,6 +13,8 @@ import {
 import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
+  isAffirmativeRoutineConfirmText,
+  isTiredEveningRoutineProposalRequest,
   pickSingleOrderForApproval,
   shouldCreateOrderApproval,
   shouldRequireScheduleApproval,
@@ -20,6 +22,15 @@ import {
 import { buildDeterministicRoutineReply } from "@/lib/proposed-routine";
 import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
 import type { ScheduleItem } from "@/lib/schedule-item";
+import {
+  buildPhase2RoutineFromProposal,
+  buildTiredEveningProposalReply,
+  buildTiredEveningRoutineProposal,
+} from "@/lib/routine-proposal-flow";
+import type { RoutineProposal } from "@/lib/routine-proposal";
+
+const DEMO_ROUTINE_KEY = "demo";
+const demoPendingRoutine = new Map<string, RoutineProposal>();
 
 const eventSchema = z.object({
   id: z.string(),
@@ -191,6 +202,41 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
     const nowIso = data.nowIso ?? new Date().toISOString();
+
+    if (isTiredEveningRoutineProposalRequest(data.message)) {
+      const proposal = buildTiredEveningRoutineProposal();
+      demoPendingRoutine.set(DEMO_ROUTINE_KEY, proposal);
+      return {
+        reply: buildTiredEveningProposalReply(proposal),
+        actions: [],
+        pendingOrders: [],
+        routineProposal: proposal,
+      } satisfies ChatResponse;
+    }
+
+    const pendingDemoRoutine = demoPendingRoutine.get(DEMO_ROUTINE_KEY);
+    if (pendingDemoRoutine && isAffirmativeRoutineConfirmText(data.message)) {
+      demoPendingRoutine.delete(DEMO_ROUTINE_KEY);
+      const todaySchedule: ScheduleItem[] = data.events.map((e) => ({
+        id: e.id,
+        title: e.title,
+        subtitle: e.subtitle ?? null,
+        start_time: e.start_time,
+        level: (e.level ?? "Low") as ScheduleItem["level"],
+      }));
+      const phase2 = buildPhase2RoutineFromProposal(pendingDemoRoutine, {
+        userMessage: data.message,
+        nowIso,
+        todayEvents: todaySchedule,
+      });
+      return {
+        reply: phase2.reply,
+        actions: phase2.actions,
+        pendingOrders: [],
+        routineScheduleConfirmed: true,
+      } satisfies ChatResponse;
+    }
+
     const tz = isRestOfNightBedtimePlanIntent(data.message)
       ? EVENING_PLAN_TIMEZONE
       : (data.timezone ?? "UTC");
@@ -240,6 +286,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     }));
 
     const tryDeterministicBedtimeReply = (llmDraft?: string | null): boolean => {
+      if (isTiredEveningRoutineProposalRequest(data.message)) return false;
       if (!isRestOfNightBedtimePlanIntent(data.message)) return false;
       if (!actions.some((a) => a.kind === "schedule_event")) return false;
 
@@ -313,7 +360,11 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       break;
     }
 
-    if (isRestOfNightBedtimePlanIntent(data.message) && actions.some((a) => a.kind === "schedule_event")) {
+    if (
+      !isTiredEveningRoutineProposalRequest(data.message) &&
+      isRestOfNightBedtimePlanIntent(data.message) &&
+      actions.some((a) => a.kind === "schedule_event")
+    ) {
       tryDeterministicBedtimeReply(reply);
     }
 

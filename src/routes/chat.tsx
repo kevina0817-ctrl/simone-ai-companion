@@ -163,26 +163,36 @@ function ChatPage() {
         removedFood,
         foodBedtime,
         proposedRoutine,
+        routineProposal,
+        displayReplyOverride,
       } = await applyChatScheduleResult(qc, {
         actions: toScheduleActions(result.actions),
         userMessage: t,
         assistantReply: replyText,
         userId: user!.id,
         nowIso,
+        routineProposal: result.routineProposal,
+        routineScheduleConfirmed: result.routineScheduleConfirmed,
       });
 
-      let displayReply = applyScheduleReplyOutcome(replyText, {
-        committed,
-        pendingApproval,
-        removedFood,
-        foodBedtime,
-        userMessage: t,
-        proposedRoutine,
-      });
+      let displayReply =
+        displayReplyOverride ??
+        applyScheduleReplyOutcome(replyText, {
+          committed,
+          pendingApproval,
+          removedFood,
+          foodBedtime,
+          userMessage: t,
+          proposedRoutine,
+        });
 
-      if (proposedRoutine && proposedRoutine.activities.length > 0) {
+      if (proposedRoutine && !routineProposal && proposedRoutine.activities.length > 0) {
         displayReply = enforceRoutineTimesInReply(displayReply, proposedRoutine);
         verifyProposedRoutineChatAlignment(displayReply, proposedRoutine);
+      }
+
+      if (routineProposal) {
+        toast.success("Wind-down routine ready — reply in chat or approve on Approvals to schedule times");
       }
 
       if (committed.length > 0) {

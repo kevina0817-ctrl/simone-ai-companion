@@ -8,6 +8,7 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
 import {
   decide,
+  isRoutineProposalApproval,
   isScheduleApproval,
   isShoppingApproval,
   resolveOrderIdForApproval,
@@ -184,6 +185,42 @@ function ActionButtons({ id }: { id: string }) {
         Approve
       </button>
     </div>
+  );
+}
+
+function RoutineProposalCard({ id, item }: { id: string; item: PendingItem }) {
+  const status = useStatus(id) ?? "pending";
+  const proposal = item.routineProposal;
+  if (!proposal) return null;
+
+  return (
+    <article className="mt-4 rounded-3xl border-l-4 border-l-primary/40 bg-card/70 p-5 shadow-card">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15">
+          <Calendar className="h-5 w-5 text-primary" />
+        </div>
+        <div className="flex-1">
+          <div className="text-base font-medium leading-tight">{item.title}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Flexible plan • Times are set after you approve
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 rounded-2xl border border-border/60 bg-background/40 p-3 text-sm">
+        <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Activities</div>
+        <ul className="mt-2 space-y-1.5">
+          {proposal.activities.map((name) => (
+            <li key={name} className="font-medium">
+              {name}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          From now until bedtime — exact times appear on the next approval step.
+        </p>
+      </div>
+      {status === "pending" ? <ActionButtons id={id} /> : <StatusBanner status={status} />}
+    </article>
   );
 }
 
@@ -645,6 +682,7 @@ function ApproveAllBar() {
 
 function PendingTab() {
   const pending = usePending();
+  const routineProposalPending = pending.filter(isRoutineProposalApproval);
   const schedulePending = pending.filter(isScheduleApproval);
   const orderPending = pending.filter(isShoppingApproval);
 
@@ -663,6 +701,11 @@ function PendingTab() {
   return (
     <>
       <ApproveAllBar />
+      {routineProposalPending.length > 0 && <SectionLabel>Wind-down routines</SectionLabel>}
+      {routineProposalPending.map((p) => (
+        <RoutineProposalCard key={p.id} id={p.id} item={p} />
+      ))}
+
       {schedulePending.length > 0 && <SectionLabel>Schedule & events</SectionLabel>}
       {schedulePending.map((p) => (
         <ScheduleApprovalCard key={p.id} id={p.id} item={p} />
