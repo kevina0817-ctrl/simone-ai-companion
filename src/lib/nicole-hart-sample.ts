@@ -99,19 +99,25 @@ export const nicoleHartBudget: BudgetSettings = {
   cats: { Grocery: 900, Amazon: 400, Other: 900 },
 };
 
-/** Curated wellness day — early rise, social cafe moments, evening yoga. */
+/** Demo Today’s Schedule — explicit priority labels for Nicole Hart. */
 export function buildNicoleHartSchedule(): DemoEvent[] {
   return [
-    { id: "nh-1", title: "Morning ritual", subtitle: "7:00 AM · hydration + sunlight", start_time: todayAt(7, 0), level: "Low" },
-    { id: "nh-2", title: "Pilates — reformer flow", subtitle: "Aura studio · 7:30 AM", start_time: todayAt(7, 30), level: "High" },
-    { id: "nh-3", title: "Matcha + journaling", subtitle: "Home · ceremonial grade", start_time: todayAt(9, 0), level: "Low" },
-    { id: "nh-4", title: "Wellness cafe lunch", subtitle: "Planta · grain bowl + greens", start_time: todayAt(11, 30), level: "Medium" },
-    { id: "nh-5", title: "Afternoon tea with girlfriends", subtitle: "Yorkville · 2:00 PM", start_time: todayAt(14, 0), level: "Medium" },
-    { id: "nh-6", title: "Neighborhood walk + supplements", subtitle: "Vitamin D · omega · magnesium", start_time: todayAt(16, 0), level: "Low" },
-    { id: "nh-7", title: "Evening yoga — candlelit flow", subtitle: "6:00 PM · recovery focus", start_time: todayAt(18, 0), level: "Medium" },
-    { id: "nh-8", title: "Light dinner prep", subtitle: "Salmon + roasted vegetables", start_time: todayAt(20, 0), level: "Low" },
-    { id: "nh-9", title: "Skincare wind-down", subtitle: "No screens · 9:30 PM", start_time: todayAt(21, 30), level: "Low" },
-    { id: "nh-10", title: "Sleep prep", subtitle: "Lights out · 10:15 PM target", start_time: todayAt(22, 15), level: "Low" },
+    { id: "nh-h1", title: "Pilates class", subtitle: "Health · Aura studio · reformer flow", start_time: todayAt(7, 0), level: "High" },
+    { id: "nh-l1", title: "Pinterest browsing", subtitle: "Leisure · mood board · 15 min", start_time: todayAt(7, 45), level: "Low" },
+    { id: "nh-m1", title: "Content planning", subtitle: "Work · Aura Elevate · weekly posts", start_time: todayAt(8, 30), level: "Medium" },
+    { id: "nh-h2", title: "Skincare appointment", subtitle: "Health · Yorkville clinic · facial", start_time: todayAt(9, 30), level: "High" },
+    { id: "nh-m2", title: "Matcha café visit", subtitle: "Wellness · ceremonial grade · journaling", start_time: todayAt(10, 30), level: "Medium" },
+    { id: "nh-h3", title: "Healthy grocery shopping", subtitle: "Errands · Whole Foods · organic haul", start_time: todayAt(11, 0), level: "High" },
+    { id: "nh-l2", title: "Lifestyle vlog watching", subtitle: "Entertainment · wellness creators", start_time: todayAt(12, 30), level: "Low" },
+    { id: "nh-m3", title: "Self-development reading", subtitle: "Growth · mindset chapter · 30 min", start_time: todayAt(13, 0), level: "Medium" },
+    { id: "nh-h4", title: "Afternoon tea with friends", subtitle: "Social · Yorkville · Mira & Jess", start_time: todayAt(14, 0), level: "High" },
+    { id: "nh-h5", title: "Monthly budgeting review", subtitle: "Finance · Aura Elevate + personal caps", start_time: todayAt(15, 30), level: "High" },
+    { id: "nh-m4", title: "Vision board journaling", subtitle: "Planning · Q2 intentions · aesthetic spread", start_time: todayAt(16, 30), level: "Medium" },
+    { id: "nh-h6", title: "Yoga session", subtitle: "Health · candlelit flow · recovery", start_time: todayAt(18, 0), level: "High" },
+    { id: "nh-m5", title: "Wellness shopping", subtitle: "Errands · supplements + clean beauty", start_time: todayAt(19, 30), level: "Medium" },
+    { id: "nh-l3", title: "Relaxing music session", subtitle: "Leisure · ambient playlist · tea", start_time: todayAt(20, 30), level: "Low" },
+    { id: "nh-l4", title: "Bubble bath / spa night", subtitle: "Leisure · Epsom salts · no screens", start_time: todayAt(21, 30), level: "Low" },
+    { id: "nh-l5", title: "Casual social media scrolling", subtitle: "Leisure · light catch-up · 20 min cap", start_time: todayAt(22, 30), level: "Low" },
   ];
 }
 

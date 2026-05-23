@@ -103,22 +103,25 @@ const todayAt = (hour: number, minute: number) => {
   return date.toISOString();
 };
 
-/** Packed Bay Street day — gym, meetings, dinner, meditation. */
+/** Demo Today’s Schedule — explicit priority labels for Jordan Ross. */
 export function buildJordanRossSchedule(): DemoEvent[] {
   return [
-    { id: "jr-1", title: "Gym — strength + conditioning", subtitle: "Equinox Yorkville · 6:00 AM", start_time: todayAt(6, 0), level: "High" },
-    { id: "jr-2", title: "Market open prep", subtitle: "Bloomberg + overnight risk", start_time: todayAt(7, 15), level: "Medium" },
-    { id: "jr-3", title: "Investment committee prep", subtitle: "Deck final pass", start_time: todayAt(8, 30), level: "High" },
-    { id: "jr-4", title: "Team standup", subtitle: "Trading + research leads", start_time: todayAt(9, 0), level: "Medium" },
-    { id: "jr-5", title: "LP quarterly update call", subtitle: "Zoom · 45 min", start_time: todayAt(10, 0), level: "High" },
-    { id: "jr-6", title: "Due diligence deep dive", subtitle: "Series C fintech", start_time: todayAt(11, 30), level: "High" },
-    { id: "jr-7", title: "Working lunch", subtitle: "Desk · protein + greens", start_time: todayAt(12, 30), level: "Medium" },
-    { id: "jr-8", title: "Portfolio company sync", subtitle: "CEO check-in", start_time: todayAt(14, 0), level: "High" },
-    { id: "jr-9", title: "Legal & compliance review", subtitle: "New fund terms", start_time: todayAt(15, 30), level: "High" },
-    { id: "jr-10", title: "Client strategy block", subtitle: "Prep notes for dinner", start_time: todayAt(17, 0), level: "Medium" },
-    { id: "jr-11", title: "Dinner date", subtitle: "Alo · Yorkville · 7:00 PM", start_time: todayAt(19, 0), level: "Medium" },
-    { id: "jr-12", title: "Wind-down walk", subtitle: "Harbourfront · no phone", start_time: todayAt(21, 30), level: "Low" },
-    { id: "jr-13", title: "Bedtime meditation", subtitle: "Calm · 20 min · lights out by 10:45", start_time: todayAt(22, 30), level: "Low" },
+    { id: "jr-h1", title: "Team workout session", subtitle: "Health · Equinox Yorkville · squad lift", start_time: todayAt(6, 30), level: "High" },
+    { id: "jr-m1", title: "MBA reading time", subtitle: "Education · case prep before market open", start_time: todayAt(7, 30), level: "Medium" },
+    { id: "jr-h2", title: "Client meeting", subtitle: "Work · Wolf Capital · portfolio review", start_time: todayAt(8, 0), level: "High" },
+    { id: "jr-h3", title: "Car insurance renewal", subtitle: "Finance · policy review & payment", start_time: todayAt(9, 30), level: "High" },
+    { id: "jr-m2", title: "Weekly planning and journaling", subtitle: "Planning · goals + calendar lock", start_time: todayAt(10, 30), level: "Medium" },
+    { id: "jr-h4", title: "Grocery shopping", subtitle: "Errands · Whole Foods Yorkville · ~$300", start_time: todayAt(12, 0), level: "High" },
+    { id: "jr-h5", title: "Monthly rent payment", subtitle: "Finance · auto-pay confirmation", start_time: todayAt(12, 45), level: "High" },
+    { id: "jr-l1", title: "Watch YouTube highlights", subtitle: "Entertainment · quick lunch break", start_time: todayAt(13, 15), level: "Low" },
+    { id: "jr-m3", title: "Basketball training", subtitle: "Fitness · skills + conditioning", start_time: todayAt(15, 0), level: "Medium" },
+    { id: "jr-m4", title: "Poker study session", subtitle: "Skills · GTO review · 45 min", start_time: todayAt(16, 30), level: "Medium" },
+    { id: "jr-h6", title: "Dinner reservation with friends", subtitle: "Social · Alo · Yorkville · table for 4", start_time: todayAt(18, 30), level: "High" },
+    { id: "jr-m5", title: "Guitar practice", subtitle: "Skills · acoustic · 30 min", start_time: todayAt(20, 0), level: "Medium" },
+    { id: "jr-l2", title: "Gaming session", subtitle: "Entertainment · online · unwind", start_time: todayAt(21, 0), level: "Low" },
+    { id: "jr-l3", title: "Casual Netflix night", subtitle: "Leisure · documentary or series", start_time: todayAt(22, 0), level: "Low" },
+    { id: "jr-l4", title: "Evening walk", subtitle: "Leisure · Harbourfront · no phone", start_time: todayAt(22, 45), level: "Low" },
+    { id: "jr-l5", title: "Listen to music before sleep", subtitle: "Leisure · jazz playlist · lights low", start_time: todayAt(23, 15), level: "Low" },
   ];
 }
 

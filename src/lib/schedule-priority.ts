@@ -158,12 +158,16 @@ export function inferScheduleLevelFromTitle(title: string): SchedulePriorityLeve
   return classifySchedulePriority(title);
 }
 
-/** Resolve level from title/subtitle; ignores generic model defaults when title is present. */
+/** Resolve level for display: trust stored High/Medium/Low, else classify from title. */
 export function resolveScheduleLevel(
   level: string | undefined,
   title?: string,
   context?: SchedulePriorityContext,
 ): SchedulePriorityLevel {
+  const stored = level?.trim();
+  if (stored === "High" || stored === "Medium" || stored === "Low") {
+    return stored;
+  }
   if (title?.trim()) {
     return classifySchedulePriority(title, context?.subtitle, context);
   }

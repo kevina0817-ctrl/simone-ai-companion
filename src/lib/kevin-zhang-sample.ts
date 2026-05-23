@@ -99,20 +99,25 @@ export const kevinZhangBudget: BudgetSettings = {
   cats: { Grocery: 320, Amazon: 120, Other: 410 },
 };
 
-/** UofT international student day: late wake, classes, gym, gaming, 2 AM sleep. */
+/** Demo Today’s Schedule — explicit priority labels for Kevin Zhang. */
 export function buildKevinZhangSchedule(): DemoEvent[] {
   return [
-    { id: "kz-1", title: "Wake up", subtitle: "Snoozed twice · 11:00 AM", start_time: todayAt(11, 0), level: "Low" },
-    { id: "kz-2", title: "Chatime bubble tea", subtitle: "Brown sugar milk tea · $7.80", start_time: todayAt(11, 35), level: "Low" },
-    { id: "kz-3", title: "CSC258 — Computer Organization", subtitle: "Bahen Centre · afternoon lecture", start_time: todayAt(13, 0), level: "High" },
-    { id: "kz-4", title: "STA257 tutorial", subtitle: "Sid Smith · probability", start_time: todayAt(15, 0), level: "High" },
-    { id: "kz-5", title: "Study block — assignment due Friday", subtitle: "Robarts 2nd floor · phones away", start_time: todayAt(15, 30), level: "High" },
-    { id: "kz-6", title: "Library coffee + protein shake", subtitle: "~120 mg caffeine", start_time: todayAt(17, 0), level: "Medium" },
-    { id: "kz-7", title: "Gym — Goldring Centre", subtitle: "Push day · 6:30 PM · 5.2k steps so far", start_time: todayAt(18, 30), level: "Medium" },
-    { id: "kz-8", title: "Cheap takeout", subtitle: "Pizza Pizza / Ming's · ~$18", start_time: todayAt(20, 0), level: "Low" },
-    { id: "kz-9", title: "Gaming — Valorant squad", subtitle: "Discord · screen time climbing", start_time: todayAt(21, 30), level: "Medium" },
-    { id: "kz-10", title: "Instant noodles + assignment push", subtitle: "Kitchen · last problem set questions", start_time: todayAt(23, 15), level: "Medium" },
-    { id: "kz-11", title: "Wind-down (still on phone)", subtitle: "Target sleep ~2:00 AM", start_time: todayAt(23, 45), level: "Low" },
+    { id: "kz-m1", title: "Coding practice", subtitle: "Skills · LeetCode + side repo", start_time: todayAt(10, 30), level: "Medium" },
+    { id: "kz-h1", title: "University lecture", subtitle: "School · CSC258 · Bahen Centre", start_time: todayAt(11, 30), level: "High" },
+    { id: "kz-h2", title: "Tuition payment reminder", subtitle: "Finance · UofT portal · due this week", start_time: todayAt(12, 15), level: "High" },
+    { id: "kz-h3", title: "Group project meeting", subtitle: "School · team sync · Robarts study room", start_time: todayAt(14, 0), level: "High" },
+    { id: "kz-m2", title: "Resume update", subtitle: "Career · internship applications", start_time: todayAt(15, 0), level: "Medium" },
+    { id: "kz-h4", title: "Grocery shopping", subtitle: "Errands · T&T Kensington · meal prep", start_time: todayAt(16, 0), level: "High" },
+    { id: "kz-h5", title: "Midterm study session", subtitle: "School · STA257 · problem sets", start_time: todayAt(16, 45), level: "High" },
+    { id: "kz-m3", title: "Networking coffee chat", subtitle: "Career · alumni mentor · café near campus", start_time: todayAt(17, 30), level: "Medium" },
+    { id: "kz-h6", title: "Gym workout", subtitle: "Health · Goldring Centre · push day", start_time: todayAt(18, 30), level: "High" },
+    { id: "kz-m4", title: "Basketball with friends", subtitle: "Social · intramural court · pickup", start_time: todayAt(19, 45), level: "Medium" },
+    { id: "kz-m5", title: "Side project work", subtitle: "Skills · hackathon app · 1 hr block", start_time: todayAt(21, 0), level: "Medium" },
+    { id: "kz-l1", title: "Gaming with friends", subtitle: "Entertainment · Valorant squad", start_time: todayAt(22, 30), level: "Low" },
+    { id: "kz-l2", title: "Discord hangout", subtitle: "Social · voice chat · unwind", start_time: todayAt(23, 5), level: "Low" },
+    { id: "kz-l3", title: "Watch anime or YouTube", subtitle: "Entertainment · one episode cap", start_time: todayAt(23, 30), level: "Low" },
+    { id: "kz-l4", title: "Late-night snack run", subtitle: "Leisure · convenience store · instant noodles", start_time: todayAt(23, 50), level: "Low" },
+    { id: "kz-l5", title: "Browsing online shopping", subtitle: "Leisure · carts & wishlists · screen time", start_time: todayAt(23, 58), level: "Low" },
   ];
 }
 
