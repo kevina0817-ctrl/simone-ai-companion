@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Package, Truck } from "lucide-react";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/format-currency";
 import type { PendingOrder } from "@/lib/pending-order";
 import { cancelApprovedOrder } from "@/lib/pending-orders-store";
 import {
@@ -34,8 +35,6 @@ export function PendingOrderCard({
 }) {
   const [trackingOpen, setTrackingOpen] = useState(false);
   const itemCount = order.items.reduce((s, i) => s + i.qty, 0);
-  const priceSymbol = order.amountCurrency === "CAD" ? "CA$" : "$";
-
   const onCancel = () => {
     const removed = cancelApprovedOrder(order.id);
     if (!removed) {
@@ -43,7 +42,7 @@ export function PendingOrderCard({
       return;
     }
     toast.success(
-      `Canceled “${removed.title}” — ${priceSymbol}${removed.totalEstimatedPrice.toFixed(2)} removed from this month's spend`,
+      `Canceled “${removed.title}” — ${formatCurrency(removed.totalEstimatedPrice)} removed from this month's spend`,
     );
   };
 
@@ -68,18 +67,14 @@ export function PendingOrderCard({
               {it.qty > 1 ? <span className="text-muted-foreground">{it.qty}× </span> : null}
               {it.name}
             </span>
-            <span className="tabular-nums">
-              {priceSymbol}
-              {(it.estimatedPrice * it.qty).toFixed(2)}
-            </span>
+            <span className="tabular-nums">{formatCurrency(it.estimatedPrice * it.qty)}</span>
           </li>
         ))}
       </ul>
       <div className={`flex items-baseline justify-between ${compact ? "mt-2 border-t border-border/60 pt-2" : "mt-2 border-t border-border/60 pt-2"}`}>
         <span className="text-muted-foreground text-[11px]">Est. total</span>
         <span className="tabular-nums text-sm font-medium">
-          {priceSymbol}
-          {order.totalEstimatedPrice.toFixed(2)}
+          {formatCurrency(order.totalEstimatedPrice)}
         </span>
       </div>
 

@@ -1,35 +1,24 @@
 import { inferOrderCategory } from "@/lib/order-category";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import {
-  formatCurrencyByCategory,
+  collectAmountsFromOrder,
+  formatCurrency,
+  normalizeCurrencyInText,
   stripChatPriceBlocks,
-  normalizeCurrencyInReplyForOrder,
-  type OriginalCurrency,
-} from "@/lib/format-currency-by-category";
+} from "@/lib/format-currency";
 import type { PendingOrder } from "@/lib/pending-order";
 
-function orderOriginalCurrency(order: PendingOrder): OriginalCurrency {
-  if (order.amountCurrency === "CAD") return "CAD";
-  return "USD";
-}
-
-/** One canonical price line per order — no CAD+USD mix, no conversion copy. */
+/** One canonical price line per order. */
 export function formatChatOrderPriceSummary(order: PendingOrder): string {
   const category = order.category ?? inferOrderCategory(order.store, order.title);
-  const original = orderOriginalCurrency(order);
-  const total = order.totalEstimatedPrice;
-  const label = formatCurrencyByCategory(category, total, original);
+  const total = formatCurrency(order.totalEstimatedPrice);
 
   if (category === "grocery") {
-    return `Estimated grocery total: ${label}`;
+    return `Estimated grocery total: ${total}`;
   }
-  if (category === "amazon") {
-    return `Price estimate: ${label}`;
-  }
-  return `Price estimate: approximately ${label}.`;
+  return `Price estimate: ${total}`;
 }
 
-/** Collect tool-created orders for currency normalization. */
 export function collectUsdOrdersFromChatResult(
   result: Pick<ChatResponse, "pendingOrders" | "actions">,
 ): PendingOrder[] {
@@ -58,20 +47,19 @@ function summaryAlreadyPresent(text: string, summary: string): boolean {
   return text.includes(core);
 }
 
-/**
- * Apply strict category currency rules to assistant chat copy.
- * Budget CAD conversion stays in order-prepare / approvals — not shown here.
- */
+/** Normalize assistant reply to CA$ only and append a single price line when needed. */
 export function applyChatCurrencyToReply(reply: string, orders: PendingOrder[]): string {
-  if (orders.length === 0) return reply;
+  if (orders.length === 0) return normalizeCurrencyInText(stripChatPriceBlocks(reply.trim()));
 
   let text = stripChatPriceBlocks(reply.trim());
+  const allAmounts: number[] = [];
 
   for (const order of orders) {
-    const category = order.category ?? inferOrderCategory(order.store, order.title);
-    const original = orderOriginalCurrency(order);
-    text = normalizeCurrencyInReplyForOrder(text, category, order, original);
+    allAmounts.push(...collectAmountsFromOrder(order));
+    text = normalizeCurrencyInText(text, collectAmountsFromOrder(order));
   }
+
+  text = normalizeCurrencyInText(text, allAmounts);
 
   const summaries: string[] = [];
   for (const order of orders) {

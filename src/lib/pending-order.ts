@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { shouldCreateOrderApproval } from "@/lib/chat-intent";
+import { formatCurrency } from "@/lib/format-currency";
 import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
 import { isValidPendingOrder, isValidProductName } from "@/lib/order-validation";
 
@@ -22,10 +23,6 @@ export type PendingOrder = {
   totalEstimatedPrice: number;
   status: PendingOrderStatus;
   createdAt: string;
-  /** Display currency after FX normalization (other-category orders → CAD). */
-  amountCurrency?: "USD" | "CAD";
-  /** Pre-conversion USD total for other-category orders. */
-  originalTotalUsd?: number;
   /** Set at approve time when purchase would exceed monthly budget */
   exceedsBudget?: boolean;
   budgetOverBy?: number;
@@ -78,16 +75,14 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
   const title = parsed.data.title.trim();
   const store = parsed.data.store?.trim() || "Whole Foods";
 
-  const category = inferOrderCategory(store, title);
   const order: PendingOrder = {
     id: generateOrderId(),
     title,
     store,
-    category,
+    category: inferOrderCategory(store, title),
     items,
     totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
-    amountCurrency: category === "grocery" || category === "amazon" ? "CAD" : "USD",
     createdAt: new Date().toISOString(),
   };
 
@@ -112,17 +107,19 @@ export function parseOrderFromUserMessage(userMessage: string): PendingOrder | n
   }
 
   const storeMatch = trimmed.match(
-    /\b(?:from|at)\s+(whole foods|amazon|target|trader joe'?s?|tiffany(?:\s+&\s+co)?)\b/i,
+    /\b(?:from|at)\s+(whole foods|amazon|target|trader joe'?s?|tiffany(?:\s+&\s+co)?|louis vuitton)\b/i,
   );
   const store = storeMatch?.[1]
     ? storeMatch[1].replace(/\b\w/g, (c) => c.toUpperCase())
     : /tiffany/i.test(trimmed)
       ? "Tiffany"
-      : /amazon/i.test(trimmed)
-        ? "Amazon"
-        : "Online";
+      : /louis\s+vuitton/i.test(trimmed)
+        ? "Louis Vuitton"
+        : /amazon/i.test(trimmed)
+          ? "Amazon"
+          : "Online";
 
-  const priceMatch = trimmed.match(/(?:US\$|USD|\$)\s*([\d,]+(?:\.\d{2})?)/i);
+  const priceMatch = trimmed.match(/(?:CA\$|US\$|USD|\$)\s*([\d,]+(?:\.\d{2})?)/i);
   const unitPrice = priceMatch ? Number.parseFloat(priceMatch[1].replace(/,/g, "")) : 0;
 
   const items: OrderLineItem[] =
@@ -135,16 +132,14 @@ export function parseOrderFromUserMessage(userMessage: string): PendingOrder | n
         ];
 
   const normalizedTitle = title.charAt(0).toUpperCase() + title.slice(1);
-  const category = inferOrderCategory(store, normalizedTitle);
   const order: PendingOrder = {
     id: generateOrderId(),
     title: normalizedTitle,
     store,
-    category,
+    category: inferOrderCategory(store, normalizedTitle),
     items,
     totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
-    amountCurrency: category === "grocery" || category === "amazon" ? "CAD" : "USD",
     createdAt: new Date().toISOString(),
   };
 
@@ -157,7 +152,5 @@ export function parseOrderFromText(text: string): PendingOrder | null {
 }
 
 export function formatOrderDetail(order: PendingOrder): string {
-  const symbol =
-    order.amountCurrency === "CAD" ? "CA$" : order.amountCurrency === "USD" ? "US$" : "$";
-  return `${symbol}${order.totalEstimatedPrice.toFixed(2)} • ${order.items.length} items • ${order.store}`;
+  return `${formatCurrency(order.totalEstimatedPrice)} • ${order.items.length} items • ${order.store}`;
 }

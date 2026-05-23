@@ -77,10 +77,8 @@ Do not turn product descriptions, prices, or shopping lists into calendar events
 Never call create_pending_order multiple times for multiple recommended options in the same turn.
 For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
-(name, qty, estimated_price). Quote grocery totals in Canadian dollars only (e.g. "CA$128.50") — never US$ or USD in grocery copy.
-For Amazon orders, quote prices in Canadian dollars only (CA$/CAD) — never US$ or USD.
-For luxury / other retailers (e.g. Louis Vuitton, Tiffany), quote US dollars only (US$/USD) in chat — never show CAD amounts or conversion text in the same message.
-Do not repeat price paragraphs; state the price once.
+(name, qty, estimated_price). Quote every price in Canadian dollars only (CA$ format, e.g. "CA$128.50") — never US$, USD, or conversion text.
+For Amazon, grocery, luxury, and all other retailers: use CA$ only in chat. State each price once; do not repeat price paragraphs.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
@@ -134,7 +132,7 @@ const tools = [
                   description: "Line item product name only — same rules as order title",
                 },
                 qty: { type: "number" },
-                estimated_price: { type: "number", description: "Unit price USD" },
+                estimated_price: { type: "number", description: "Unit price in CAD" },
               },
               required: ["name"],
             },

@@ -21,8 +21,6 @@ import type { PendingOrder } from "@/lib/pending-order";
 import type { OrderCategory } from "@/lib/order-category";
 
 export {
-  USD_TO_CAD_RATE,
-  convertOtherOrderToCad,
   prepareOrderForApprovals,
   formatApprovalOrderDetail,
   categoryLabel,

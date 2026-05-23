@@ -37,6 +37,7 @@ import {
 import { backendAvailable, demoUser } from "@/lib/demo-mode";
 import { getPendingApprovalOrder } from "@/lib/pending-orders-store";
 import { PendingOrderCard } from "@/components/PendingOrderCard";
+import { formatCurrency } from "@/lib/format-currency";
 
 export const Route = createFileRoute("/approvals")({
   head: () => ({ meta: [{ title: "Approvals — Simone" }] }),
@@ -262,7 +263,6 @@ function ScheduleApprovalCard({ id, item }: { id: string; item: PendingItem }) {
 function OrderBudgetPrompt({
   check,
   orderTotal,
-  priceSymbol,
   batchLabel,
   onStartRaise,
   onDecline,
@@ -270,7 +270,6 @@ function OrderBudgetPrompt({
 }: {
   check: BudgetCheck;
   orderTotal: number;
-  priceSymbol: string;
   batchLabel?: boolean;
   onStartRaise: () => void;
   onDecline: () => void;
@@ -278,17 +277,20 @@ function OrderBudgetPrompt({
 }) {
   const cap = check.monthlyCap === "unlimited" ? 0 : check.monthlyCap;
   const overBy = check.overBy;
+  const capLabel = formatCurrency(cap);
+  const orderLabel = formatCurrency(orderTotal);
+  const overLabel = formatCurrency(overBy);
 
   return (
     <div className="mt-4 rounded-2xl border border-risk-medium/40 bg-risk-medium/10 px-4 py-3 text-sm">
       <p className="leading-relaxed text-foreground">
         {batchLabel
           ? overBy > 0
-            ? `Approving all pending orders (${priceSymbol}${orderTotal.toFixed(2)} total) would put you $${overBy.toFixed(2)} over your $${cap.toFixed(0)} monthly budget. Raise your cap for this month only?`
-            : `These orders would exceed your $${cap.toFixed(0)} monthly budget threshold. Raise your cap for this month only?`
+            ? `Approving all pending orders (${orderLabel} total) would put you ${overLabel} over your ${capLabel} monthly budget. Raise your cap for this month only?`
+            : `These orders would exceed your ${capLabel} monthly budget threshold. Raise your cap for this month only?`
           : overBy > 0
-            ? `Approving this order (${priceSymbol}${orderTotal.toFixed(2)}) would put you $${overBy.toFixed(2)} over your $${cap.toFixed(0)} monthly budget. Raise your cap for this month only?`
-            : `This order would exceed your $${cap.toFixed(0)} monthly budget threshold. Raise your cap for this month only?`}
+            ? `Approving this order (${orderLabel}) would put you ${overLabel} over your ${capLabel} monthly budget. Raise your cap for this month only?`
+            : `This order would exceed your ${capLabel} monthly budget threshold. Raise your cap for this month only?`}
       </p>
       <div className="mt-3 flex gap-2">
         <button
@@ -332,7 +334,7 @@ function OrderBudgetRaiseForm({
       <div className="text-sm font-medium">Set monthly budget (CAD)</div>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
         Enter a new monthly cap for this month. The order will be approved only after you save a budget
-        of at least CA${check.projected.toFixed(2)} (current spend plus this order).
+        of at least {formatCurrency(check.projected)} (current spend plus this order).
       </p>
       <label className="mt-3 block">
         <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Monthly budget (CAD)</span>
@@ -459,7 +461,6 @@ function OrderActionButtons({ id }: { id: string }) {
         <OrderBudgetPrompt
           check={budgetCheck}
           orderTotal={order.totalEstimatedPrice}
-          priceSymbol={order.amountCurrency === "CAD" ? "CA$" : "$"}
           onStartRaise={() => {
             setShowBudgetInput(true);
             setInputError(null);
@@ -518,7 +519,6 @@ function OrderApprovalCard({ id }: { id: string }) {
           <div className="text-base font-medium leading-tight">{order.title}</div>
           <div className="text-[11px] text-muted-foreground">
             {order.store} • {categoryLabel(order.category)} • Pending approval
-            {order.amountCurrency === "CAD" ? " · priced in CAD" : ""}
           </div>
         </div>
       </div>
@@ -654,7 +654,6 @@ function ApproveAllBar() {
         <OrderBudgetPrompt
           check={budgetCheck}
           orderTotal={batchOrderTotal}
-          priceSymbol="CA$"
           batchLabel
           onStartRaise={() => {
             setShowBudgetInput(true);

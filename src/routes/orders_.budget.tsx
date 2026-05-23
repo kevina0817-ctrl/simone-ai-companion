@@ -15,6 +15,7 @@ import {
   writeBudgetSettings,
   type BudgetPeriod,
 } from "@/lib/budget-store";
+import { formatCurrency } from "@/lib/format-currency";
 
 export const Route = createFileRoute("/orders_/budget")({
   head: () => ({ meta: [{ title: "Set your budget — Simone" }] }),
@@ -212,7 +213,8 @@ function BudgetPage() {
                   onValueChange={(v) => setAmountAndResetCats(v[0])}
                 />
                 <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-                  <span>$50</span><span>${sliderMax.toLocaleString()}+</span>
+                  <span>{formatCurrency(50)}</span>
+                  <span>{formatCurrency(sliderMax)}+</span>
                 </div>
               </div>
             );
@@ -224,7 +226,10 @@ function BudgetPage() {
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Category limits</div>
             <div className="text-[11px] text-muted-foreground">
-              ${total} <span className={amount !== Infinity && total > amount ? "text-destructive" : ""}>/ {amount === Infinity ? "∞" : `$${amount}`}</span>
+              {formatCurrency(total)}{" "}
+              <span className={amount !== Infinity && total > amount ? "text-destructive" : ""}>
+                / {amount === Infinity ? "∞" : formatCurrency(amount)}
+              </span>
             </div>
           </div>
           <div className="mt-3 space-y-4">
@@ -235,7 +240,7 @@ function BudgetPage() {
                     <span className="text-base">{c.emoji}</span>
                     <span>{c.label}</span>
                   </div>
-                  <span className="text-xs font-medium">${cats[c.key] ?? 0}</span>
+                  <span className="text-xs font-medium">{formatCurrency(cats[c.key] ?? 0)}</span>
                 </div>
                 <Slider
                   className="mt-2"
@@ -250,7 +255,7 @@ function BudgetPage() {
           </div>
           {amount !== Infinity && total > amount && (
             <div className="mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
-              Category total exceeds your {period.toLowerCase()} cap by ${total - amount}.
+              Category total exceeds your {period.toLowerCase()} cap by {formatCurrency(total - amount)}.
             </div>
           )}
         </div>

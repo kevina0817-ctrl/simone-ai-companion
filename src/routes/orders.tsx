@@ -18,6 +18,7 @@ import {
 import { useApprovedOrders } from "@/lib/pending-orders-store";
 import { useAuth } from "@/hooks/useAuth";
 import { ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
+import { formatCurrency } from "@/lib/format-currency";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Orders — Simone" }] }),
@@ -57,7 +58,7 @@ function BudgetExceededWarning() {
     <div className="mt-4 rounded-2xl border border-risk-medium/40 bg-risk-medium/10 px-4 py-3 text-sm">
       <p className="leading-relaxed text-foreground">
         {spent > monthly
-          ? `You're $${(spent - monthly).toFixed(2)} over your ${monthly.toFixed(0)} monthly cap. Raise it for this month only?`
+          ? `You're ${formatCurrency(spent - monthly)} over your ${formatCurrency(monthly)} monthly cap. Raise it for this month only?`
           : "You're approaching your budget alert threshold. Raise your cap for this month only?"}
       </p>
       <div className="mt-3 flex gap-2">
@@ -116,7 +117,7 @@ function BudgetCard() {
   const periodCapLabel =
     unlimited
       ? `${budgetPeriodTab} · unlimited`
-      : `${budgetPeriodTab} · $${periodCap.toLocaleString()}`;
+      : `${budgetPeriodTab} · ${formatCurrency(periodCap)}`;
 
   return (
     <div className="mt-4 rounded-3xl bg-card/70 p-5 shadow-card">
@@ -134,17 +135,20 @@ function BudgetCard() {
             {unlimited
               ? `Unlimited ${periodLabelLower} budget — track spending freely.`
               : spent > periodCap
-                ? `Over ${periodLabelLower} cap by $${(spent - periodCap).toFixed(2)}.`
+                ? `Over ${periodLabelLower} cap by ${formatCurrency(spent - periodCap)}.`
                 : pct >= alertAt
                   ? `At ${pct}% — at or past your ${alertAt}% alert.`
                   : remaining != null && remaining >= 0
-                    ? `$${remaining.toFixed(2)} left this ${periodLabelLower}.`
+                    ? `${formatCurrency(remaining)} left this ${periodLabelLower}.`
                     : `You've spent ${pct}% of your ${periodLabelLower} budget.`}
           </div>
         </div>
         <div className="text-right text-xs font-medium">
-          ${spent.toFixed(2)}
-          <span className="text-muted-foreground"> / {unlimited ? "∞" : `$${periodCap}`}</span>
+          {formatCurrency(spent)}
+          <span className="text-muted-foreground">
+            {" "}
+            / {unlimited ? "∞" : formatCurrency(periodCap)}
+          </span>
         </div>
       </div>
 
@@ -211,7 +215,7 @@ function CategorySpend({ label, amount }: { label: string; amount: number }) {
   return (
     <div className="rounded-lg bg-secondary/40 px-2 py-1.5">
       <div className="text-muted-foreground">{label}</div>
-      <div className="font-medium text-foreground">${amount.toFixed(2)}</div>
+      <div className="font-medium text-foreground">{formatCurrency(amount)}</div>
     </div>
   );
 }

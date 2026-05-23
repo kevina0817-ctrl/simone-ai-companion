@@ -68,7 +68,7 @@ Answer ANY question intelligently — small talk, advice, planning, recommendati
 You CAN take real actions via tools when (and only when) the user clearly asks:
 - schedule_event: add one event (title + start_time + end_time ISO). One specific event for today → direct to Today's Schedule; multiple events or full plans → Approvals. For direct adds, confirm it is already scheduled — never say pending approval or "once you confirm".
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
-- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in USD).
+- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in CAD).
 
 RECOMMENDATION MODE: when the user wants suggestions or multiple options, list them in chat only — do NOT call create_pending_order.
 ORDER MODE: only after they pick one item ("I want the…", "buy this one", "second option") call create_pending_order once for that product.
@@ -76,9 +76,7 @@ When the user asks to buy a specific product they already chose, ONLY CALL creat
 Do not split product names or prices into fake calendar events.
 Never create multiple pending orders for multiple recommended options in one turn.
 Order title and item names must be real products only — never assistant filler phrases.
-Grocery and Amazon: quote Canadian dollars only (CA$/CAD) — never US$ or USD in chat.
-Luxury / other (e.g. Louis Vuitton): quote US dollars only (US$/USD) — never CAD or conversion text in chat.
-State each price once; do not repeat price paragraphs.
+Quote every price in Canadian dollars only (CA$ format). Never US$, USD, conversion text, or dual currencies. State each price once.
 Do NOT call a tool for general questions or chit-chat.
 
 BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern). Always assume bedtime 11:00 PM unless the user explicitly names another — never infer bedtime from duration. "N hours before bedtime" = window ending at bedtime (3h → 8:00–11:00 PM, 2h → 9:00–11:00 PM), not now+N hours. Nothing after bedtime. No food within 4h of bedtime. No 12:00 AM–1:00 AM blocks for before-bed requests.
@@ -125,7 +123,7 @@ const tools = [
               properties: {
                 name: { type: "string" },
                 qty: { type: "number" },
-                estimated_price: { type: "number", description: "Unit price in USD" },
+                estimated_price: { type: "number", description: "Unit price in CAD" },
               },
               required: ["name"],
             },

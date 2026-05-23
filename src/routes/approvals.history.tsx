@@ -24,9 +24,9 @@ const groups: Array<{ label: string; entries: Entry[] }> = [
   {
     label: "This week",
     entries: [
-      { id: "h1", icon: <ShoppingBag className="h-4 w-4 text-success" />, title: "Grocery reorder", detail: "$48.10 • Whole Foods", decidedAt: "Mon 8:14 AM", decidedBy: "You", status: "approved" },
+      { id: "h1", icon: <ShoppingBag className="h-4 w-4 text-success" />, title: "Grocery reorder", detail: "CA$48.10 • Whole Foods", decidedAt: "Mon 8:14 AM", decidedBy: "You", status: "approved" },
       { id: "h2", icon: <Calendar className="h-4 w-4 text-primary" />, title: "Moved yoga to 7 AM", detail: "Calendar adjustment", decidedAt: "Mon 7:02 AM", decidedBy: "Simone", status: "approved" },
-      { id: "h3", icon: <Package className="h-4 w-4 text-champagne" />, title: "Amazon: AirPods case", detail: "$24.99 • 1-day shipping", decidedAt: "Sun 9:41 PM", decidedBy: "You", status: "approved" },
+      { id: "h3", icon: <Package className="h-4 w-4 text-champagne" />, title: "Amazon: AirPods case", detail: "CA$24.99 • 1-day shipping", decidedAt: "Sun 9:41 PM", decidedBy: "You", status: "approved" },
       { id: "h4", icon: <Package className="h-4 w-4 text-muted-foreground" />, title: "Skipped Amazon coffee pods", detail: "Monthly subscription paused", decidedAt: "Sun 9:12 AM", decidedBy: "You", status: "declined" },
     ],
   },
@@ -34,15 +34,15 @@ const groups: Array<{ label: string; entries: Entry[] }> = [
     label: "Last week",
     entries: [
       { id: "h5", icon: <Sparkles className="h-4 w-4 text-primary" />, title: "Booked recovery session", detail: "Sauna + cold plunge • 5:30 PM", decidedAt: "Fri 4:48 PM", decidedBy: "Simone", status: "approved" },
-      { id: "h6", icon: <DollarSign className="h-4 w-4 text-success" />, title: "Raised dining budget", detail: "$800 → $900", decidedAt: "Thu 11:20 AM", decidedBy: "You", status: "approved" },
+      { id: "h6", icon: <DollarSign className="h-4 w-4 text-success" />, title: "Raised dining budget", detail: "CA$800 → CA$900", decidedAt: "Thu 11:20 AM", decidedBy: "You", status: "approved" },
       { id: "h7", icon: <Calendar className="h-4 w-4 text-champagne" />, title: "Declined dentist reschedule", detail: "Kept original Friday slot", decidedAt: "Wed 2:01 PM", decidedBy: "You", status: "declined" },
-      { id: "h8", icon: <ShoppingBag className="h-4 w-4 text-success" />, title: "Refilled household supplies", detail: "$32.40 • Amazon", decidedAt: "Tue 9:33 AM", decidedBy: "Simone", status: "approved" },
+      { id: "h8", icon: <ShoppingBag className="h-4 w-4 text-success" />, title: "Refilled household supplies", detail: "CA$32.40 • Amazon", decidedAt: "Tue 9:33 AM", decidedBy: "Simone", status: "approved" },
     ],
   },
   {
     label: "Earlier",
     entries: [
-      { id: "h9", icon: <Package className="h-4 w-4 text-champagne" />, title: "New running shoes", detail: "$128.00 • approved budget", decidedAt: "May 3", decidedBy: "You", status: "approved" },
+      { id: "h9", icon: <Package className="h-4 w-4 text-champagne" />, title: "New running shoes", detail: "CA$128.00 • approved budget", decidedAt: "May 3", decidedBy: "You", status: "approved" },
       { id: "h10", icon: <ShoppingBag className="h-4 w-4 text-muted-foreground" />, title: "Cancelled wine club", detail: "Renewal blocked", decidedAt: "Apr 27", decidedBy: "You", status: "declined" },
     ],
   },
