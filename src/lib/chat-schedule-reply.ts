@@ -3,6 +3,7 @@ import {
   userRequestedLateFood,
   type FoodBedtimeEnforcementResult,
 } from "@/lib/boredom-schedule";
+import { isSchedulingWellnessIntent, isShoppingOrOrderChatIntent } from "@/lib/chat-intent";
 import {
   formatProposedRoutineChatBlock,
   stripStructuredScheduleLinesFromReply,
@@ -52,15 +53,39 @@ function supportiveFollowUp(eventTitle: string): string {
 /**
  * Align assistant copy with what actually happened (direct timeline vs Approvals queue).
  */
+function shouldAppendFoodBedtimeNotice(
+  userMessage: string | undefined,
+  removedFood: ScheduleItem[],
+  outcome: {
+    committed: ScheduleItem[];
+    pendingApproval: ScheduleItem[];
+    proposedRoutine?: ProposedRoutine;
+  },
+): boolean {
+  const msg = userMessage?.trim() ?? "";
+  if (isShoppingOrOrderChatIntent(msg)) return false;
+
+  if (removedFood.length > 0) return true;
+
+  if (!msg || !isSchedulingWellnessIntent(msg)) return false;
+
+  return userRequestedLateFood(msg);
+}
+
 function appendFoodBedtimeNotice(
   text: string,
   removedFood: ScheduleItem[],
-  foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">,
-  userMessage?: string,
+  foodBedtime: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff"> | undefined,
+  userMessage: string | undefined,
+  outcome: {
+    committed: ScheduleItem[];
+    pendingApproval: ScheduleItem[];
+    proposedRoutine?: ProposedRoutine;
+  },
 ): string {
-  const shouldNotify =
-    removedFood.length > 0 || Boolean(userMessage && userRequestedLateFood(userMessage));
-  if (!shouldNotify || !foodBedtime) return text;
+  if (!shouldAppendFoodBedtimeNotice(userMessage, removedFood, outcome) || !foodBedtime) {
+    return text;
+  }
   const notice = buildFoodBedtimeSuggestion(foodBedtime.bedtime, foodBedtime.foodCutoff);
   if (!text.trim()) return notice;
   if (text.includes(notice.slice(0, 40))) return text;
@@ -79,8 +104,19 @@ export function applyScheduleReplyOutcome(
   },
 ): string {
   const trimmed = reply.trim();
+  const noticeOutcome = {
+    committed: outcome.committed,
+    pendingApproval: outcome.pendingApproval,
+    proposedRoutine: outcome.proposedRoutine,
+  };
   const withFoodNotice = (body: string) =>
-    appendFoodBedtimeNotice(body, outcome.removedFood ?? [], outcome.foodBedtime, outcome.userMessage);
+    appendFoodBedtimeNotice(
+      body,
+      outcome.removedFood ?? [],
+      outcome.foodBedtime,
+      outcome.userMessage,
+      noticeOutcome,
+    );
 
   if (!trimmed) {
     if (outcome.committed.length > 0 && outcome.pendingApproval.length === 0) {

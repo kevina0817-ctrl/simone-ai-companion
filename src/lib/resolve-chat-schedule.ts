@@ -12,6 +12,7 @@ import {
   shouldRequireScheduleApproval,
   shouldRunScheduleTextFallbacks,
   shouldSuppressScheduleApprovals,
+  isShoppingOrOrderChatIntent,
 } from "@/lib/chat-intent";
 import {
   buildProposedRoutine,
@@ -107,7 +108,9 @@ export function resolveChatScheduleEvents(input: ResolveChatScheduleInput): Reso
     useApprovals: false,
   };
 
-  if (shouldSuppressScheduleApprovals(userMessage)) return empty;
+  if (shouldSuppressScheduleApprovals(userMessage) || isShoppingOrOrderChatIntent(userMessage)) {
+    return empty;
+  }
 
   const scheduleActions = actions.filter((a): a is ScheduleEventAction => a.kind === "schedule_event");
   const priorityContext = buildSchedulePriorityContext(userMessage);

@@ -1,4 +1,8 @@
-import { isBoredomOrFreeTimeIntent, isEveningPlanIntent } from "@/lib/boredom-schedule";
+import {
+  isBoredomOrFreeTimeIntent,
+  isEveningPlanIntent,
+  isRestOfNightBedtimePlanIntent,
+} from "@/lib/boredom-schedule";
 import { getPendingRoutineProposal } from "@/lib/routine-proposal-store";
 import { wantsBulkScheduleApprovals } from "@/lib/schedule-item";
 import type { PendingOrder } from "@/lib/pending-order";
@@ -143,9 +147,49 @@ export function shouldSuppressScheduleApprovals(userMessage: string): boolean {
   return isPurchaseOrderIntent(userMessage) && !isScheduleManagementIntent(userMessage);
 }
 
+const GROCERY_OR_SHOPPING_LIST =
+  /\b(?:grocery|groceries|grocery\s+list|shopping\s+list|whole\s+foods|trader\s+joe'?s?|costco|safeway|t&t|tnt)\b/i;
+
+const PENDING_ORDER_FLOW =
+  /\b(?:pending\s+(?:grocery\s+)?order|create\s+(?:a\s+)?(?:pending\s+)?(?:grocery|shopping)\s+order|grocery\s+order|shopping\s+order)\b/i;
+
+/**
+ * Grocery / Amazon / order approval chat — not calendar scheduling.
+ * Sleep and food-cutoff copy must not run on these turns.
+ */
+export function isShoppingOrOrderChatIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t) return false;
+  if (shouldSuppressScheduleApprovals(t)) return true;
+  if (shouldCreateOrderApproval(t) && !isScheduleManagementIntent(t)) return true;
+  if (isProductRecommendationRequest(t) && SHOPPING_NOUNS.test(t)) return true;
+  if (PENDING_ORDER_FLOW.test(t)) return true;
+  if (GROCERY_OR_SHOPPING_LIST.test(t) && !isScheduleManagementIntent(t)) return true;
+  if (
+    /\bamazon\b/i.test(t) &&
+    !isScheduleManagementIntent(t) &&
+    (isPurchaseOrderIntent(t) || isProductRecommendationRequest(t) || PRICE_HINT.test(t))
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Scheduling, bedtime routine, wellness evening plans, or calendar changes. */
+export function isSchedulingWellnessIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || isShoppingOrOrderChatIntent(t)) return false;
+  if (isScheduleManagementIntent(t)) return true;
+  if (isTiredEveningRoutineProposalRequest(t)) return true;
+  if (isRestOfNightBedtimePlanIntent(t)) return true;
+  if (isEveningPlanIntent(t)) return true;
+  return false;
+}
+
 /** Text fallback only when the user explicitly asked to book/queue events — never from assistant replies. */
 export function shouldRunScheduleTextFallbacks(userMessage: string): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
+  if (isShoppingOrOrderChatIntent(userMessage)) return false;
   if (isTiredEveningRoutineProposalRequest(userMessage)) return false;
   return (
     wantsBulkScheduleApprovals(userMessage) ||

@@ -433,7 +433,12 @@ export function enforceFoodBedtimeSchedule(
 export function userRequestedLateFood(userMessage: string): boolean {
   const t = userMessage.trim();
   if (!t || !FOOD_EVENT_PATTERN.test(t)) return false;
-  return /\b(?:dinner|lunch|breakfast|meal|snack|eat|food|restaurant|takeout|grocer)\b/i.test(t);
+  if (/\b(?:grocery|groceries|grocery\s+list|shopping\s+list|whole\s+foods|amazon|pending\s+order)\b/i.test(t)) {
+    return false;
+  }
+  return /\b(?:dinner|lunch|breakfast|meal|snack|eat|food|restaurant|takeout|schedule|calendar|tonight|bedtime)\b/i.test(
+    t,
+  );
 }
 
 export function buildFoodBedtimeSuggestion(
