@@ -1,15 +1,31 @@
 import { z } from "zod";
 import { shouldCreateOrderApproval } from "@/lib/chat-intent";
 import { formatCurrency } from "@/lib/format-currency";
+import {
+  computeGroceryLineTotal,
+  enrichGroceryLineItem,
+  inferGroceryPricingMode,
+  isGroceryPricedLineItem,
+  type GroceryPricingMode,
+} from "@/lib/grocery-pricing";
 import { inferOrderCategory, type OrderCategory } from "@/lib/order-category";
 import { isValidPendingOrder, isValidProductName } from "@/lib/order-validation";
 
 export type { OrderCategory } from "@/lib/order-category";
+export type { GroceryPricingMode } from "@/lib/grocery-pricing";
 
 export type OrderLineItem = {
   name: string;
   qty: number;
+  /** Unit price in CAD (same as unitPrice for grocery lines). */
   estimatedPrice: number;
+  /** Grocery: numeric amount paired with unit (e.g. 3 for "3 lbs"). */
+  quantity?: number;
+  /** Grocery: display measure — lbs, dozen, 32 oz, bag, etc. */
+  unit?: string;
+  pricingMode?: GroceryPricingMode;
+  /** Computed server-side from pricingMode — not from LLM. */
+  lineTotal?: number;
 };
 
 export type PendingOrderStatus = "pending_approval" | "approved" | "declined";
@@ -31,9 +47,38 @@ export type PendingOrder = {
 const lineItemSchema = z.object({
   name: z.string().min(1).max(120),
   qty: z.number().positive().optional(),
+  quantity: z.number().positive().optional(),
+  unit: z.string().max(40).optional(),
+  pricing_mode: z.enum(["per_unit", "package"]).optional(),
   estimated_price: z.number().nonnegative().optional(),
   price: z.number().nonnegative().optional(),
 });
+
+function normalizeLineItemFromTool(row: z.infer<typeof lineItemSchema>): OrderLineItem {
+  const unitPrice = Math.round((row.estimated_price ?? row.price ?? 0) * 100) / 100;
+  const quantity = row.quantity ?? row.qty ?? 1;
+  const qty = Math.max(1, Math.round(quantity));
+  const unit = row.unit?.trim() || undefined;
+  const pricingMode = row.pricing_mode ?? (unit ? inferGroceryPricingMode(unit) : undefined);
+
+  const base: OrderLineItem = {
+    name: row.name.trim(),
+    qty,
+    quantity,
+    unit,
+    estimatedPrice: unitPrice,
+    pricingMode,
+  };
+
+  if (unit || pricingMode) {
+    return enrichGroceryLineItem(base);
+  }
+
+  return {
+    ...base,
+    lineTotal: Math.round(unitPrice * qty * 100) / 100,
+  };
+}
 
 const orderToolSchema = z.object({
   title: z.string().min(1).max(120),
@@ -41,8 +86,14 @@ const orderToolSchema = z.object({
   items: z.array(lineItemSchema).min(1).max(40),
 });
 
-/** Line total = quantity × unit price (estimatedPrice is always per unit). */
+/** Line total — grocery uses pricingMode; other orders use count × unit price. */
 export function computeLineTotal(item: OrderLineItem): number {
+  if (isGroceryPricedLineItem(item) || item.pricingMode) {
+    return computeGroceryLineTotal(item);
+  }
+  if (item.lineTotal != null && Number.isFinite(item.lineTotal)) {
+    return Math.round(item.lineTotal * 100) / 100;
+  }
   return Math.round(item.estimatedPrice * item.qty * 100) / 100;
 }
 
@@ -50,9 +101,17 @@ export function computeOrderTotal(items: OrderLineItem[]): number {
   return Math.round(items.reduce((sum, i) => sum + computeLineTotal(i), 0) * 100) / 100;
 }
 
-/** Recompute total from line items — never trust LLM-stated order totals. */
+/** Recompute line totals and order total — never trust LLM-stated totals. */
 export function recomputePendingOrderTotals(order: PendingOrder): PendingOrder {
-  const items = order.items.map((item) => ({ ...item }));
+  const isGrocery = (order.category ?? inferOrderCategory(order.store, order.title)) === "grocery";
+  const items = order.items.map((item) => {
+    const copy = { ...item };
+    if (isGrocery && (copy.unit || copy.pricingMode)) {
+      return enrichGroceryLineItem(copy);
+    }
+    const lineTotal = Math.round(copy.estimatedPrice * copy.qty * 100) / 100;
+    return { ...copy, lineTotal };
+  });
   return {
     ...order,
     items,
@@ -77,15 +136,7 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
   const parsed = orderToolSchema.safeParse(args);
   if (!parsed.success) return null;
 
-  const items: OrderLineItem[] = parsed.data.items.map((row) => {
-    const qty = Math.max(1, Math.round(row.qty ?? 1));
-    const unit = row.estimated_price ?? row.price ?? 0;
-    return {
-      name: row.name.trim(),
-      qty,
-      estimatedPrice: Math.round(unit * 100) / 100,
-    };
-  });
+  const items: OrderLineItem[] = parsed.data.items.map((row) => normalizeLineItemFromTool(row));
 
   const title = parsed.data.title.trim();
   const store = parsed.data.store?.trim() || "Whole Foods";

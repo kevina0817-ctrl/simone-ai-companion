@@ -27,7 +27,7 @@ export function formatChatOrderPriceSummary(order: PendingOrder): string {
   const total = formatCurrency(normalized.totalEstimatedPrice);
 
   if (category === "grocery") {
-    return `Estimated Total Price: ${total}`;
+    return `Total Estimated Price: ${total}`;
   }
   if (category === "amazon") {
     return `Amazon order total: ${total}`;
@@ -76,9 +76,11 @@ function summaryAlreadyPresent(text: string, summary: string): boolean {
 
 function shouldAppendGroceryOrderTotal(userMessage: string, orders: PendingOrder[]): boolean {
   if (orders.length === 0) return false;
-  if (isInitialGroceryProposalTurn(userMessage)) return false;
-  const hasGrocery = groceryOrdersFromPending(orders).length > 0;
-  if (!hasGrocery) return true;
+  const grocery = groceryOrdersFromPending(orders);
+  if (grocery.length === 0) return !isInitialGroceryProposalTurn(userMessage);
+  const items = grocery.flatMap((o) => o.items);
+  const hasStructuredGrocery = items.some((i) => i.unit != null || i.pricingMode != null);
+  if (hasStructuredGrocery) return true;
   return isGroceryOrderConfirmTurn(userMessage);
 }
 
@@ -144,9 +146,6 @@ export function applyChatCurrencyToReply(
 
   if (cadItems.length > 0) {
     text = rebuildReplyWithCadShoppingItems(text, cadItems);
-    if (initialGroceryProposal) {
-      text = stripGroceryTotalFromReply(text);
-    }
     return finalizeCadShoppingReply(text, normalizedOrders, userMessage);
   }
 

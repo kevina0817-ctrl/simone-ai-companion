@@ -1,8 +1,9 @@
 import { inferOrderCategory, isCadDefaultOrderCategory } from "@/lib/order-category";
 import { formatCurrency } from "@/lib/format-currency";
+import { formatGroceryQuantityLabel, isGroceryPricedLineItem } from "@/lib/grocery-pricing";
 import { computeLineTotal, type OrderLineItem, type PendingOrder } from "@/lib/pending-order";
 
-/** One shopping line from numeric unit + qty — format at display time only. */
+/** Compact line for Amazon / count-based orders. */
 export function formatShoppingItemLine(index: number, item: OrderLineItem): string {
   const unit = item.estimatedPrice;
   const lineTotal = computeLineTotal(item);
@@ -12,7 +13,37 @@ export function formatShoppingItemLine(index: number, item: OrderLineItem): stri
   return `${index}. ${item.name} (${formatCurrency(unit)})`;
 }
 
+/** Grocery line with quantity, unit price, and line total (CAD only). */
+export function formatGroceryItemBlock(index: number, item: OrderLineItem): string {
+  const lineTotal = computeLineTotal(item);
+  const unitPrice = item.estimatedPrice;
+  const qtyLabel = formatGroceryQuantityLabel(item);
+  const mode = item.pricingMode;
+
+  let lineTotalLine: string;
+  if (mode === "package") {
+    lineTotalLine = `* Line Total: ${formatCurrency(lineTotal)}`;
+  } else {
+    const n = item.quantity ?? item.qty;
+    if (n > 1) {
+      lineTotalLine = `* Line Total: ${n} × ${formatCurrency(unitPrice)} = ${formatCurrency(lineTotal)}`;
+    } else {
+      lineTotalLine = `* Line Total: ${formatCurrency(lineTotal)}`;
+    }
+  }
+
+  return [
+    `${index}. ${item.name}`,
+    `* Quantity: ${qtyLabel}`,
+    `* Estimated Price: ${formatCurrency(unitPrice)}`,
+    lineTotalLine,
+  ].join("\n");
+}
+
 export function formatGroceryItemLine(index: number, item: OrderLineItem): string {
+  if (isGroceryPricedLineItem(item)) {
+    return formatGroceryItemBlock(index, item);
+  }
   return formatShoppingItemLine(index, item);
 }
 
@@ -21,13 +52,14 @@ export function formatGroceryListBlock(items: OrderLineItem[]): string {
 }
 
 export function formatShoppingListBlock(items: OrderLineItem[]): string {
-  return items.map((item, i) => formatShoppingItemLine(i + 1, item)).join("\n");
+  return items.map((item, i) => formatGroceryItemLine(i + 1, item)).join("\n\n");
 }
 
 function isGroceryListLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
   if (/^\s*(?:\d+\.|[-*•])\s/.test(t)) return true;
+  if (/^\s*\*\s*(?:Quantity|Estimated Price|Line Total)/i.test(t)) return true;
   if (/\b(?:CA\$|US\$|CACA\$|\$)\s*[\d,]+/.test(t)) return true;
   if (/\([\s$CUA\d.,]+\)/.test(t) && /\d+\.\d{2}/.test(t)) return true;
   return false;

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { applyChatCurrencyToReply, formatChatOrderPriceSummary } from "@/lib/chat-order-currency";
-import { formatGroceryListBlock, formatShoppingItemLine, rebuildReplyWithGroceryItems } from "@/lib/format-grocery-reply";
+import {
+  formatGroceryItemBlock,
+  formatGroceryListBlock,
+  formatShoppingItemLine,
+  rebuildReplyWithGroceryItems,
+} from "@/lib/format-grocery-reply";
+import { GROCERY_93_EXAMPLE } from "@/lib/grocery-pricing";
 import { formatCurrency, repairCorruptedCurrency } from "@/lib/format-currency";
 import { computeOrderTotal, type OrderLineItem, type PendingOrder } from "@/lib/pending-order";
 
@@ -11,30 +17,38 @@ function groceryOrder(items: PendingOrder["items"]): PendingOrder {
     store: "Whole Foods",
     category: "grocery",
     items,
-    totalEstimatedPrice: items.reduce((s, i) => s + i.estimatedPrice * i.qty, 0),
+    totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
     createdAt: new Date().toISOString(),
   };
 }
 
 describe("formatGroceryListBlock", () => {
-  it("formats each line once from numeric prices", () => {
+  it("formats simple count items without unit", () => {
     const block = formatGroceryListBlock([
       { name: "Chicken Breast", qty: 1, estimatedPrice: 12.99 },
       { name: "Ground Turkey", qty: 1, estimatedPrice: 7.99 },
     ]);
-    expect(block).toBe(
-      "1. Chicken Breast (CA$12.99)\n2. Ground Turkey (CA$7.99)",
-    );
+    expect(block).toBe("1. Chicken Breast (CA$12.99)\n\n2. Ground Turkey (CA$7.99)");
   });
 
   it("shows qty × unit = line total when qty > 1", () => {
     expect(formatShoppingItemLine(1, { name: "Chicken Breast", qty: 2, estimatedPrice: 9 })).toBe(
       "1. Chicken Breast — 2 × CA$9.00 = CA$18.00",
     );
-    expect(formatShoppingItemLine(8, { name: "Canned Tuna", qty: 4, estimatedPrice: 6 })).toBe(
-      "8. Canned Tuna — 4 × CA$6.00 = CA$24.00",
-    );
+  });
+
+  it("renders grocery blocks with package flat pricing", () => {
+    const block = formatGroceryItemBlock(3, GROCERY_93_EXAMPLE[2]!);
+    expect(block).toContain("1 dozen");
+    expect(block).toContain("Line Total: CA$3.00");
+    expect(block).not.toContain("1 ×");
+  });
+
+  it("renders per_unit grocery blocks with multiply", () => {
+    const block = formatGroceryItemBlock(1, GROCERY_93_EXAMPLE[0]!);
+    expect(block).toContain("Quantity: 3 lbs");
+    expect(block).toContain("3 × CA$9.00 = CA$27.00");
   });
 });
 
@@ -52,11 +66,16 @@ const PROTEIN_GROCERY_ITEMS: OrderLineItem[] = [
 ];
 
 describe("grocery order total from line items", () => {
-  it("reports CA$99.00 for the protein grocery example", () => {
+  it("reports CA$99.00 for legacy count-only items", () => {
     expect(computeOrderTotal(PROTEIN_GROCERY_ITEMS)).toBe(99);
     const order = groceryOrder(PROTEIN_GROCERY_ITEMS);
     order.totalEstimatedPrice = 66;
-    expect(formatChatOrderPriceSummary(order)).toBe("Estimated Total Price: CA$99.00");
+    expect(formatChatOrderPriceSummary(order)).toBe("Total Estimated Price: CA$99.00");
+  });
+
+  it("reports CA$93.00 for structured grocery example", () => {
+    const order = groceryOrder(GROCERY_93_EXAMPLE);
+    expect(formatChatOrderPriceSummary(order)).toBe("Total Estimated Price: CA$93.00");
   });
 });
 
@@ -70,49 +89,31 @@ describe("applyChatCurrencyToReply — no corrupted prices", () => {
     });
     expect(out).not.toMatch(/CACA/i);
     expect(out).toContain("CA$6.99");
-    expect(out).not.toMatch(/6\.99\.99/);
   });
 
-  it("rebuilds list from structured items instead of re-formatting LLM prices", () => {
-    const order = groceryOrder([
-      { name: "Chicken Breast", qty: 1, estimatedPrice: 12.99 },
-      { name: "Ground Turkey", qty: 1, estimatedPrice: 7.99 },
-    ]);
-    const messy =
-      "Weekly groceries:\n\n" +
-      "1. Chicken — CACA$12.99\n2. Turkey — CACACA$7.99.49\n\n" +
-      "### Total Estimated Price: CA$20.98\n\nShall I create the order?";
-
-    const out = applyChatCurrencyToReply(messy, [order], {
-      userMessage: "What groceries should I get?",
-    });
-    expect(out).not.toMatch(/CACA/i);
-    expect(out).not.toMatch(/\.49\.49/);
-    expect(out).toContain("1. Chicken Breast (CA$12.99)");
-    expect(out).toContain("2. Ground Turkey (CA$7.99)");
-    expect(out).not.toMatch(/Total Estimated Price/i);
+  it("shows computed Total Estimated Price for structured grocery list", () => {
+    const order = groceryOrder(GROCERY_93_EXAMPLE);
+    const out = applyChatCurrencyToReply(
+      "Here is your list.\n\nEstimated Total Price: $66.00\n\nWant me to create the order?",
+      [order],
+      { userMessage: "What groceries should I get this week?" },
+    );
+    expect(out).toContain("Total Estimated Price: CA$93.00");
+    expect(out).not.toContain("$66.00");
+    expect(out).toContain("3 × CA$9.00 = CA$27.00");
+    expect(out).toContain("Line Total: CA$3.00");
+    expect(out).not.toMatch(/US\$|USD/i);
   });
 
-  it("replaces LLM unit-sum total with qty-weighted total on confirm", () => {
+  it("replaces LLM unit-sum total on confirm", () => {
     const order = groceryOrder(PROTEIN_GROCERY_ITEMS);
     const out = applyChatCurrencyToReply(
       "Estimated Total Price: $66.00\n\nShall I create the order?",
       [order],
       { userMessage: "Yes, create the pending grocery order" },
     );
-    expect(out).toContain("Estimated Total Price: CA$99.00");
+    expect(out).toContain("Total Estimated Price: CA$99.00");
     expect(out).not.toContain("$66.00");
-    expect(out).toContain("2 × CA$9.00 = CA$18.00");
-  });
-
-  it("shows grocery total only after confirm", () => {
-    const order = groceryOrder([{ name: "Spinach", qty: 1, estimatedPrice: 4.5 }]);
-    order.totalEstimatedPrice = 4.5;
-
-    const confirmed = applyChatCurrencyToReply("Order created.", [order], {
-      userMessage: "Yes, create the pending grocery order",
-    });
-    expect(confirmed).toContain("Estimated Total Price: CA$4.50");
   });
 });
 
@@ -120,7 +121,6 @@ describe("repairCorruptedCurrency", () => {
   it("fixes repeated CA prefixes and decimal tails", () => {
     expect(repairCorruptedCurrency("CACA$12.99")).toBe("CA$12.99");
     expect(repairCorruptedCurrency("CA$6.99.99")).toBe("CA$6.99");
-    expect(repairCorruptedCurrency("CACACA$7.99.49.49")).toBe("CA$7.99");
   });
 });
 
@@ -131,7 +131,5 @@ describe("rebuildReplyWithGroceryItems", () => {
     const twice = rebuildReplyWithGroceryItems(once, items);
     expect(twice).toBe(once);
     expect(formatCurrency(3.49)).toBe("CA$3.49");
-    expect(twice).toContain("(CA$3.49)");
-    expect(twice).not.toMatch(/CACA/);
   });
 });

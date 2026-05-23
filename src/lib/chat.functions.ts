@@ -77,8 +77,8 @@ Do not turn product descriptions, prices, or shopping lists into calendar events
 Never call create_pending_order multiple times for multiple recommended options in the same turn.
 For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
-(name, qty, estimated_price as numbers in CAD). estimated_price is always the UNIT price per item; qty is how many to buy. The app computes line totals (qty × unit) and order total — never sum prices yourself or state an order total in chat.
-GROCERY LIST (first response): list item names and quantities in chat; put qty and unit estimated_price in create_pending_order for each line. Do NOT write CA$, US$, dollar amounts, or any order total in chat — the app renders prices. No grand total on the first pass — ask if they want a pending grocery order. After they agree to create the order, the app shows Estimated Total Price from qty × unit only.
+(name, quantity, unit, estimated_price, optional pricing_mode). estimated_price is UNIT price in CAD. For groceries: use quantity + unit (e.g. quantity 3, unit "lbs") — app uses pricing_mode: per_unit multiplies (3×9), package uses flat price (dozen, oz, bag, bottle). Never sum prices or state order totals in chat.
+GROCERY LIST: call create_pending_order with structured line items (quantity, unit, estimated_price). App renders line totals and Total Estimated Price in CAD — do not calculate totals yourself.
 AMAZON ORDERS: always CAD. Use numeric estimated_price in tools; the app shows CA$ only. Never US$, USD, US dollars, or conversion text in chat.
 For luxury/other retailers outside grocery and Amazon: you may mention one price estimate in prose when not using line items — still use CA$ only, never US$ or conversion text.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
@@ -133,8 +133,23 @@ const tools = [
                   type: "string",
                   description: "Line item product name only — same rules as order title",
                 },
-                qty: { type: "number" },
-                estimated_price: { type: "number", description: "Unit price in CAD" },
+                qty: { type: "number", description: "Legacy count — prefer quantity + unit for groceries" },
+                quantity: {
+                  type: "number",
+                  description: "Grocery: numeric amount for the unit (e.g. 3 for 3 lbs, 32 for 32 oz)",
+                },
+                unit: {
+                  type: "string",
+                  description:
+                    "Grocery measure: lbs, cups, heads, medium, dozen, oz, bag, can, etc. App sets pricing_mode from unit.",
+                },
+                pricing_mode: {
+                  type: "string",
+                  enum: ["per_unit", "package"],
+                  description:
+                    "per_unit: line = quantity × estimated_price. package: line = estimated_price only (dozen, oz, bag, bottle, …).",
+                },
+                estimated_price: { type: "number", description: "Unit price in CAD (per lb, per cup, or flat package price)" },
               },
               required: ["name"],
             },
