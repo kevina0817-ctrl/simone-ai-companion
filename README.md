@@ -128,9 +128,10 @@ Full template: [`.env.example`](.env.example)
 
 ### Shanshan Ao
 
-- Deck creation and presentation materials
-- Product idea generation and UX concepts
-- Frontend development and UI/UX implementation
+- Product ideation and business concept
+- User scenarios and feature planning
+- UI/UX design and frontend development
+- Product management and project planning
 
 ### Mark Qian
 
