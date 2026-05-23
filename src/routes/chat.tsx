@@ -152,17 +152,21 @@ function ChatPage() {
         ? result.reply
         : applyChatCurrencyToReply(result.reply, usdOrders);
 
-      const { committed, pendingApproval, cancelled } = await applyChatScheduleResult(qc, {
-        actions: toScheduleActions(result.actions),
-        userMessage: t,
-        assistantReply: replyText,
-        userId: user!.id,
-        nowIso,
-      });
+      const { committed, pendingApproval, cancelled, removedFood, foodBedtime } =
+        await applyChatScheduleResult(qc, {
+          actions: toScheduleActions(result.actions),
+          userMessage: t,
+          assistantReply: replyText,
+          userId: user!.id,
+          nowIso,
+        });
 
       const displayReply = applyScheduleReplyOutcome(replyText, {
         committed,
         pendingApproval,
+        removedFood,
+        foodBedtime,
+        userMessage: t,
       });
 
       if (committed.length > 0) {

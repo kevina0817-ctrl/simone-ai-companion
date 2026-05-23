@@ -27,6 +27,22 @@ const LATE_EVENING_EXPLICIT =
 export const DEFAULT_BEDTIME_HOUR = 23;
 export const DEFAULT_BEDTIME_MINUTE = 0;
 
+/** No food-related events at or after bedtime minus this many hours. */
+export const FOOD_CUTOFF_HOURS_BEFORE_BED = 4;
+
+/** Within this many hours of bedtime, evening plans use wind-down activities only. */
+export const WIND_DOWN_ONLY_HOURS_BEFORE_BED = 3;
+
+const FOOD_EVENT_PATTERN =
+  /\b(?:dinner|lunch|breakfast|brunch|meal(?:\s+prep)?|snack|grocer(?:y|ies)|grocery\s+(?:shop|run|haul)|healthy\s+grocery|whole\s+foods|eating\s+with|restaurant|café|cafe|takeout|take\s+out|food\s+run|late[\s-]?night\s+food|late[\s-]?night\s+snack|bubble\s+tea|drinks?\s+with|happy\s+hour|afternoon\s+tea|pizza|sushi|ramen|noodles|dine|dining|meal\s+planning|grab\s+(?:a\s+)?bite|order(?:ing)?\s+food|cook(?:ing)?\s+(?:dinner|lunch)|kitchen\s+time|protein\s+shake\s+run|food\s+with\s+friends)\b/i;
+
+const WIND_DOWN_ACTIVITY_PATTERN =
+  /\b(?:read(?:ing)?|stretch(?:ing)?|light\s+walk|evening\s+walk|journal(?:ing)?|meditat(?:e|ion)?|skincare|prepar(?:e|ing)\s+for\s+tomorrow|tomorrow\s+prep|relaxing\s+music|listen\s+to\s+music|wind[\s-]?down|breathwork|gentle\s+yoga|light\s+yoga|calm\s+down|bedtime\s+routine|pack\s+(?:bag|gym)|lay\s+out\s+clothes)\b/i;
+
+const BEDTIME_AT_PATTERN =
+  /\b(?:bed(?:time)?|sleep)\s*(?:at|by|around|is|:)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
+const IN_BED_BY_PATTERN = /\bin\s+bed\s+by\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
+
 export type ZonedClock = {
   timeZone: string;
   year: number;
@@ -198,11 +214,49 @@ export function alignPlanStartWithNow(
   return planStart;
 }
 
-/** Default 11:00 PM Toronto tonight; never after midnight for routine evening plans. */
+function inferMeridiem(hour: number, meridiem?: string): "am" | "pm" {
+  if (meridiem?.toLowerCase() === "am" || meridiem?.toLowerCase() === "pm") {
+    return meridiem.toLowerCase() as "am" | "pm";
+  }
+  if (hour === 12) return "pm";
+  if (hour >= 8 && hour <= 11) return "pm";
+  if (hour >= 1 && hour <= 6) return hour <= 5 ? "am" : "pm";
+  return "pm";
+}
+
+function wallHour24(hour12: number, meridiem: "am" | "pm"): number {
+  if (meridiem === "am") return hour12 === 12 ? 0 : hour12;
+  return hour12 === 12 ? 12 : hour12 + 12;
+}
+
+/** Parse an explicit bedtime from the user message (Toronto local wall clock). */
+export function parseBedtimeFromMessage(
+  userMessage: string,
+  now: ZonedClock,
+): ZonedClock | null {
+  const t = userMessage.trim();
+  if (!t) return null;
+
+  const match = t.match(BEDTIME_AT_PATTERN) ?? t.match(IN_BED_BY_PATTERN);
+  if (!match) return null;
+
+  const hour12 = Number(match[1]);
+  const minute = match[2] ? Number(match[2]) : 0;
+  const meridiem = inferMeridiem(hour12, match[3]);
+  const hour = wallHour24(hour12, meridiem);
+
+  return withClockTime(now, hour, minute, 0);
+}
+
+/** Default 11:00 PM Toronto tonight unless the user names a bedtime or late night. */
 export function getEveningBedtimeClock(
   now: ZonedClock,
   userMessage?: string,
 ): ZonedClock {
+  if (userMessage) {
+    const parsed = parseBedtimeFromMessage(userMessage, now);
+    if (parsed) return parsed;
+  }
   let hour = DEFAULT_BEDTIME_HOUR;
   let minute = DEFAULT_BEDTIME_MINUTE;
   if (userMessage && userExplicitlyWantsLateEvening(userMessage)) {
@@ -212,12 +266,123 @@ export function getEveningBedtimeClock(
   return withClockTime(now, hour, minute, 0);
 }
 
+export function resolveBedtimeClock(now: ZonedClock, userMessage?: string): ZonedClock {
+  return getEveningBedtimeClock(now, userMessage);
+}
+
+export function subtractMinutesFromClock(clock: ZonedClock, minutes: number): ZonedClock {
+  const instant = new Date(clockToInstant(clock).getTime() - minutes * 60_000);
+  return getZonedClock(instant, clock.timeZone);
+}
+
+export function getFoodCutoffClock(bedtime: ZonedClock): ZonedClock {
+  return subtractMinutesFromClock(bedtime, FOOD_CUTOFF_HOURS_BEFORE_BED * 60);
+}
+
+export function isFoodRelatedScheduleEvent(title: string, subtitle?: string | null): boolean {
+  const text = `${title} ${subtitle ?? ""}`.trim();
+  if (!text) return false;
+  return FOOD_EVENT_PATTERN.test(text);
+}
+
+export function isWindDownOnlyActivity(title: string, subtitle?: string | null): boolean {
+  const text = `${title} ${subtitle ?? ""}`.trim();
+  if (!text) return false;
+  if (isFoodRelatedScheduleEvent(title, subtitle)) return false;
+  return WIND_DOWN_ACTIVITY_PATTERN.test(text);
+}
+
+function isSameTorontoCalendarDay(iso: string, clock: ZonedClock): boolean {
+  const z = getZonedClock(new Date(iso), clock.timeZone);
+  return z.year === clock.year && z.month === clock.month && z.day === clock.day;
+}
+
+export function isEventStartAtOrAfterFoodCutoff(
+  event: Pick<ScheduleItem, "start_time">,
+  foodCutoff: ZonedClock,
+): boolean {
+  if (!isSameTorontoCalendarDay(event.start_time, foodCutoff)) return false;
+  const start = getZonedClock(new Date(event.start_time), foodCutoff.timeZone);
+  return totalMinutes(start) >= totalMinutes(foodCutoff);
+}
+
+export type FoodBedtimeEnforcementResult = {
+  events: ScheduleItem[];
+  removedFood: ScheduleItem[];
+  bedtime: ZonedClock;
+  foodCutoff: ZonedClock;
+};
+
+/**
+ * Drop food events at/after food cutoff (bedtime − 4h). For evening plans within 3h of
+ * bedtime, keep only wind-down non-food activities.
+ */
+export function enforceFoodBedtimeSchedule(
+  events: ScheduleItem[],
+  opts: {
+    nowIso?: string;
+    userMessage?: string;
+    eveningPlan?: boolean;
+    timeZone?: string;
+  },
+): FoodBedtimeEnforcementResult {
+  const timeZone = opts.timeZone ?? EVENING_PLAN_TIMEZONE;
+  const instant = opts.nowIso ? new Date(opts.nowIso) : new Date();
+  const now = getZonedClock(instant, timeZone);
+  const bedtime = resolveBedtimeClock(now, opts.userMessage);
+  const foodCutoff = getFoodCutoffClock(bedtime);
+  const eveningPlan = opts.eveningPlan ?? isEveningPlanIntent(opts.userMessage ?? "");
+  const limits = getEveningPlanLimits(instant, opts.userMessage, timeZone);
+  const within3HoursOfBedtime = limits.minutesUntilBedtime <= WIND_DOWN_ONLY_HOURS_BEFORE_BED * 60;
+
+  const kept: ScheduleItem[] = [];
+  const removedFood: ScheduleItem[] = [];
+
+  for (const ev of events) {
+    const isFood = isFoodRelatedScheduleEvent(ev.title, ev.subtitle);
+    const tooLateForFood = isFood && isEventStartAtOrAfterFoodCutoff(ev, foodCutoff);
+
+    if (tooLateForFood) {
+      removedFood.push(ev);
+      continue;
+    }
+
+    if (eveningPlan && within3HoursOfBedtime && !isWindDownOnlyActivity(ev.title, ev.subtitle)) {
+      if (isFood) removedFood.push(ev);
+      continue;
+    }
+
+    kept.push(ev);
+  }
+
+  return { events: kept, removedFood, bedtime, foodCutoff };
+}
+
+export function userRequestedLateFood(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || !FOOD_EVENT_PATTERN.test(t)) return false;
+  return /\b(?:dinner|lunch|breakfast|meal|snack|eat|food|restaurant|takeout|grocer)\b/i.test(t);
+}
+
+export function buildFoodBedtimeSuggestion(
+  bedtime: ZonedClock,
+  foodCutoff: ZonedClock,
+): string {
+  return (
+    `For healthier sleep, I don't schedule food-related activities after ${formatZonedTime(foodCutoff)} ` +
+    `(about four hours before a ${formatZonedTime(bedtime)} bedtime). ` +
+    `I'd suggest moving dinner earlier or choosing a light wind-down instead — like reading, stretching, journaling, or meditation.`
+  );
+}
+
 export type EveningPlanLimits = {
   planStart: ZonedClock;
   bedtime: ZonedClock;
+  foodCutoff: ZonedClock;
   minutesUntilBedtime: number;
   nearBedtime: boolean;
   veryNearBedtime: boolean;
+  within3HoursOfBedtime: boolean;
   maxEvents: number;
   maxBlockMinutes: number;
   lightActivitiesOnly: boolean;
@@ -231,7 +396,8 @@ export function getEveningPlanLimits(
   const now = getZonedClock(instant, timeZone);
   let planStart = roundUpToNextQuarterHour(instant, timeZone);
   planStart = alignPlanStartWithNow(planStart, now, instant);
-  const bedtime = getEveningBedtimeClock(now, userMessage);
+  const bedtime = resolveBedtimeClock(now, userMessage);
+  const foodCutoff = getFoodCutoffClock(bedtime);
   const planStartInstant = clockToInstant(planStart);
   const bedtimeInstant = clockToInstant(bedtime);
   const minutesUntilBedtime = Math.max(
@@ -240,7 +406,9 @@ export function getEveningPlanLimits(
   );
   const veryNearBedtime = minutesUntilBedtime <= 30;
   const nearBedtime = minutesUntilBedtime <= 60;
-  const lightActivitiesOnly = veryNearBedtime || totalMinutes(planStart) >= 22 * 60;
+  const within3HoursOfBedtime = minutesUntilBedtime <= WIND_DOWN_ONLY_HOURS_BEFORE_BED * 60;
+  const lightActivitiesOnly =
+    veryNearBedtime || within3HoursOfBedtime || totalMinutes(planStart) >= 22 * 60;
 
   let maxEvents = 4;
   let maxBlockMinutes = 45;
@@ -258,9 +426,11 @@ export function getEveningPlanLimits(
   return {
     planStart,
     bedtime,
+    foodCutoff,
     minutesUntilBedtime,
     nearBedtime,
     veryNearBedtime,
+    within3HoursOfBedtime,
     maxEvents,
     maxBlockMinutes,
     lightActivitiesOnly,
@@ -289,7 +459,9 @@ export function coerceBoredomScheduleEvents(
 ): ScheduleItem[] {
   const instant = opts.nowIso ? new Date(opts.nowIso) : opts.now ?? new Date();
   const limits = getEveningPlanLimits(instant, opts.userMessage);
-  const { planStart, bedtime, maxEvents, maxBlockMinutes } = limits;
+  const { planStart, bedtime, foodCutoff, maxEvents, maxBlockMinutes, within3HoursOfBedtime } =
+    limits;
+  const foodCutoffMinutes = totalMinutes(foodCutoff);
 
   if (limits.minutesUntilBedtime < 10) {
     return [];
@@ -301,9 +473,17 @@ export function coerceBoredomScheduleEvents(
   );
   const result: ScheduleItem[] = [];
 
-  for (const ev of sorted.slice(0, maxEvents)) {
+  for (const ev of sorted.slice(0, maxEvents * 2)) {
+    if (result.length >= maxEvents) break;
     if (totalMinutes(cursor) >= totalMinutes(bedtime)) break;
     if (cursor.hour >= 0 && cursor.hour < 6) break;
+
+    if (isFoodRelatedScheduleEvent(ev.title, ev.subtitle) && totalMinutes(cursor) >= foodCutoffMinutes) {
+      continue;
+    }
+    if (within3HoursOfBedtime && !isWindDownOnlyActivity(ev.title, ev.subtitle)) {
+      continue;
+    }
 
     const durationMs = eventDurationMs(ev, maxBlockMinutes);
     const startInstant = clockToInstant(cursor);
@@ -327,7 +507,11 @@ export function coerceBoredomScheduleEvents(
     cursor = getZonedClock(endInstant, EVENING_PLAN_TIMEZONE);
   }
 
-  return result;
+  return enforceFoodBedtimeSchedule(result, {
+    nowIso: opts.nowIso ?? instant.toISOString(),
+    userMessage: opts.userMessage,
+    eveningPlan: true,
+  }).events;
 }
 
 export function formatZonedTime(clock: ZonedClock): string {
@@ -348,8 +532,16 @@ export function buildBoredomPlanningContextBlock(opts: {
   const instant = new Date(opts.nowIso);
   const limits = getEveningPlanLimits(instant, opts.userMessage);
   const now = getZonedClock(instant, EVENING_PLAN_TIMEZONE);
-  const { planStart, bedtime, lightActivitiesOnly, veryNearBedtime, nearBedtime, maxEvents } =
-    limits;
+  const {
+    planStart,
+    bedtime,
+    foodCutoff,
+    lightActivitiesOnly,
+    veryNearBedtime,
+    nearBedtime,
+    within3HoursOfBedtime,
+    maxEvents,
+  } = limits;
 
   const todayDate = instant.toLocaleDateString("en-CA", {
     timeZone: EVENING_PLAN_TIMEZONE,
@@ -370,7 +562,8 @@ export function buildBoredomPlanningContextBlock(opts: {
     `- Current Eastern Time now: ${formatZonedTime(now)}.`,
     `- First activity starts at ${formatZonedTime(planStart)} (next quarter-hour from now — NOT midnight unless it is actually near midnight).`,
     `- Example first start_time ISO: ${planStartIso}`,
-    `- Last activity must end by ${formatZonedTime(bedtime)} (healthy default bedtime; example end bound: ${bedtimeIso}).`,
+    `- Last activity must end by ${formatZonedTime(bedtime)} (healthy default bedtime unless the user named one; example end bound: ${bedtimeIso}).`,
+    `- FOOD CUTOFF: Do NOT schedule any food-related activity at or after ${formatZonedTime(foodCutoff)} (${FOOD_CUTOFF_HOURS_BEFORE_BED} hours before bedtime). This includes dinner, lunch, snacks, meal prep, groceries, restaurants, drinks/late-night food, or eating with friends.`,
     "- Never schedule optional activities after 11:00 PM or after midnight (no 12:00 AM–1:00 AM blocks when the user is planning their evening).",
     `- Schedule at most ${maxEvents} activities in this window.`,
     "- Space activities sequentially from the quarter-hour start until bedtime.",
@@ -378,13 +571,18 @@ export function buildBoredomPlanningContextBlock(opts: {
     "- Set level to Low for every activity in this rest-of-night / tired / before-bedtime plan (green priority) — never High or Medium.",
   ];
 
+  if (veryNearBedtime || within3HoursOfBedtime) {
+    lines.push(
+      `- Within ${WIND_DOWN_ONLY_HOURS_BEFORE_BED} hours of bedtime: schedule ONLY non-food wind-down activities (reading, stretching, light walk, journaling, meditation, skincare, preparing for tomorrow, relaxing music) — no meals, snacks, restaurants, or grocery runs.`,
+    );
+  }
   if (veryNearBedtime) {
     lines.push(
-      "- It is very close to bedtime: suggest only 1 light wind-down activity (reading, tea, stretch, brief walk) — no late-night outings or screens marathons.",
+      "- It is very close to bedtime: suggest only 1 light wind-down activity — no late-night outings or screen marathons.",
     );
   } else if (nearBedtime || lightActivitiesOnly) {
     lines.push(
-      "- Keep the plan short with lighter activities only (wind-down, light snack, reading, gentle walk) — no heavy outings.",
+      "- Keep the plan short with lighter wind-down activities only (reading, gentle walk, meditation) — no heavy outings and no food after the food cutoff.",
     );
   } else {
     lines.push(
@@ -392,6 +590,10 @@ export function buildBoredomPlanningContextBlock(opts: {
         `${formatZonedTime(planStart)} to ${formatZonedTime(bedtime)}…"`,
     );
   }
+
+  lines.push(
+    "- If the user asks for dinner or food too late, politely suggest moving the meal earlier or a light non-food wind-down instead — do not call schedule_event for food past the cutoff.",
+  );
 
   return lines.join("\n");
 }

@@ -28,8 +28,10 @@ import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/li
 
 import {
   coerceBoredomScheduleEvents,
+  enforceFoodBedtimeSchedule,
   isEveningPlanIntent,
   userExplicitlyWantsTomorrow,
+  type FoodBedtimeEnforcementResult,
 } from "@/lib/boredom-schedule";
 import {
   shouldParseStructuredScheduleFromReply,
@@ -212,6 +214,9 @@ export type ApplyChatScheduleResult = {
   /** Sent to Approvals for review. */
   pendingApproval: ScheduleItem[];
   cancelled: ScheduleItem[];
+  /** Food events removed for starting at/after bedtime − 4h. */
+  removedFood: ScheduleItem[];
+  foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">;
 };
 
 /**
@@ -224,6 +229,8 @@ export async function applyChatScheduleResult(
   const cancelled: ScheduleItem[] = [];
   const committed: ScheduleItem[] = [];
   const pendingApproval: ScheduleItem[] = [];
+  let removedFood: ScheduleItem[] = [];
+  let foodBedtime: ApplyChatScheduleResult["foodBedtime"];
   const byTitle = new Map<string, ScheduleItem>();
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
@@ -260,13 +267,24 @@ export async function applyChatScheduleResult(
       (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
     );
 
-    if (events.length > 0 && (priorityContext?.eveningLeisurePlan ?? isEveningPlanIntent(userMessage))) {
+    const eveningPlan = priorityContext?.eveningLeisurePlan ?? isEveningPlanIntent(userMessage);
+
+    if (events.length > 0 && eveningPlan) {
       events = coerceBoredomScheduleEvents(events, {
         nowIso,
         userMessage,
         todayEvents,
       });
     }
+
+    const foodEnforced = enforceFoodBedtimeSchedule(events, {
+      nowIso,
+      userMessage,
+      eveningPlan,
+    });
+    events = foodEnforced.events;
+    removedFood = foodEnforced.removedFood;
+    foodBedtime = { bedtime: foodEnforced.bedtime, foodCutoff: foodEnforced.foodCutoff };
 
     events = applySchedulePriorityToItems(events, priorityContext);
 
@@ -323,5 +341,5 @@ export async function applyChatScheduleResult(
     await qc.invalidateQueries({ queryKey: todayQueryKey(userId) });
   }
 
-  return { committed, pendingApproval, cancelled };
+  return { committed, pendingApproval, cancelled, removedFood, foodBedtime };
 }

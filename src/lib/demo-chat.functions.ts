@@ -66,7 +66,7 @@ Quote prices as US dollars (e.g. "approximately US$950") — never call unconver
 For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
 Do NOT call a tool for general questions or chit-chat.
 
-BOREDOM / EVENING: Use America/Toronto (Eastern) from planning context. Schedule TODAY only from the next quarter-hour after NOW until 11:00 PM — never 12:00 AM–1:00 AM blocks unless they ask to stay up late (7:05 PM now → first block 7:15 PM, not midnight). Light, short plans if it is almost bedtime.`;
+BOREDOM / EVENING: Use America/Toronto (Eastern) from planning context. Schedule TODAY only from the next quarter-hour after NOW until bedtime (default 11:00 PM). No food-related events within 4 hours before bedtime (7:00 PM cutoff for 11:00 PM sleep). Within 3 hours of bedtime, only non-food wind-down activities. Never 12:00 AM–1:00 AM blocks unless they ask to stay up late. If dinner is too late, suggest moving it earlier or a light wind-down.`;
 
 const tools = [
   {

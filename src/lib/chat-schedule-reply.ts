@@ -1,3 +1,8 @@
+import {
+  buildFoodBedtimeSuggestion,
+  userRequestedLateFood,
+  type FoodBedtimeEnforcementResult,
+} from "@/lib/boredom-schedule";
 import { formatScheduleTimeRange, type ScheduleItem } from "@/lib/schedule-item";
 
 const APPROVAL_PHRASE =
@@ -42,15 +47,42 @@ function supportiveFollowUp(eventTitle: string): string {
 /**
  * Align assistant copy with what actually happened (direct timeline vs Approvals queue).
  */
+function appendFoodBedtimeNotice(
+  text: string,
+  removedFood: ScheduleItem[],
+  foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">,
+  userMessage?: string,
+): string {
+  const shouldNotify =
+    removedFood.length > 0 || Boolean(userMessage && userRequestedLateFood(userMessage));
+  if (!shouldNotify || !foodBedtime) return text;
+  const notice = buildFoodBedtimeSuggestion(foodBedtime.bedtime, foodBedtime.foodCutoff);
+  if (!text.trim()) return notice;
+  if (text.includes(notice.slice(0, 40))) return text;
+  return `${text.trim()}\n\n${notice}`;
+}
+
 export function applyScheduleReplyOutcome(
   reply: string,
-  outcome: { committed: ScheduleItem[]; pendingApproval: ScheduleItem[] },
+  outcome: {
+    committed: ScheduleItem[];
+    pendingApproval: ScheduleItem[];
+    removedFood?: ScheduleItem[];
+    userMessage?: string;
+    foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">;
+  },
 ): string {
   const trimmed = reply.trim();
+  const withFoodNotice = (body: string) =>
+    appendFoodBedtimeNotice(body, outcome.removedFood ?? [], outcome.foodBedtime, outcome.userMessage);
+
   if (!trimmed) {
     if (outcome.committed.length > 0 && outcome.pendingApproval.length === 0) {
       const lead = buildDirectConfirmation(outcome.committed);
-      return `${lead}\n\n${supportiveFollowUp(outcome.committed[0]!.title)}`;
+      return withFoodNotice(`${lead}\n\n${supportiveFollowUp(outcome.committed[0]!.title)}`);
+    }
+    if ((outcome.removedFood?.length ?? 0) > 0) {
+      return withFoodNotice("");
     }
     return trimmed;
   }
@@ -61,15 +93,15 @@ export function applyScheduleReplyOutcome(
     const followUp = supportiveFollowUp(outcome.committed[0]!.title);
 
     if (stripped.length < 40 || APPROVAL_PHRASE.test(trimmed)) {
-      return `${lead}\n\n${followUp}`;
+      return withFoodNotice(`${lead}\n\n${followUp}`);
     }
 
     if (!/\b(?:added|scheduled|booked|set up|on your schedule)\b/i.test(stripped)) {
-      return `${lead}\n\n${stripped}\n\n${followUp}`;
+      return withFoodNotice(`${lead}\n\n${stripped}\n\n${followUp}`);
     }
 
-    return `${stripped}\n\n${followUp}`;
+    return withFoodNotice(`${stripped}\n\n${followUp}`);
   }
 
-  return trimmed;
+  return withFoodNotice(trimmed);
 }
