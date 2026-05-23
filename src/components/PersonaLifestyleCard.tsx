@@ -1,5 +1,15 @@
 import type { ReactNode } from "react";
-import { Activity, Bell, Coffee, Droplets, Footprints, Gamepad2, Moon } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  Coffee,
+  Droplets,
+  Footprints,
+  Gamepad2,
+  HeartPulse,
+  Moon,
+  UtensilsCrossed,
+} from "lucide-react";
 import { HomeCollapsibleSection } from "@/components/HomeCollapsibleSection";
 import type { HomeSectionCollapse } from "@/hooks/useHomeSectionCollapse";
 import type { StoredPersonaLifestyle } from "@/lib/persona-registry";
@@ -18,6 +28,7 @@ export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
         sectionId="recovery"
         sections={sections}
         title="Recovery & Body"
+        icon={<HeartPulse className="h-4 w-4 text-primary" />}
         className="mt-0"
       >
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -89,6 +100,7 @@ export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
         sectionId="mealsHabits"
         sections={sections}
         title="Meals & Habits"
+        icon={<UtensilsCrossed className="h-4 w-4 text-champagne" />}
         className="bg-card/60 shadow-none"
         contentClassName="text-[11px] text-muted-foreground"
       >
