@@ -9,7 +9,8 @@ import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import {
   buildBoredomPlanningContextBlock,
   EVENING_PLAN_TIMEZONE,
-  isBoredomOrFreeTimeIntent,
+  getTorontoCalendarDayBounds,
+  isEveningPlanIntent,
 } from "@/lib/boredom-schedule";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
@@ -43,7 +44,7 @@ MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with mul
 When the schedule_event tool returns added_to_today_schedule: true, the event is already live — use past-tense direct confirmation only.
 When the tool returns pending_approval: true, the event is waiting in Approvals — you may mention reviewing or confirming there.
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
-BOREDOM / EVENING ACTIVITIES: When the user is bored or wants evening suggestions — use America/Toronto (Eastern Time) from the planning context. Schedule ONLY for TODAY from the next quarter-hour until 11:00 PM bedtime (never 11:15 PM–1:00 AM blocks unless they explicitly ask to stay up late). First block: 7:05 PM → 7:15 PM Eastern. Keep plans realistic and healthy; if it is almost bedtime, suggest only 1–2 light wind-down activities.
+BOREDOM / EVENING ACTIVITIES: When the user is bored, asks what to do tonight, or wants a plan from now until sleep/bedtime — use America/Toronto (Eastern Time) from the planning context. Schedule ONLY for TODAY from the next quarter-hour after NOW until 11:00 PM bedtime (never 12:00 AM–1:00 AM blocks unless they explicitly ask to stay up late). Example: if now is 7:05 PM Eastern, first block starts 7:15 PM — NOT midnight. Keep plans realistic and healthy; if it is almost bedtime, suggest only 1–2 light wind-down activities.
 When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
 For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
 When the user asks to add all events to Approvals, call schedule_event separately for each activity with title, start_time, and end_time.
@@ -148,24 +149,24 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     });
 
     const nowIso = data.nowIso ?? new Date().toISOString();
-    const tz = isBoredomOrFreeTimeIntent(data.message)
-      ? EVENING_PLAN_TIMEZONE
-      : (data.timezone ?? "UTC");
+    const eveningPlan = isEveningPlanIntent(data.message);
+    const tz = eveningPlan ? EVENING_PLAN_TIMEZONE : (data.timezone ?? "UTC");
     const ref = new Date(nowIso);
+    const torontoDay = getTorontoCalendarDayBounds(ref);
     const dayStartIso =
       data.dayStartIso ??
-      (() => {
+      (eveningPlan ? torontoDay.startIso : (() => {
         const s = new Date(ref);
         s.setHours(0, 0, 0, 0);
         return s.toISOString();
-      })();
+      })());
     const dayEndIso =
       data.dayEndIso ??
-      (() => {
+      (eveningPlan ? torontoDay.endIso : (() => {
         const e = new Date(ref);
         e.setHours(23, 59, 59, 999);
         return e.toISOString();
-      })();
+      })());
     const today = dayStartIso.slice(0, 10);
 
     const fetchTodayEvents = async () => {
@@ -215,7 +216,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
-      ...(isBoredomOrFreeTimeIntent(data.message)
+      ...(isEveningPlanIntent(data.message)
         ? [
             {
               role: "system",

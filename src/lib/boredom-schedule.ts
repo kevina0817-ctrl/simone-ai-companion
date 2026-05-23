@@ -7,6 +7,10 @@ export const EVENING_PLAN_TIMEZONE = "America/Toronto";
 const BOREDOM_INTENT =
   /\b(?:i\s*(?:'m|am)|feeling)\s+bored\b|\bi\s+feel\s+bored\b|\b(?:i\s*)?bored\b.*\b(?:what|something|activities?|plan|do)\b|\bwhat\s+should\s+i\s+do(?:\s+now|\s+tonight)?\b|\bhelp\s+me\s+plan\s+(?:the\s+)?rest\s+of\s+(?:my\s+)?tonight\b|\bsomething\s+to\s+do\s+(?:now|tonight)\b|\b(?:have|got)\s+nothing\s+to\s+do\b|\bkill\s+time\b|\bneed\s+(?:something|ideas?)\s+to\s+do\b|\bevening\s+activit|\bactivit(?:y|ies)\s+for\s+tonight\b|\bsuggest(?:ions?)?\s+(?:for\s+)?(?:this\s+)?evening\b|\bwhat\s+to\s+do\s+tonight\b/i;
 
+/** "From now until sleep/bedtime" and similar evening planning (not only boredom). */
+const EVENING_PLAN_INTENT =
+  /\b(?:help\s+me\s+plan\s+(?:my\s+)?(?:schedule|night|evening)\s+from\s+now|plan\s+(?:my\s+)?(?:schedule|night|evening)\s+from\s+now|from\s+now\s+until\s+(?:sleep|bed(?:time)?)|now\s+until\s+(?:sleep|bed(?:time)?)|until\s+(?:i\s+)?(?:sleep|bed(?:time)?)|rest\s+of\s+(?:my\s+)?(?:night|evening)|for\s+the\s+rest\s+of\s+tonight|what\s+should\s+i\s+do\s+for\s+the\s+rest\s+of\s+tonight|what\s+should\s+i\s+do\s+tonight|tonight'?s?\s+(?:plan|schedule))\b/i;
+
 const TOMORROW_EXPLICIT =
   /\b(?:tomorrow|next\s+day|the\s+morning)\b/i;
 
@@ -107,6 +111,34 @@ export function isBoredomOrFreeTimeIntent(userMessage: string): boolean {
   return BOREDOM_INTENT.test(t);
 }
 
+/** Evening / tonight planning from now → bedtime (America/Toronto). */
+export function isEveningPlanIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t) return false;
+  if (isBoredomOrFreeTimeIntent(t)) return true;
+  if (EVENING_PLAN_INTENT.test(t)) return true;
+  if (TONIGHT_HINT.test(t) && /\b(?:plan|schedule|activit|what\s+should\s+i\s+do)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+function isLateNightMorningHour(hour: number): boolean {
+  return hour >= 0 && hour < 6;
+}
+
+function isEveningTorontoHour(hour: number): boolean {
+  return hour >= 17 && hour <= 23;
+}
+
+/** Toronto calendar-day bounds for schedule queries (not server-local midnight). */
+export function getTorontoCalendarDayBounds(instant = new Date()) {
+  const z = getZonedClock(instant, EVENING_PLAN_TIMEZONE);
+  const start = zonedWallTimeToInstant(z.year, z.month, z.day, 0, 0, 0, EVENING_PLAN_TIMEZONE);
+  const end = zonedWallTimeToInstant(z.year, z.month, z.day, 23, 59, 59, EVENING_PLAN_TIMEZONE);
+  return { start, end, startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
 export function userExplicitlyWantsTomorrow(userMessage: string): boolean {
   const t = userMessage.trim();
   if (!t || !TOMORROW_EXPLICIT.test(t)) return false;
@@ -127,8 +159,23 @@ export function roundUpToNextQuarterHour(
   const hasSubMinute = z.second > 0;
   const totalMins = z.hour * 60 + z.minute;
   const bump = hasSubMinute ? 1 : 0;
-  const ceiled = Math.ceil((totalMins + bump) / 15) * 15;
+  let ceiled = Math.ceil((totalMins + bump) / 15) * 15;
+  if (ceiled >= 24 * 60) {
+    return withClockTime(z, 23, 45, 0);
+  }
   return withClockTime(z, Math.floor(ceiled / 60), ceiled % 60, 0);
+}
+
+/** If plan start landed after midnight while "now" is still evening, re-anchor to now. */
+export function alignPlanStartWithNow(
+  planStart: ZonedClock,
+  now: ZonedClock,
+  instant: Date,
+): ZonedClock {
+  if (isEveningTorontoHour(now.hour) && isLateNightMorningHour(planStart.hour)) {
+    return roundUpToNextQuarterHour(instant, now.timeZone);
+  }
+  return planStart;
 }
 
 /** Default 11:00 PM Toronto tonight; never after midnight for routine evening plans. */
@@ -162,9 +209,15 @@ export function getEveningPlanLimits(
   timeZone: string = EVENING_PLAN_TIMEZONE,
 ): EveningPlanLimits {
   const now = getZonedClock(instant, timeZone);
-  const planStart = roundUpToNextQuarterHour(instant, timeZone);
+  let planStart = roundUpToNextQuarterHour(instant, timeZone);
+  planStart = alignPlanStartWithNow(planStart, now, instant);
   const bedtime = getEveningBedtimeClock(now, userMessage);
-  const minutesUntilBedtime = Math.max(0, totalMinutes(bedtime) - totalMinutes(planStart));
+  const planStartInstant = clockToInstant(planStart);
+  const bedtimeInstant = clockToInstant(bedtime);
+  const minutesUntilBedtime = Math.max(
+    0,
+    Math.floor((bedtimeInstant.getTime() - planStartInstant.getTime()) / 60_000),
+  );
   const veryNearBedtime = minutesUntilBedtime <= 30;
   const nearBedtime = minutesUntilBedtime <= 60;
   const lightActivitiesOnly = veryNearBedtime || totalMinutes(planStart) >= 22 * 60;
@@ -274,6 +327,7 @@ export function buildBoredomPlanningContextBlock(opts: {
 }): string {
   const instant = new Date(opts.nowIso);
   const limits = getEveningPlanLimits(instant, opts.userMessage);
+  const now = getZonedClock(instant, EVENING_PLAN_TIMEZONE);
   const { planStart, bedtime, lightActivitiesOnly, veryNearBedtime, nearBedtime, maxEvents } =
     limits;
 
@@ -286,13 +340,18 @@ export function buildBoredomPlanningContextBlock(opts: {
 
   const tzLabel = "America/Toronto (Eastern Time)";
 
+  const planStartIso = clockToInstant(planStart).toISOString();
+  const bedtimeIso = clockToInstant(bedtime).toISOString();
+
   const lines = [
     "BOREDOM / EVENING ACTIVITY PLANNING (mandatory for this message):",
     `- Use ${tzLabel} for all times. Now and schedule blocks must match this timezone (not UTC).`,
     `- Plan ONLY for ${todayDate} (today). Do NOT use tomorrow's date unless the user explicitly asked for tomorrow.`,
-    `- First activity starts at ${formatZonedTime(planStart)} (next quarter-hour from now in Eastern Time).`,
-    `- Last activity must end by ${formatZonedTime(bedtime)} (healthy default bedtime).`,
-    "- Never schedule optional activities after 11:00 PM or after midnight (no 11:15 PM–1:00 AM blocks).",
+    `- Current Eastern Time now: ${formatZonedTime(now)}.`,
+    `- First activity starts at ${formatZonedTime(planStart)} (next quarter-hour from now — NOT midnight unless it is actually near midnight).`,
+    `- Example first start_time ISO: ${planStartIso}`,
+    `- Last activity must end by ${formatZonedTime(bedtime)} (healthy default bedtime; example end bound: ${bedtimeIso}).`,
+    "- Never schedule optional activities after 11:00 PM or after midnight (no 12:00 AM–1:00 AM blocks when the user is planning their evening).",
     `- Schedule at most ${maxEvents} activities in this window.`,
     "- Space activities sequentially from the quarter-hour start until bedtime.",
     "- Call schedule_event once per activity with start_time and end_time as ISO datetimes on TODAY's calendar date in Eastern Time.",

@@ -28,7 +28,7 @@ import { resolveScheduleLevel } from "@/lib/schedule-priority";
 
 import {
   coerceBoredomScheduleEvents,
-  isBoredomOrFreeTimeIntent,
+  isEveningPlanIntent,
   userExplicitlyWantsTomorrow,
 } from "@/lib/boredom-schedule";
 import {
@@ -253,7 +253,7 @@ export async function applyChatScheduleResult(
 
     if (
       events.length > 0 &&
-      isBoredomOrFreeTimeIntent(userMessage) &&
+      isEveningPlanIntent(userMessage) &&
       !userExplicitlyWantsTomorrow(userMessage)
     ) {
       events = coerceBoredomScheduleEvents(events, {
