@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { inferScheduleLevelFromTitle, resolveScheduleLevel } from "@/lib/schedule-priority";
+import { classifySchedulePriority, resolveScheduleLevel } from "@/lib/schedule-priority";
 
 function looksLikeOrderOrProductLine(line: string): boolean {
   const t = line.trim();
@@ -66,7 +66,9 @@ export function normalizeScheduleFromToolArgs(
     subtitle: description?.trim() || null,
     start_time: startDate.toISOString(),
     end_time: endIso,
-    level: resolveScheduleLevel(parsed.data.level, parsed.data.title.trim()),
+    level: resolveScheduleLevel(parsed.data.level, parsed.data.title.trim(), {
+      subtitle: description?.trim() || null,
+    }),
   };
 
   return isValidStructuredScheduleEvent(item) ? item : null;
@@ -257,7 +259,7 @@ function parseStructuredScheduleLine(
     subtitle: null,
     start_time: start.toISOString(),
     end_time: endDate.toISOString(),
-    level: inferScheduleLevelFromTitle(title),
+    level: classifySchedulePriority(title),
   };
 
   return isValidStructuredScheduleEvent(item) ? item : null;
@@ -413,7 +415,7 @@ export function parseScheduleFromText(text: string, ref = new Date()): ScheduleI
     subtitle,
     start_time: day.toISOString(),
     end_time: end.toISOString(),
-    level: inferScheduleLevelFromTitle(title),
+    level: classifySchedulePriority(title, subtitle),
   };
 
   return isValidStructuredScheduleEvent(item) ? item : null;

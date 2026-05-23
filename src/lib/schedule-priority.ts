@@ -2,6 +2,12 @@ import type { ScheduleLevel } from "@/lib/schedule-item";
 
 export type SchedulePriorityLevel = ScheduleLevel;
 
+export type SchedulePriorityContext = {
+  /** Rest-of-night / boredom leisure plans — all generated blocks default to Low. */
+  eveningLeisurePlan?: boolean;
+  subtitle?: string | null;
+};
+
 export type SchedulePriorityStyles = {
   /** Timeline dot / indicator */
   dot: string;
@@ -63,41 +69,101 @@ export function setSchedulePriorityTheme(
 export function normalizeScheduleLevel(level: string | undefined): SchedulePriorityLevel {
   const t = level?.trim();
   if (t === "High" || t === "Medium" || t === "Low") return t;
-  return "Medium";
+  return "Low";
 }
 
-const HIGH_TITLE =
-  /\b(?:school|class|lecture|tutorial|study|studying|assignment|exam|homework|problem\s+set|coursework|work(?:out)?|gym|fitness|training|pilates|yoga|strength|conditioning|run(?:ning)?|eat(?:ing)?|breakfast|lunch|dinner|meal|food|takeout|protein|nutrition)\b/i;
+function eventText(title: string, subtitle?: string | null): string {
+  return `${title} ${subtitle ?? ""}`.trim();
+}
 
-const LOW_TITLE =
-  /\b(?:game|gaming|valorant|league|leisure|relax(?:ation)?|netflix|stream|scroll|wind-?down|sleep\s+prep|bedtime|meditat|skincare|walk|stroll|break\b|free\s+time|hang\s+out|date\s+night)\b/i;
+/** Spending, purchases, or budget impact. */
+const HIGH_MONEY =
+  /\b(?:buy(?:ing)?|purchase|order(?:ing)?|shop(?:ping)?|grocery|groceries|whole\s+foods|amazon|takeout|take\s+out|food\s+run|ticket|tickets|booking|book\s+tickets|reservation|checkout|budget|spend|paid|payment|\$\d|us\$|ca\$)\b/i;
 
-const MEDIUM_TITLE =
-  /\b(?:errand|productive|productivity|grocery|groceries|shopping|standup|meeting|call|sync|review|prep|commute|market|portfolio|committee|diligence)\b/i;
+/** Social / shared plans affecting others (2+ people). */
+const HIGH_SOCIAL =
+  /\b(?:with\s+friends|friends|friend|group|team|client|customers?|coworkers?|colleagues?|dinner\s+with|lunch\s+with|brunch\s+with|breakfast\s+with|coffee\s+with|date\s+night|together|gathering|party|meetup|meeting|interview|presentation|group\s+workout|workout\s+buddy|sync\s+with|call\s+with|zoom\s+with|family|parents|partner|wedding|baby\s+shower)\b/i;
 
-/** Infer priority from event title when level is missing or generic. */
+/** Urgent work / school commitments (still high when time-bound). */
+const HIGH_URGENT_WORK =
+  /\b(?:exam|deadline|investment\s+committee|due\s+diligence|compliance|legal\s+review|LP\s+call|portfolio\s+company)\b/i;
+
+/** Personal leisure, hobbies, optional entertainment. */
+const LOW_LEISURE =
+  /\b(?:game|gaming|valorant|league|movie|film|netflix|stream(?:ing)?|tv\b|watch|read(?:ing)?|book\s+club\s+novel|journal|journaling|guitar|piano|hobby|leisure|relax(?:ation)?|meditat(?:e|ion)?|mindfulness|wind-?down|bedtime|skincare|scroll|nap|podcast|music|listen(?:ing)?|tea\s+time|stretch(?:ing)?|breathwork|sauna|cold\s+plunge|evening\s+walk|solo\s+walk|stroll|free\s+time|casual|chill|unwind|yoga|pilates|gentle\s+yoga|light\s+yoga|candlelit)\b/i;
+
+/** Productive but not urgent — solo work, errands, fitness prep. */
+const MEDIUM_PRODUCTIVE =
+  /\b(?:study|studying|class|lecture|tutorial|assignment|homework|problem\s+set|coursework|errand|productive|productivity|prep(?:aration)?|review\s+deck|deep\s+work|focus\s+block|standup|commute|market\s+prep|gym|fitness|training|conditioning|run(?:ning)?|meal\s+prep|lunch\s+prep|work\s+block|email\s+catch-?up|organize|planning\s+session)\b/i;
+
+function matchesHighPriority(text: string): boolean {
+  return HIGH_MONEY.test(text) || HIGH_SOCIAL.test(text) || HIGH_URGENT_WORK.test(text);
+}
+
+function matchesLowPriority(text: string): boolean {
+  return LOW_LEISURE.test(text);
+}
+
+function matchesMediumPriority(text: string): boolean {
+  return MEDIUM_PRODUCTIVE.test(text);
+}
+
+/**
+ * Classify schedule priority for Approvals and Today's Schedule.
+ * High: money, social/shared, urgent commitments.
+ * Low: leisure/hobbies (default for rest-of-night plans).
+ * Medium: only when clearly productive but not urgent.
+ */
+export function classifySchedulePriority(
+  title: string,
+  subtitle?: string | null,
+  context?: SchedulePriorityContext,
+): SchedulePriorityLevel {
+  if (context?.eveningLeisurePlan) return "Low";
+
+  const text = eventText(title, subtitle ?? context?.subtitle);
+  if (!text) return "Low";
+
+  if (matchesHighPriority(text)) return "High";
+  if (matchesLowPriority(text)) return "Low";
+  if (matchesMediumPriority(text)) return "Medium";
+
+  return "Low";
+}
+
+/** @deprecated Use classifySchedulePriority — title-only wrapper. */
 export function inferScheduleLevelFromTitle(title: string): SchedulePriorityLevel {
-  const t = title.trim();
-  if (!t) return "Medium";
-  if (HIGH_TITLE.test(t)) return "High";
-  if (LOW_TITLE.test(t)) return "Low";
-  if (MEDIUM_TITLE.test(t)) return "Medium";
-  return "Medium";
+  return classifySchedulePriority(title);
 }
 
+/** Resolve level from title/subtitle; ignores generic model defaults when title is present. */
 export function resolveScheduleLevel(
   level: string | undefined,
   title?: string,
+  context?: SchedulePriorityContext,
 ): SchedulePriorityLevel {
-  const normalized = normalizeScheduleLevel(level);
-  if (level?.trim() === "High" || level?.trim() === "Medium" || level?.trim() === "Low") {
-    return normalized;
+  if (title?.trim()) {
+    return classifySchedulePriority(title, context?.subtitle, context);
   }
-  if (title) return inferScheduleLevelFromTitle(title);
-  return normalized;
+  return normalizeScheduleLevel(level);
 }
 
-export function getSchedulePriorityStyles(level: string | undefined, title?: string): SchedulePriorityStyles {
-  const resolved = resolveScheduleLevel(level, title);
+export function getSchedulePriorityStyles(
+  level: string | undefined,
+  title?: string,
+  context?: SchedulePriorityContext,
+): SchedulePriorityStyles {
+  const resolved = resolveScheduleLevel(level, title, context);
   return getSchedulePriorityTheme()[resolved];
+}
+
+/** Apply priority rules to a batch of schedule items (e.g. before Approvals). */
+export function applySchedulePriorityToItems<T extends { title: string; subtitle?: string | null; level: ScheduleLevel }>(
+  items: T[],
+  context?: SchedulePriorityContext,
+): T[] {
+  return items.map((item) => ({
+    ...item,
+    level: classifySchedulePriority(item.title, item.subtitle, context),
+  }));
 }

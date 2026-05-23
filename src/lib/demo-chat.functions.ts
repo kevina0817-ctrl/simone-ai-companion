@@ -80,7 +80,11 @@ const tools = [
           subtitle: { type: "string" },
           start_time: { type: "string", description: "ISO 8601 start datetime" },
           end_time: { type: "string", description: "ISO 8601 end datetime" },
-          level: { type: "string", enum: ["High", "Medium", "Low"] },
+          level: {
+            type: "string",
+            enum: ["High", "Medium", "Low"],
+            description: "High: purchases or social plans. Low: leisure. Medium: solo productive only.",
+          },
         },
         required: ["title", "start_time", "end_time"],
       },

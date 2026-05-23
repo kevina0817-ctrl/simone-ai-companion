@@ -44,6 +44,7 @@ MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with mul
 When the schedule_event tool returns added_to_today_schedule: true, the event is already live — use past-tense direct confirmation only.
 When the tool returns pending_approval: true, the event is waiting in Approvals — you may mention reviewing or confirming there.
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
+Schedule priority: High = spending, shopping, or events with others (meetings, dinner with friends, group plans). Low = hobbies, relaxation, entertainment. Medium = solo productive blocks only — do not use Medium for casual evening leisure.
 BOREDOM / EVENING ACTIVITIES: When the user is bored, asks what to do tonight, or wants a plan from now until sleep/bedtime — use America/Toronto (Eastern Time) from the planning context. Schedule ONLY for TODAY from the next quarter-hour after NOW until 11:00 PM bedtime (never 12:00 AM–1:00 AM blocks unless they explicitly ask to stay up late). Example: if now is 7:05 PM Eastern, first block starts 7:15 PM — NOT midnight. Keep plans realistic and healthy; if it is almost bedtime, suggest only 1–2 light wind-down activities.
 When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
 For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
@@ -78,7 +79,12 @@ const tools = [
           subtitle: { type: "string", description: "Optional short detail, e.g. 'Sauna + cold plunge'" },
           start_time: { type: "string", description: "ISO 8601 start datetime with timezone offset" },
           end_time: { type: "string", description: "ISO 8601 end datetime with timezone offset (after start_time)" },
-          level: { type: "string", enum: ["High", "Medium", "Low"], description: "Priority level, default Medium" },
+          level: {
+            type: "string",
+            enum: ["High", "Medium", "Low"],
+            description:
+              "High: purchases, budget, or social plans with others. Low: leisure/hobbies. Medium: solo productive work only. Rest-of-night plans: always Low.",
+          },
         },
         required: ["title", "start_time", "end_time"],
       },

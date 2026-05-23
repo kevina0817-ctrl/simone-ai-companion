@@ -24,7 +24,7 @@ import {
   type ScheduleItem,
   type CancelMatchCriteria,
 } from "@/lib/schedule-item";
-import { resolveScheduleLevel } from "@/lib/schedule-priority";
+import { applySchedulePriorityToItems } from "@/lib/schedule-priority";
 
 import {
   coerceBoredomScheduleEvents,
@@ -51,15 +51,23 @@ type ApplyInput = {
 };
 
 
-function toScheduleItem(action: Extract<ChatScheduleAction, { kind: "schedule_event" }>): ScheduleItem {
-  return {
+function toScheduleItem(
+  action: Extract<ChatScheduleAction, { kind: "schedule_event" }>,
+  priorityContext?: { eveningLeisurePlan?: boolean },
+): ScheduleItem {
+  const subtitle = action.subtitle ?? null;
+  const base = {
     id: action.id ?? generateScheduleId(),
     title: action.title,
-    subtitle: action.subtitle ?? null,
+    subtitle,
     start_time: new Date(action.start_time).toISOString(),
     end_time: action.end_time ? new Date(action.end_time).toISOString() : undefined,
-    level: resolveScheduleLevel(action.level, action.title),
+    level: "Low" as const,
   };
+  return applySchedulePriorityToItems([base], {
+    eveningLeisurePlan: priorityContext?.eveningLeisurePlan,
+    subtitle,
+  })[0]!;
 }
 
 function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_event" }>): CancelMatchCriteria {
@@ -224,10 +232,16 @@ export async function applyChatScheduleResult(
 
   const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
   const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
+  const eveningLeisurePlan =
+    isEveningPlanIntent(userMessage) && !userExplicitlyWantsTomorrow(userMessage);
+  const priorityContext = { eveningLeisurePlan };
   let assistantParsedCount = 0;
 
   if (!suppressSchedule) {
-    collectScheduleApprovals(scheduleActions.map((a) => toScheduleItem(a)), byTitle);
+    collectScheduleApprovals(
+      scheduleActions.map((a) => toScheduleItem(a, priorityContext)),
+      byTitle,
+    );
 
     if (shouldRunScheduleTextFallbacks(userMessage)) {
       if (wantsBulkScheduleApprovals(userMessage)) {
@@ -262,6 +276,8 @@ export async function applyChatScheduleResult(
         todayEvents,
       });
     }
+
+    events = applySchedulePriorityToItems(events, priorityContext);
 
     const useApprovals = shouldRequireScheduleApproval(userMessage, events.length, {
       assistantParsedCount,

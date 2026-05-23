@@ -355,6 +355,7 @@ export function buildBoredomPlanningContextBlock(opts: {
     `- Schedule at most ${maxEvents} activities in this window.`,
     "- Space activities sequentially from the quarter-hour start until bedtime.",
     "- Call schedule_event once per activity with start_time and end_time as ISO datetimes on TODAY's calendar date in Eastern Time.",
+    "- Set level to Low for every activity in this rest-of-night leisure plan (green priority).",
   ];
 
   if (veryNearBedtime) {
