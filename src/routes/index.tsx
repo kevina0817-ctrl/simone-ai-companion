@@ -11,7 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { HomeCollapsibleSection } from "@/components/HomeCollapsibleSection";
 import { HomeStatusChips } from "@/components/HomeStatusChips";
+import { useHomeSectionCollapse } from "@/hooks/useHomeSectionCollapse";
 import { SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
 import { TodayScheduleTimeline } from "@/components/TodayScheduleTimeline";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
@@ -48,6 +50,7 @@ function Home() {
   const seed = useServerFn(seedDemoData);
 
   const displayName = useResolvedDisplayName();
+  const homeSections = useHomeSectionCollapse();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -197,19 +200,23 @@ function Home() {
           </div>
         )}
 
-        <div className="mt-5 rounded-3xl bg-card/70 p-5 shadow-card">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Insight for today
-          </div>
+        <HomeCollapsibleSection
+          sectionId="insight"
+          sections={homeSections}
+          title="Insight for today"
+          icon={<Sparkles className="h-4 w-4 text-primary" />}
+          className="mt-5"
+        >
           <p className="text-sm leading-relaxed text-muted-foreground">
             {showWellnessRings && insight
               ? insight
               : "Log today's wellness to unlock personalized insights from Simone."}
           </p>
-        </div>
+        </HomeCollapsibleSection>
 
-        {showLifestyle && <PersonaLifestyleCard lifestyle={resolvedLifestyle!} />}
+        {showLifestyle && (
+          <PersonaLifestyleCard lifestyle={resolvedLifestyle!} sections={homeSections} />
+        )}
 
         <div className="mt-6">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

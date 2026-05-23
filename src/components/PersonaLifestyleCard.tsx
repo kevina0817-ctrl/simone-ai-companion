@@ -1,18 +1,25 @@
 import type { ReactNode } from "react";
 import { Activity, Bell, Coffee, Droplets, Footprints, Gamepad2, Moon } from "lucide-react";
+import { HomeCollapsibleSection } from "@/components/HomeCollapsibleSection";
+import type { HomeSectionCollapse } from "@/hooks/useHomeSectionCollapse";
 import type { StoredPersonaLifestyle } from "@/lib/persona-registry";
 
 type Props = {
   lifestyle: StoredPersonaLifestyle;
+  sections: HomeSectionCollapse;
 };
 
-export function PersonaLifestyleCard({ lifestyle }: Props) {
+export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
   const w = lifestyle.wellness;
 
   return (
     <div className="mt-5 space-y-3">
-      <div className="rounded-3xl bg-card/70 p-5 shadow-card">
-        <div className="mb-3 text-sm font-medium">Recovery & body</div>
+      <HomeCollapsibleSection
+        sectionId="recovery"
+        sections={sections}
+        title="Recovery & body"
+        className="mt-0"
+      >
         <div className="grid grid-cols-2 gap-2 text-xs">
           <Metric label="Recovery" value={w.recovery_score != null ? `${w.recovery_score}%` : "—"} />
           <Metric label="HRV" value={w.hrv_ms != null ? `${w.hrv_ms} ms` : "—"} />
@@ -24,14 +31,15 @@ export function PersonaLifestyleCard({ lifestyle }: Props) {
           <Metric icon={<Gamepad2 className="h-3 w-3" />} label="Screen time" value={w.screen_time_hours != null ? `${w.screen_time_hours} h` : "—"} />
         </div>
         {w.notes && <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">{w.notes}</p>}
-      </div>
+      </HomeCollapsibleSection>
 
       {lifestyle.recommendations.length > 0 && (
-        <div className="rounded-3xl bg-card/70 p-5 shadow-card">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <Activity className="h-4 w-4 text-primary" />
-            Simone recommends
-          </div>
+        <HomeCollapsibleSection
+          sectionId="recommendations"
+          sections={sections}
+          title="Simone recommends"
+          icon={<Activity className="h-4 w-4 text-primary" />}
+        >
           <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
             {lifestyle.recommendations.map((r) => (
               <li key={r} className="list-inside list-disc">
@@ -39,15 +47,16 @@ export function PersonaLifestyleCard({ lifestyle }: Props) {
               </li>
             ))}
           </ul>
-        </div>
+        </HomeCollapsibleSection>
       )}
 
       {lifestyle.notifications.length > 0 && (
-        <div className="rounded-3xl bg-card/70 p-5 shadow-card">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <Bell className="h-4 w-4 text-champagne" />
-            Notifications
-          </div>
+        <HomeCollapsibleSection
+          sectionId="notifications"
+          sections={sections}
+          title="Notifications"
+          icon={<Bell className="h-4 w-4 text-champagne" />}
+        >
           <ul className="space-y-3">
             {lifestyle.notifications.map((n) => (
               <li key={n.id} className="border-b border-border/50 pb-2 last:border-0 last:pb-0">
@@ -56,15 +65,16 @@ export function PersonaLifestyleCard({ lifestyle }: Props) {
               </li>
             ))}
           </ul>
-        </div>
+        </HomeCollapsibleSection>
       )}
 
       {lifestyle.weekOverview.length > 0 && (
-        <div className="rounded-3xl bg-card/70 p-5 shadow-card">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <Moon className="h-4 w-4 text-primary" />
-            This week
-          </div>
+        <HomeCollapsibleSection
+          sectionId="thisWeek"
+          sections={sections}
+          title="This week"
+          icon={<Moon className="h-4 w-4 text-primary" />}
+        >
           <ul className="space-y-1.5 text-[11px] text-muted-foreground">
             {lifestyle.weekOverview.map((d) => (
               <li key={d.day}>
@@ -72,7 +82,7 @@ export function PersonaLifestyleCard({ lifestyle }: Props) {
               </li>
             ))}
           </ul>
-        </div>
+        </HomeCollapsibleSection>
       )}
 
       <div className="rounded-3xl bg-card/60 p-4 text-[11px] text-muted-foreground">
