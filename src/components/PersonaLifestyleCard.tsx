@@ -17,7 +17,7 @@ export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
       <HomeCollapsibleSection
         sectionId="recovery"
         sections={sections}
-        title="Recovery & body"
+        title="Recovery & Body"
         className="mt-0"
       >
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -37,7 +37,7 @@ export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
         <HomeCollapsibleSection
           sectionId="recommendations"
           sections={sections}
-          title="Simone recommends"
+          title="Simone Recommendations"
           icon={<Activity className="h-4 w-4 text-primary" />}
         >
           <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
@@ -72,7 +72,7 @@ export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
         <HomeCollapsibleSection
           sectionId="thisWeek"
           sections={sections}
-          title="This week"
+          title="This Week"
           icon={<Moon className="h-4 w-4 text-primary" />}
         >
           <ul className="space-y-1.5 text-[11px] text-muted-foreground">
@@ -85,13 +85,18 @@ export function PersonaLifestyleCard({ lifestyle, sections }: Props) {
         </HomeCollapsibleSection>
       )}
 
-      <div className="rounded-3xl bg-card/60 p-4 text-[11px] text-muted-foreground">
-        <div className="font-medium text-foreground">Meals & habits</div>
-        <p className="mt-1">{lifestyle.preferences.meal_style.join(" · ")}</p>
+      <HomeCollapsibleSection
+        sectionId="mealsHabits"
+        sections={sections}
+        title="Meals & Habits"
+        className="bg-card/60 shadow-none"
+        contentClassName="text-[11px] text-muted-foreground"
+      >
+        <p>{lifestyle.preferences.meal_style.join(" · ")}</p>
         <p className="mt-1">{lifestyle.preferences.caffeine}</p>
         <p className="mt-1">{lifestyle.preferences.gaming}</p>
         <p className="mt-1">{lifestyle.preferences.groceries}</p>
-      </div>
+      </HomeCollapsibleSection>
     </div>
   );
 }

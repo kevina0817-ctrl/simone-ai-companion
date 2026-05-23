@@ -9,6 +9,7 @@ type Props = {
   title: string;
   icon?: ReactNode;
   className?: string;
+  contentClassName?: string;
   children: ReactNode;
 };
 
@@ -18,6 +19,7 @@ export function HomeCollapsibleSection({
   title,
   icon,
   className,
+  contentClassName,
   children,
 }: Props) {
   const expanded = sections.isOpen(sectionId);
@@ -42,7 +44,9 @@ export function HomeCollapsibleSection({
           aria-hidden
         />
       </button>
-      {expanded && <div className="px-5 pb-5 pt-0">{children}</div>}
+      {expanded && (
+        <div className={cn("px-5 pb-5 pt-0", contentClassName)}>{children}</div>
+      )}
     </div>
   );
 }

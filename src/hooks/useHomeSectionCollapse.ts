@@ -3,15 +3,26 @@ import { useCallback, useEffect, useState } from "react";
 export type HomeSectionId =
   | "insight"
   | "recovery"
+  | "mealsHabits"
   | "recommendations"
   | "notifications"
   | "thisWeek";
+
+export const HOME_SECTION_IDS: HomeSectionId[] = [
+  "insight",
+  "recovery",
+  "mealsHabits",
+  "recommendations",
+  "notifications",
+  "thisWeek",
+];
 
 const STORAGE_KEY = "simone:home-sections";
 
 const DEFAULT_OPEN: Record<HomeSectionId, boolean> = {
   insight: true,
   recovery: true,
+  mealsHabits: true,
   recommendations: true,
   notifications: true,
   thisWeek: true,
@@ -47,7 +58,23 @@ export function useHomeSectionCollapse() {
     setOpen((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  return { isOpen, setSectionOpen, toggle };
+  const expandAll = useCallback((ids: HomeSectionId[] = HOME_SECTION_IDS) => {
+    setOpen((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = true;
+      return next;
+    });
+  }, []);
+
+  const collapseAll = useCallback((ids: HomeSectionId[] = HOME_SECTION_IDS) => {
+    setOpen((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = false;
+      return next;
+    });
+  }, []);
+
+  return { isOpen, setSectionOpen, toggle, expandAll, collapseAll };
 }
 
 export type HomeSectionCollapse = ReturnType<typeof useHomeSectionCollapse>;

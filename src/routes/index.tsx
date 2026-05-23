@@ -12,6 +12,7 @@ import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { HomeCollapsibleSection } from "@/components/HomeCollapsibleSection";
+import { HomeSectionControls } from "@/components/HomeSectionControls";
 import { HomeStatusChips } from "@/components/HomeStatusChips";
 import { useHomeSectionCollapse } from "@/hooks/useHomeSectionCollapse";
 import { SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
@@ -200,12 +201,14 @@ function Home() {
           </div>
         )}
 
+        <HomeSectionControls sections={homeSections} className="mt-5 flex items-center justify-end gap-4" />
+
         <HomeCollapsibleSection
           sectionId="insight"
           sections={homeSections}
-          title="Insight for today"
+          title="Insight for Today"
           icon={<Sparkles className="h-4 w-4 text-primary" />}
-          className="mt-5"
+          className="mt-3"
         >
           <p className="text-sm leading-relaxed text-muted-foreground">
             {showWellnessRings && insight
