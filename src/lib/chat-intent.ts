@@ -206,6 +206,7 @@ export function shouldParseStructuredScheduleFromReply(
   scheduleActionCount: number,
 ): boolean {
   if (shouldSuppressScheduleApprovals(userMessage)) return false;
+  if (scheduleActionCount > 0 && isEveningPlanIntent(userMessage)) return false;
   if (wantsBulkScheduleApprovals(userMessage)) return true;
   if (isEveningPlanIntent(userMessage)) return true;
   if (scheduleActionCount > 0 && isScheduleManagementIntent(userMessage)) return true;

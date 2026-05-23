@@ -27,12 +27,20 @@ import {
 import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 
 import {
+  EVENING_PLAN_TIMEZONE,
   coerceBoredomScheduleEvents,
   enforceFoodBedtimeSchedule,
   isEveningPlanIntent,
+  isRestOfNightBedtimePlanIntent,
   userExplicitlyWantsTomorrow,
   type FoodBedtimeEnforcementResult,
 } from "@/lib/boredom-schedule";
+import {
+  buildProposedRoutine,
+  proposedRoutineToScheduleItems,
+  verifyProposedRoutineChatAlignment,
+  type ProposedRoutine,
+} from "@/lib/proposed-routine";
 import {
   shouldParseStructuredScheduleFromReply,
   shouldRequireScheduleApproval,
@@ -217,6 +225,8 @@ export type ApplyChatScheduleResult = {
   /** Food events removed for starting at/after bedtime − 4h. */
   removedFood: ScheduleItem[];
   foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">;
+  /** Canonical bedtime routine — same times in chat and Approvals. */
+  proposedRoutine?: ProposedRoutine;
 };
 
 /**
@@ -231,6 +241,7 @@ export async function applyChatScheduleResult(
   const pendingApproval: ScheduleItem[] = [];
   let removedFood: ScheduleItem[] = [];
   let foodBedtime: ApplyChatScheduleResult["foodBedtime"];
+  let proposedRoutine: ProposedRoutine | undefined;
   const byTitle = new Map<string, ScheduleItem>();
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
@@ -293,6 +304,18 @@ export async function applyChatScheduleResult(
       toolCallCount: scheduleActions.length,
     });
 
+    const useRoutinePipeline =
+      events.length > 0 &&
+      (isRestOfNightBedtimePlanIntent(userMessage) || eveningPlan);
+
+    if (useRoutinePipeline) {
+      proposedRoutine = buildProposedRoutine(events, {
+        timeZone: EVENING_PLAN_TIMEZONE,
+        requiresApproval: useApprovals,
+      });
+      events = proposedRoutineToScheduleItems(proposedRoutine);
+    }
+
     if (events.length > 0) {
       if (useApprovals) {
         addPendingScheduleApprovals(events);
@@ -341,5 +364,5 @@ export async function applyChatScheduleResult(
     await qc.invalidateQueries({ queryKey: todayQueryKey(userId) });
   }
 
-  return { committed, pendingApproval, cancelled, removedFood, foodBedtime };
+  return { committed, pendingApproval, cancelled, removedFood, foodBedtime, proposedRoutine };
 }

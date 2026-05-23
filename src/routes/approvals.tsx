@@ -192,7 +192,7 @@ function ScheduleApprovalCard({ id, item }: { id: string; item: PendingItem }) {
   const ev = item.scheduleEvent;
   if (!ev) return null;
 
-  const when = formatScheduleTimeRange(ev);
+  const when = formatScheduleTimeRange(ev, ev.time_zone);
   const priority = getSchedulePriorityStyles(ev.level, ev.title);
 
   return (

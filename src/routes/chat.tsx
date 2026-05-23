@@ -17,6 +17,10 @@ import { toast } from "sonner";
 import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
 import { applyScheduleReplyOutcome } from "@/lib/chat-schedule-reply";
+import {
+  mergeChatReplyWithProposedRoutine,
+  verifyProposedRoutineChatAlignment,
+} from "@/lib/proposed-routine";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
 import {
   applyChatCurrencyToReply,
@@ -152,22 +156,33 @@ function ChatPage() {
         ? result.reply
         : applyChatCurrencyToReply(result.reply, usdOrders);
 
-      const { committed, pendingApproval, cancelled, removedFood, foodBedtime } =
-        await applyChatScheduleResult(qc, {
-          actions: toScheduleActions(result.actions),
-          userMessage: t,
-          assistantReply: replyText,
-          userId: user!.id,
-          nowIso,
-        });
+      const {
+        committed,
+        pendingApproval,
+        cancelled,
+        removedFood,
+        foodBedtime,
+        proposedRoutine,
+      } = await applyChatScheduleResult(qc, {
+        actions: toScheduleActions(result.actions),
+        userMessage: t,
+        assistantReply: replyText,
+        userId: user!.id,
+        nowIso,
+      });
 
-      const displayReply = applyScheduleReplyOutcome(replyText, {
+      let displayReply = applyScheduleReplyOutcome(replyText, {
         committed,
         pendingApproval,
         removedFood,
         foodBedtime,
         userMessage: t,
       });
+
+      if (proposedRoutine && proposedRoutine.activities.length > 0) {
+        displayReply = mergeChatReplyWithProposedRoutine(displayReply, proposedRoutine);
+        verifyProposedRoutineChatAlignment(displayReply, proposedRoutine);
+      }
 
       if (committed.length > 0) {
         toast.success(

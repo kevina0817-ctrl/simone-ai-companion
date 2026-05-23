@@ -35,6 +35,8 @@ export type ScheduleItem = {
   /** End of block (required for Approvals extraction; optional on persisted timeline rows). */
   end_time?: string;
   level: ScheduleLevel;
+  /** When set, display times in this IANA zone (evening / bedtime routines). */
+  time_zone?: string;
 };
 
 const toolArgsSchema = z.object({
@@ -147,18 +149,26 @@ export function isValidStructuredScheduleEvent(item: ScheduleItem): boolean {
   return true;
 }
 
-export function formatScheduleTimeRange(item: ScheduleItem): string {
+export function formatScheduleTimeRange(item: ScheduleItem, timeZone?: string): string {
   const start = new Date(item.start_time);
   const end = item.end_time ? new Date(item.end_time) : null;
+  const tz = timeZone ?? item.time_zone;
   const fmt = (d: Date) =>
-    d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+    d.toLocaleTimeString("en-CA", {
+      timeZone: tz,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   if (end && !Number.isNaN(end.getTime())) {
     return `${fmt(start)} – ${fmt(end)}`;
   }
-  return start.toLocaleString([], {
+  return start.toLocaleString("en-CA", {
+    timeZone: tz,
     weekday: "short",
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
   });
 }
 

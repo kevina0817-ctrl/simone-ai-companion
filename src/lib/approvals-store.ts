@@ -72,7 +72,10 @@ export function setApprovalsDecideContext(ctx: ApprovalsDecideContext | null) {
 }
 
 function formatScheduleDetail(item: ScheduleItem): string {
-  const parts = [`Schedule • ${formatScheduleTimeRange(item)}`, item.level];
+  const parts = [
+    `Schedule • ${formatScheduleTimeRange(item, item.time_zone)}`,
+    item.level,
+  ];
   if (item.subtitle) parts.push(item.subtitle);
   return parts.join(" • ");
 }
