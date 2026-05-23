@@ -8,7 +8,9 @@ import {
   buildBoredomPlanningContextBlock,
   EVENING_PLAN_TIMEZONE,
   isEveningPlanIntent,
+  isRestOfNightBedtimePlanIntent,
 } from "@/lib/boredom-schedule";
+import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
@@ -140,20 +142,23 @@ function collectActionsFromToolCalls(
 ): { actions: ChatAction[]; pendingOrders: ChatResponse["pendingOrders"] } {
   const actions: ChatAction[] = [];
   const pendingOrders: ChatResponse["pendingOrders"] = [];
+  const priorityContext = buildSchedulePriorityContext(userMessage);
 
   for (const tc of toolCalls) {
     try {
       const args = JSON.parse(tc.function.arguments || "{}");
       if (tc.function.name === "schedule_event") {
-        const item = normalizeScheduleFromToolArgs(args);
+        const item = normalizeScheduleFromToolArgs(args, undefined, priorityContext ?? undefined);
         if (item) {
+          const [scheduled] = applySchedulePriorityToItems([item], priorityContext ?? undefined);
+          const leveled = scheduled ?? item;
           actions.push({
             kind: "schedule_event",
-            title: item.title,
-            subtitle: item.subtitle,
-            start_time: item.start_time,
-            end_time: item.end_time,
-            level: item.level,
+            title: leveled.title,
+            subtitle: leveled.subtitle,
+            start_time: leveled.start_time,
+            end_time: leveled.end_time,
+            level: leveled.level,
           });
         }
       } else if (tc.function.name === "create_pending_order" && shouldCreateOrderApproval(userMessage)) {
@@ -182,7 +187,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
     const nowIso = data.nowIso ?? new Date().toISOString();
-    const tz = isEveningPlanIntent(data.message)
+    const tz = isRestOfNightBedtimePlanIntent(data.message)
       ? EVENING_PLAN_TIMEZONE
       : (data.timezone ?? "UTC");
     const w = data.wellness;
@@ -202,7 +207,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
-      ...(isEveningPlanIntent(data.message)
+      ...(isRestOfNightBedtimePlanIntent(data.message)
         ? [
             {
               role: "system",

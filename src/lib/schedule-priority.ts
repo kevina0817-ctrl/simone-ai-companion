@@ -1,12 +1,34 @@
 import type { ScheduleLevel } from "@/lib/schedule-item";
+import { isRestOfNightBedtimePlanIntent } from "@/lib/boredom-schedule";
 
 export type SchedulePriorityLevel = ScheduleLevel;
 
 export type SchedulePriorityContext = {
-  /** Rest-of-night / boredom leisure plans — all generated blocks default to Low. */
+  /** Rest-of-night / tired / bedtime plans — all generated blocks forced to Low (green). */
   eveningLeisurePlan?: boolean;
+  /** User message — used to detect bedtime override before title-based rules. */
+  userMessage?: string;
   subtitle?: string | null;
 };
+
+/** True when tired/bedtime/rest-of-night intent should force Low on every event. */
+export function shouldForceLowPriorityForMessage(userMessage?: string): boolean {
+  if (!userMessage?.trim()) return false;
+  return isRestOfNightBedtimePlanIntent(userMessage);
+}
+
+export function buildSchedulePriorityContext(userMessage?: string): SchedulePriorityContext | undefined {
+  if (!userMessage?.trim()) return undefined;
+  const forceLow = shouldForceLowPriorityForMessage(userMessage);
+  return { eveningLeisurePlan: forceLow, userMessage };
+}
+
+function shouldForceLowPriority(context?: SchedulePriorityContext): boolean {
+  if (!context) return false;
+  if (context.eveningLeisurePlan) return true;
+  if (context.userMessage && shouldForceLowPriorityForMessage(context.userMessage)) return true;
+  return false;
+}
 
 export type SchedulePriorityStyles = {
   /** Timeline dot / indicator */
@@ -119,7 +141,7 @@ export function classifySchedulePriority(
   subtitle?: string | null,
   context?: SchedulePriorityContext,
 ): SchedulePriorityLevel {
-  if (context?.eveningLeisurePlan) return "Low";
+  if (shouldForceLowPriority(context)) return "Low";
 
   const text = eventText(title, subtitle ?? context?.subtitle);
   if (!text) return "Low";

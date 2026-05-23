@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { classifySchedulePriority, resolveScheduleLevel } from "@/lib/schedule-priority";
+import {
+  classifySchedulePriority,
+  resolveScheduleLevel,
+  type SchedulePriorityContext,
+} from "@/lib/schedule-priority";
 
 function looksLikeOrderOrProductLine(line: string): boolean {
   const t = line.trim();
@@ -45,6 +49,7 @@ const toolArgsSchema = z.object({
 export function normalizeScheduleFromToolArgs(
   args: unknown,
   id?: string,
+  priorityContext?: SchedulePriorityContext,
 ): ScheduleItem | null {
   const parsed = toolArgsSchema.safeParse(args);
   if (!parsed.success) return null;
@@ -68,6 +73,7 @@ export function normalizeScheduleFromToolArgs(
     end_time: endIso,
     level: resolveScheduleLevel(parsed.data.level, parsed.data.title.trim(), {
       subtitle: description?.trim() || null,
+      ...priorityContext,
     }),
   };
 

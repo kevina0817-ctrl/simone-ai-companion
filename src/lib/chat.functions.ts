@@ -11,7 +11,9 @@ import {
   EVENING_PLAN_TIMEZONE,
   getTorontoCalendarDayBounds,
   isEveningPlanIntent,
+  isRestOfNightBedtimePlanIntent,
 } from "@/lib/boredom-schedule";
+import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
 import {
   pickSingleOrderForApproval,
@@ -44,7 +46,7 @@ MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with mul
 When the schedule_event tool returns added_to_today_schedule: true, the event is already live — use past-tense direct confirmation only.
 When the tool returns pending_approval: true, the event is waiting in Approvals — you may mention reviewing or confirming there.
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
-Schedule priority: High = spending, shopping, or events with others (meetings, dinner with friends, group plans). Low = hobbies, relaxation, entertainment. Medium = solo productive blocks only — do not use Medium for casual evening leisure.
+Schedule priority: High = spending, shopping, or events with others (meetings, dinner with friends, group plans). Low = hobbies, relaxation, entertainment. Medium = solo productive blocks only — do not use Medium for casual evening leisure. If the user is tired or planning before bedtime / rest of tonight, set level to Low for every activity.
 BOREDOM / EVENING ACTIVITIES: When the user is bored, asks what to do tonight, or wants a plan from now until sleep/bedtime — use America/Toronto (Eastern Time) from the planning context. Schedule ONLY for TODAY from the next quarter-hour after NOW until 11:00 PM bedtime (never 12:00 AM–1:00 AM blocks unless they explicitly ask to stay up late). Example: if now is 7:05 PM Eastern, first block starts 7:15 PM — NOT midnight. Keep plans realistic and healthy; if it is almost bedtime, suggest only 1–2 light wind-down activities.
 When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
 For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
@@ -155,7 +157,8 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     });
 
     const nowIso = data.nowIso ?? new Date().toISOString();
-    const eveningPlan = isEveningPlanIntent(data.message);
+    const eveningPlan = isRestOfNightBedtimePlanIntent(data.message);
+    const priorityContext = buildSchedulePriorityContext(data.message);
     const tz = eveningPlan ? EVENING_PLAN_TIMEZONE : (data.timezone ?? "UTC");
     const ref = new Date(nowIso);
     const torontoDay = getTorontoCalendarDayBounds(ref);
@@ -259,27 +262,29 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           try {
             const args = JSON.parse(tc.function.arguments || "{}");
             if (tc.function.name === "schedule_event") {
-              const item = normalizeScheduleFromToolArgs(args);
+              const item = normalizeScheduleFromToolArgs(args, undefined, priorityContext ?? undefined);
               if (!item) throw new Error("Invalid schedule fields");
+              const [leveled] = applySchedulePriorityToItems([item], priorityContext ?? undefined);
+              const scheduled = leveled ?? item;
               const needsApproval = shouldRequireScheduleApproval(data.message, 1, {
                 toolCallCount: 1,
               });
               result = needsApproval
-                ? { ok: true, pending_approval: true, event: item }
+                ? { ok: true, pending_approval: true, event: scheduled }
                 : {
                     ok: true,
                     added_to_today_schedule: true,
                     message:
                       "Event is already on today's schedule (no Approvals). Confirm directly to the user.",
-                    event: item,
+                    event: scheduled,
                   };
               actions.push({
                 kind: "schedule_event",
-                title: item.title,
-                subtitle: item.subtitle,
-                start_time: item.start_time,
-                end_time: item.end_time,
-                level: item.level,
+                title: scheduled.title,
+                subtitle: scheduled.subtitle,
+                start_time: scheduled.start_time,
+                end_time: scheduled.end_time,
+                level: scheduled.level,
               });
             } else if (tc.function.name === "cancel_event") {
               const parsed = z

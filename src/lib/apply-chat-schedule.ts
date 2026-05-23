@@ -24,7 +24,7 @@ import {
   type ScheduleItem,
   type CancelMatchCriteria,
 } from "@/lib/schedule-item";
-import { applySchedulePriorityToItems } from "@/lib/schedule-priority";
+import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 
 import {
   coerceBoredomScheduleEvents,
@@ -53,7 +53,7 @@ type ApplyInput = {
 
 function toScheduleItem(
   action: Extract<ChatScheduleAction, { kind: "schedule_event" }>,
-  priorityContext?: { eveningLeisurePlan?: boolean },
+  priorityContext?: ReturnType<typeof buildSchedulePriorityContext>,
 ): ScheduleItem {
   const subtitle = action.subtitle ?? null;
   const base = {
@@ -64,10 +64,7 @@ function toScheduleItem(
     end_time: action.end_time ? new Date(action.end_time).toISOString() : undefined,
     level: "Low" as const,
   };
-  return applySchedulePriorityToItems([base], {
-    eveningLeisurePlan: priorityContext?.eveningLeisurePlan,
-    subtitle,
-  })[0]!;
+  return applySchedulePriorityToItems([base], priorityContext ? { ...priorityContext, subtitle } : { subtitle })[0]!;
 }
 
 function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_event" }>): CancelMatchCriteria {
@@ -232,9 +229,7 @@ export async function applyChatScheduleResult(
 
   const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
   const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
-  const eveningLeisurePlan =
-    isEveningPlanIntent(userMessage) && !userExplicitlyWantsTomorrow(userMessage);
-  const priorityContext = { eveningLeisurePlan };
+  const priorityContext = buildSchedulePriorityContext(userMessage);
   let assistantParsedCount = 0;
 
   if (!suppressSchedule) {
@@ -265,11 +260,7 @@ export async function applyChatScheduleResult(
       (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
     );
 
-    if (
-      events.length > 0 &&
-      isEveningPlanIntent(userMessage) &&
-      !userExplicitlyWantsTomorrow(userMessage)
-    ) {
+    if (events.length > 0 && (priorityContext?.eveningLeisurePlan ?? isEveningPlanIntent(userMessage))) {
       events = coerceBoredomScheduleEvents(events, {
         nowIso,
         userMessage,

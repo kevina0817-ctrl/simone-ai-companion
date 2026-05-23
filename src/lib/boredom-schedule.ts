@@ -9,7 +9,11 @@ const BOREDOM_INTENT =
 
 /** "From now until sleep/bedtime" and similar evening planning (not only boredom). */
 const EVENING_PLAN_INTENT =
-  /\b(?:help\s+me\s+plan\s+(?:my\s+)?(?:schedule|night|evening)\s+from\s+now|plan\s+(?:my\s+)?(?:schedule|night|evening)\s+from\s+now|from\s+now\s+until\s+(?:sleep|bed(?:time)?)|now\s+until\s+(?:sleep|bed(?:time)?)|until\s+(?:i\s+)?(?:sleep|bed(?:time)?)|rest\s+of\s+(?:my\s+)?(?:night|evening)|for\s+the\s+rest\s+of\s+tonight|what\s+should\s+i\s+do\s+for\s+the\s+rest\s+of\s+tonight|what\s+should\s+i\s+do\s+tonight|tonight'?s?\s+(?:plan|schedule))\b/i;
+  /\b(?:help\s+me\s+plan\s+(?:my\s+)?(?:schedule|night|evening)\s+from\s+now|plan\s+(?:my\s+)?(?:schedule|night|evening)\s+from\s+now|from\s+now\s+until\s+(?:sleep|bed(?:time)?)|now\s+until\s+(?:sleep|bed(?:time)?)|from\s+now\s+to\s+bed(?:time)?|until\s+(?:i\s+)?(?:sleep|bed(?:time)?)|rest\s+of\s+(?:my\s+)?(?:night|evening)|for\s+the\s+rest\s+of\s+tonight|what\s+should\s+i\s+do\s+for\s+the\s+rest\s+of\s+tonight|what\s+should\s+i\s+do\s+tonight|tonight'?s?\s+(?:plan|schedule))\b/i;
+
+/** Tired / bedtime / low-effort wind-down planning — forces Low priority on all generated events. */
+const BEDTIME_WIND_DOWN_INTENT =
+  /\b(?:i\s*(?:'m|am)\s+)?tired\b|\b(?:feeling\s+)?(?:tired|exhausted|wiped|drained)\b|\b(?:plans?|planning|activities?|events?|give\s+me|help\s+me|generate|suggest)\b.*\b(?:before\s+)?(?:bed(?:time)?|sleep)\b|\b(?:before\s+)?(?:bed(?:time)?|sleep)\b.*\b(?:plan|plans|activit|suggest|ideas?)\b|\blow[\s-]?effort\s+activit|\bplan\s+my\s+evening\b|\bevening\s+before\s+sleep\b|\bwind[\s-]?down\b.*\b(?:tonight|before\s+bed|before\s+sleep)\b|\bgenerate\s+events?\s+from\s+now\b/i;
 
 const TOMORROW_EXPLICIT =
   /\b(?:tomorrow|next\s+day|the\s+morning)\b/i;
@@ -117,10 +121,26 @@ export function isEveningPlanIntent(userMessage: string): boolean {
   if (!t) return false;
   if (isBoredomOrFreeTimeIntent(t)) return true;
   if (EVENING_PLAN_INTENT.test(t)) return true;
+  if (BEDTIME_WIND_DOWN_INTENT.test(t)) return true;
+  if (/\btired\b/i.test(t) && /\b(?:tonight|before\s+bed|before\s+sleep|bedtime)\b/i.test(t)) {
+    return true;
+  }
+  if (/\btired\b/i.test(t) && /\b(?:plan|plans|activit|what\s+should\s+i\s+do|suggest|ideas?)\b/i.test(t)) {
+    return true;
+  }
   if (TONIGHT_HINT.test(t) && /\b(?:plan|schedule|activit|what\s+should\s+i\s+do)\b/i.test(t)) {
     return true;
   }
   return false;
+}
+
+/**
+ * Rest-of-night / tired / bedtime planning — schedule timing + force all event priorities to Low.
+ */
+export function isRestOfNightBedtimePlanIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || userExplicitlyWantsTomorrow(t)) return false;
+  return isEveningPlanIntent(t);
 }
 
 function isLateNightMorningHour(hour: number): boolean {
@@ -355,7 +375,7 @@ export function buildBoredomPlanningContextBlock(opts: {
     `- Schedule at most ${maxEvents} activities in this window.`,
     "- Space activities sequentially from the quarter-hour start until bedtime.",
     "- Call schedule_event once per activity with start_time and end_time as ISO datetimes on TODAY's calendar date in Eastern Time.",
-    "- Set level to Low for every activity in this rest-of-night leisure plan (green priority).",
+    "- Set level to Low for every activity in this rest-of-night / tired / before-bedtime plan (green priority) — never High or Medium.",
   ];
 
   if (veryNearBedtime) {
