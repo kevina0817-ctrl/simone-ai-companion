@@ -126,11 +126,18 @@ Full template: [`.env.example`](.env.example)
 
 ## Team & Roles
 
-| Name | Role / Responsibility |
-|------|------------------------|
-| [Team Member 1] | [e.g. Product, UX, and frontend] |
-| [Team Member 2] | [e.g. Backend, AI, and integrations] |
-| [Team Member 3] | [e.g. Architecture and feature implementation] |
+### Shanshan Ao
+
+- Deck creation and presentation materials
+- Product idea generation and UX concepts
+- Frontend development and UI/UX implementation
+
+### Mark Qian
+
+- Backend development
+- AI workflow and approval logic integration
+- Frontend/backend integration
+- System architecture and feature implementation
 
 ---
 
