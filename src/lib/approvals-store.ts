@@ -102,9 +102,11 @@ async function commitScheduleApproval(
 function markApprovalDecided(id: string, status: "approved" | "declined") {
   const entry = state.items[id];
   if (!entry || entry.status !== "pending") return;
+  const decidedAt = Date.now();
   state = {
     ...state,
-    items: { ...state.items, [id]: { ...entry, status, decidedAt: Date.now() } },
+    items: { ...state.items, [id]: { ...entry, status, decidedAt } },
+    order: state.order.includes(id) ? state.order : [id, ...state.order],
   };
 }
 
@@ -286,7 +288,6 @@ export function executeDeclineAllPending(): { schedules: number; orders: number 
     const entry = state.items[id];
     if (!entry || entry.status !== "pending") continue;
     markApprovalDecided(id, "declined");
-    removeFromPendingApprovalQueue(id);
     schedules += 1;
   }
 
@@ -307,13 +308,51 @@ export function useStatus(id: string): "pending" | "approved" | "declined" | und
   return s.items[id]?.status;
 }
 
+/** Label for Completed history, e.g. "Approved · Today, 2:45 PM". */
+export function formatApprovalDecisionLabel(
+  status: "approved" | "declined",
+  decidedAt: number,
+): string {
+  const verb = status === "approved" ? "Approved" : "Declined";
+  const at = new Date(decidedAt);
+  const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const now = new Date();
+  if (at.toDateString() === now.toDateString()) {
+    return `${verb} · Today, ${time}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (at.toDateString() === yesterday.toDateString()) {
+    return `${verb} · Yesterday, ${time}`;
+  }
+  return `${verb} · ${time}`;
+}
+
+function collectDecidedApprovals(s: ReturnType<typeof useApprovalsSnapshot>): DecidedItem[] {
+  const seen = new Set<string>();
+  const rows: DecidedItem[] = [];
+
+  const push = (id: string) => {
+    if (seen.has(id)) return;
+    const entry = s.items[id];
+    if (!entry || entry.status === "pending" || entry.decidedAt == null) return;
+    seen.add(id);
+    rows.push({
+      ...entry.item,
+      status: entry.status as "approved" | "declined",
+      decidedAt: entry.decidedAt,
+    });
+  };
+
+  for (const id of s.order) push(id);
+  for (const id of Object.keys(s.items)) push(id);
+
+  return rows.sort((a, b) => b.decidedAt - a.decidedAt);
+}
+
 export function useRecentDecisions() {
   const s = useApprovalsSnapshot();
-  return s.order
-    .map((id) => s.items[id])
-    .filter((e) => e.status !== "pending")
-    .sort((a, b) => (b.decidedAt ?? 0) - (a.decidedAt ?? 0))
-    .map((e) => ({ ...e.item, status: e.status as "approved" | "declined", decidedAt: e.decidedAt! }));
+  return collectDecidedApprovals(s);
 }
 
 export function isScheduleApproval(item: PendingItem): boolean {
@@ -326,13 +365,6 @@ export function isShoppingApproval(item: PendingItem): boolean {
 
 function shoppingApprovalId(orderId: string): string {
   return `approval-${orderId}`;
-}
-
-function removeFromPendingApprovalQueue(approvalId: string) {
-  state = {
-    ...state,
-    order: state.order.filter((oid) => oid !== approvalId),
-  };
 }
 
 export function resolveOrderIdForApproval(approvalId: string): string | undefined {
@@ -351,6 +383,7 @@ function markShoppingApprovalDecided(
     state = {
       ...state,
       items: { ...state.items, [approvalId]: { ...entry, status, decidedAt } },
+      order: state.order.includes(approvalId) ? state.order : [approvalId, ...state.order],
     };
   } else if (order) {
     const item: PendingItem = {
@@ -377,7 +410,6 @@ export function completeShoppingApproval(approvalId: string): PendingOrder | nul
   if (!approved) return null;
 
   markShoppingApprovalDecided(approvalId, "approved", approved);
-  removeFromPendingApprovalQueue(approvalId);
   recordApprovedOrderSpend(approved);
   return approved;
 }
@@ -386,5 +418,4 @@ export function declineShoppingApproval(approvalId: string): void {
   const orderId = resolveOrderIdForApproval(approvalId) ?? approvalId;
   setPendingOrderStatus(orderId, "declined");
   markShoppingApprovalDecided(approvalId, "declined", getPendingOrder(orderId));
-  removeFromPendingApprovalQueue(approvalId);
 }

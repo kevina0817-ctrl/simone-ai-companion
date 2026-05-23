@@ -12,6 +12,7 @@ import {
   isShoppingApproval,
   resolveOrderIdForApproval,
   usePending,
+  formatApprovalDecisionLabel,
   useRecentDecisions,
   useStatus,
   type ApprovalsDecideContext,
@@ -63,7 +64,7 @@ const statusLabel: Record<Activity["status"], string> = {
   auto: "Auto",
 };
 
-function ActivityRow({ a }: { a: Activity }) {
+function ActivityRow({ a, showCompletionLabel }: { a: Activity; showCompletionLabel?: boolean }) {
   return (
     <li className="flex items-center gap-3 rounded-2xl bg-card/60 p-3">
       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-secondary">{a.icon}</div>
@@ -72,10 +73,22 @@ function ActivityRow({ a }: { a: Activity }) {
         <div className="truncate text-[11px] text-muted-foreground">{a.detail}</div>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusChip[a.status]}`}>
-          {statusLabel[a.status]}
-        </span>
-        <span className="text-[10px] text-muted-foreground">{a.when}</span>
+        {showCompletionLabel ? (
+          <span
+            className={`text-[10px] font-medium ${
+              a.status === "approved" ? "text-success" : a.status === "declined" ? "text-risk-high" : "text-muted-foreground"
+            }`}
+          >
+            {a.when}
+          </span>
+        ) : (
+          <>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusChip[a.status]}`}>
+              {statusLabel[a.status]}
+            </span>
+            <span className="text-[10px] text-muted-foreground">{a.when}</span>
+          </>
+        )}
       </div>
     </li>
   );
@@ -680,7 +693,7 @@ function CompletedTab() {
     icon: iconFor(d),
     title: d.title,
     detail: d.detail,
-    when: new Date(d.decidedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+    when: formatApprovalDecisionLabel(d.status, d.decidedAt),
     status: d.status,
   }));
 
@@ -706,7 +719,7 @@ function CompletedTab() {
       </div>
       <ul className="space-y-2">
         {completed.map((a) => (
-          <ActivityRow key={a.id} a={a} />
+          <ActivityRow key={a.id} a={a} showCompletionLabel />
         ))}
       </ul>
     </div>

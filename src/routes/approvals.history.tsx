@@ -3,7 +3,7 @@ import { ArrowLeft, Calendar, Check, DollarSign, Package, ShoppingBag, Sparkles,
 import { type ReactNode } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
-import { useRecentDecisions } from "@/lib/approvals-store";
+import { formatApprovalDecisionLabel, useRecentDecisions } from "@/lib/approvals-store";
 
 export const Route = createFileRoute("/approvals/history")({
   head: () => ({ meta: [{ title: "Approval history — Simone" }] }),
@@ -101,7 +101,7 @@ function HistoryPage() {
                         : <ShoppingBag className="h-4 w-4 text-champagne" />,
                       title: d.title,
                       detail: d.detail,
-                      decidedAt: new Date(d.decidedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+                      decidedAt: formatApprovalDecisionLabel(d.status, d.decidedAt),
                       decidedBy: "You",
                       status: d.status,
                     }}
