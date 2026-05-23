@@ -2,9 +2,14 @@ import { inferOrderCategory } from "@/lib/order-category";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { isGroceryOrderConfirmTurn, isInitialGroceryProposalTurn } from "@/lib/chat-intent";
 import {
-  collectAmountsFromOrder,
+  collectGroceryLineItems,
+  groceryOrdersFromPending,
+  rebuildReplyWithGroceryItems,
+} from "@/lib/format-grocery-reply";
+import {
   formatCurrency,
   normalizeCurrencyInText,
+  repairCorruptedCurrency,
   stripChatPriceBlocks,
   stripGroceryTotalFromReply,
 } from "@/lib/format-currency";
@@ -52,47 +57,19 @@ function summaryAlreadyPresent(text: string, summary: string): boolean {
 function shouldAppendGroceryOrderTotal(userMessage: string, orders: PendingOrder[]): boolean {
   if (orders.length === 0) return false;
   if (isInitialGroceryProposalTurn(userMessage)) return false;
-  const hasGrocery = orders.some(
-    (o) => (o.category ?? inferOrderCategory(o.store, o.title)) === "grocery",
-  );
+  const hasGrocery = groceryOrdersFromPending(orders).length > 0;
   if (!hasGrocery) return true;
   return isGroceryOrderConfirmTurn(userMessage);
 }
 
-/** Normalize assistant reply to CA$ only; grocery totals only after order confirm. */
-export function applyChatCurrencyToReply(
-  reply: string,
+function appendOrderSummaries(
+  text: string,
   orders: PendingOrder[],
-  opts?: { userMessage?: string },
+  userMessage: string,
 ): string {
-  const userMessage = opts?.userMessage ?? "";
-  const initialGroceryProposal = isInitialGroceryProposalTurn(userMessage);
-
-  if (orders.length === 0 && !initialGroceryProposal) {
-    return normalizeCurrencyInText(stripChatPriceBlocks(reply.trim()));
-  }
-
-  let text = stripChatPriceBlocks(reply.trim());
-
-  if (initialGroceryProposal) {
-    text = stripGroceryTotalFromReply(text);
-    const amounts: number[] = [];
-    for (const line of text.split("\n")) {
-      const m = line.match(/CA\$\s*([\d,]+(?:\.\d{2})?)/i);
-      if (m) amounts.push(Number.parseFloat(m[1].replace(/,/g, "")));
-    }
-    return normalizeCurrencyInText(text, amounts);
-  }
-
-  const allAmounts: number[] = [];
-  for (const order of orders) {
-    allAmounts.push(...collectAmountsFromOrder(order));
-    text = normalizeCurrencyInText(text, collectAmountsFromOrder(order));
-  }
-  text = normalizeCurrencyInText(text, allAmounts);
-
   const showGroceryTotal = shouldAppendGroceryOrderTotal(userMessage, orders);
   const summaries: string[] = [];
+
   for (const order of orders) {
     const category = order.category ?? inferOrderCategory(order.store, order.title);
     if (category === "grocery" && !showGroceryTotal) continue;
@@ -105,4 +82,41 @@ export function applyChatCurrencyToReply(
 
   if (summaries.length === 0) return text;
   return `${text}\n\n${summaries.join("\n")}`.trim();
+}
+
+/**
+ * Format chat reply prices from structured order numbers — never re-format CA$ strings in prose.
+ * Grocery line items are rendered once via formatCurrency(estimatedPrice).
+ */
+export function applyChatCurrencyToReply(
+  reply: string,
+  orders: PendingOrder[],
+  opts?: { userMessage?: string },
+): string {
+  const userMessage = opts?.userMessage ?? "";
+  const initialGroceryProposal = isInitialGroceryProposalTurn(userMessage);
+
+  let text = repairCorruptedCurrency(stripChatPriceBlocks(reply.trim()));
+
+  const groceryItems = collectGroceryLineItems(orders);
+
+  if (groceryItems.length > 0) {
+    text = rebuildReplyWithGroceryItems(text, groceryItems);
+    if (initialGroceryProposal) {
+      text = stripGroceryTotalFromReply(text);
+    }
+    return appendOrderSummaries(text, orders, userMessage);
+  }
+
+  if (initialGroceryProposal) {
+    text = stripGroceryTotalFromReply(text);
+    return repairCorruptedCurrency(text);
+  }
+
+  if (orders.length > 0) {
+    text = normalizeCurrencyInText(text);
+    return appendOrderSummaries(text, orders, userMessage);
+  }
+
+  return normalizeCurrencyInText(text);
 }

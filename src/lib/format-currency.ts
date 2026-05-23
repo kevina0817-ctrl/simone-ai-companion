@@ -4,10 +4,6 @@ function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-function escapeRegex(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
  * Canonical display format for every price in the app.
  * @example formatCurrency(2700) → "CA$2,700.00"
@@ -21,17 +17,14 @@ export function formatCurrency(amount: number): string {
   return `CA$${formatted}`;
 }
 
-export function amountVariants(amount: number): string[] {
-  const value = roundMoney(amount);
-  const formatted = formatCurrency(value).replace(/^CA\$/, "");
-  const uniq = new Set([
-    value.toFixed(2),
-    value.toFixed(0),
-    String(Math.round(value)),
-    formatted,
-    formatted.replace(/,/g, ""),
-  ]);
-  return [...uniq].filter(Boolean);
+/** Parse a numeric amount — never pass formatted strings like "CA$12.99". */
+export function parseMoneyAmount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return roundMoney(value);
+  if (typeof value !== "string") return null;
+  const stripped = value.replace(/,/g, "").replace(/[^\d.-]/g, "");
+  if (!stripped) return null;
+  const n = Number.parseFloat(stripped);
+  return Number.isFinite(n) ? roundMoney(n) : null;
 }
 
 /** Remove conversion / duplicate pricing lines from assistant copy. */
@@ -73,32 +66,21 @@ export function stripGroceryTotalFromReply(text: string): string {
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/** Rewrite US$/USD/$ price labels to CA$ (same numeric amount). */
-export function normalizeCurrencyInText(text: string, amounts?: number[]): string {
+/** Fix strings corrupted by repeated CA$ prefixing or decimal duplication. */
+export function repairCorruptedCurrency(text: string): string {
   let out = text;
-  const seen = amounts ?? [];
+  out = out.replace(/(?:CA)+(\$[\d,]+(?:\.\d{2})?)/gi, "CA$1");
+  out = out.replace(/(CA\$\d{1,3}(?:,\d{3})*\.\d{2})(?:\.\d{2})+/gi, "$1");
+  out = out.replace(/(CA\$\d+\.\d{2})(?:\.\d{2})+/gi, "$1");
+  return out;
+}
 
-  for (const amt of seen) {
-    const label = formatCurrency(amt);
-    for (const variant of amountVariants(amt)) {
-      const e = escapeRegex(variant);
-      const patterns = [
-        new RegExp(`US\\$\\s*${e}\\b`, "gi"),
-        new RegExp(`US\\$${e}\\b`, "gi"),
-        new RegExp(`USD\\s*${e}\\b`, "gi"),
-        new RegExp(`\\b${e}\\s*USD\\b`, "gi"),
-        new RegExp(`CA\\$\\s*${e}\\b`, "gi"),
-        new RegExp(`CA\\$${e}\\b`, "gi"),
-        new RegExp(`\\b${e}\\s*CAD\\b`, "gi"),
-        new RegExp(`\\bCAD\\s*${e}\\b`, "gi"),
-        new RegExp(`\\$\\s*${e}\\b`, "g"),
-      ];
-      for (const pattern of patterns) {
-        out = out.replace(pattern, label);
-      }
-    }
-  }
-
+/**
+ * One-pass US$/USD → CA$ for foreign labels only. Does not re-format existing CA$ amounts.
+ * @deprecated Prefer rendering prices from numeric fields; avoid running on full assistant replies.
+ */
+export function normalizeCurrencyInText(text: string): string {
+  let out = repairCorruptedCurrency(text);
   out = out.replace(/\bUS\$\s*([\d,]+(?:\.\d{2})?)/gi, (_, n) =>
     formatCurrency(Number.parseFloat(String(n).replace(/,/g, ""))),
   );

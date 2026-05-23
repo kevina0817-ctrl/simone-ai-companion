@@ -77,9 +77,9 @@ Do not turn product descriptions, prices, or shopping lists into calendar events
 Never call create_pending_order multiple times for multiple recommended options in the same turn.
 For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
-(name, qty, estimated_price). Quote every price in Canadian dollars only (CA$ format, e.g. "CA$128.50") — never US$, USD, or conversion text.
-GROCERY LIST (first response): show item names, quantities, and per-item prices only. Do NOT include a grand total, "Total Estimated Price", or "Estimated grocery total" line — ask if they want you to create a pending grocery order. Only state the full order total after they explicitly agree to create the order.
-For Amazon, grocery, luxury, and all other retailers: use CA$ only in chat. State each price once; do not repeat price paragraphs.
+(name, qty, estimated_price as numbers in CAD — e.g. 12.99, not "CA$12.99"). The app formats prices for display; do not put currency symbols in tool arguments.
+GROCERY LIST (first response): list item names and quantities in chat; put each unit price only in create_pending_order line items as estimated_price numbers. Do NOT write CA$, US$, or dollar amounts in the chat body for groceries — the app renders prices. No grand total on the first pass — ask if they want a pending grocery order. Only the full order total appears after they agree to create the order.
+For non-grocery shopping: you may mention a single price estimate in prose when not using line items; never US$, USD, or conversion text.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
@@ -474,11 +474,13 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       ? pickSingleOrderForApproval(data.message, pendingOrders)
       : [];
 
-    const usdOrders = collectUsdOrdersFromChatResult({
-      pendingOrders: ordersForApproval,
+    const ordersForReplyFormatting = collectUsdOrdersFromChatResult({
+      pendingOrders,
       actions,
     });
-    reply = applyChatCurrencyToReply(reply, usdOrders, { userMessage: data.message });
+    reply = applyChatCurrencyToReply(reply, ordersForReplyFormatting, {
+      userMessage: data.message,
+    });
 
     await supabase.from("chat_messages").insert({
       user_id: userId,

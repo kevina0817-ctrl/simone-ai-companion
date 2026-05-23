@@ -77,9 +77,11 @@ describe("normalizeCurrencyInText", () => {
     expect(stripChatPriceBlocks("Hi\nIf you approve, saved as CA$100")).toBe("Hi");
   });
 
-  it("normalizes inline amounts", () => {
-    const out = normalizeCurrencyInText("About US$349.99 on Amazon.", [349.99]);
+  it("normalizes US$ labels without touching existing CA$", () => {
+    const out = normalizeCurrencyInText("About US$349.99 on Amazon. Already CA$12.99.");
     expect(out).toContain("CA$349.99");
+    expect(out).toContain("CA$12.99");
     expect(out).not.toMatch(/US\$/);
+    expect(out).not.toMatch(/CACA/);
   });
 });

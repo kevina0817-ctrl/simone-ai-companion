@@ -22,10 +22,6 @@ import {
   verifyProposedRoutineChatAlignment,
 } from "@/lib/proposed-routine";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
-import {
-  applyChatCurrencyToReply,
-  collectUsdOrdersFromChatResult,
-} from "@/lib/chat-order-currency";
 import { filterEventsForToday, getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
   addDemoMessage,
@@ -151,10 +147,7 @@ function ChatPage() {
         addDemoMessage({ role: "user", content: t });
       }
 
-      const usdOrders = collectUsdOrdersFromChatResult(result);
-      const replyText = backendAvailable
-        ? result.reply
-        : applyChatCurrencyToReply(result.reply, usdOrders, { userMessage: t });
+      const replyText = result.reply;
 
       const {
         committed,

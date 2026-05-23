@@ -5,6 +5,10 @@ import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import {
+  applyChatCurrencyToReply,
+  collectUsdOrdersFromChatResult,
+} from "@/lib/chat-order-currency";
+import {
   buildBoredomPlanningContextBlock,
   EVENING_PLAN_TIMEZONE,
   isEveningPlanIntent,
@@ -76,8 +80,8 @@ When the user asks to buy a specific product they already chose, ONLY CALL creat
 Do not split product names or prices into fake calendar events.
 Never create multiple pending orders for multiple recommended options in one turn.
 Order title and item names must be real products only — never assistant filler phrases.
-Quote every price in Canadian dollars only (CA$ format). Never US$, USD, conversion text, or dual currencies. State each price once.
-For grocery lists: per-item prices only on the first pass — no grand total or "Total Estimated Price" until the user agrees to create the pending order.
+For create_pending_order use numeric estimated_price in CAD (e.g. 12.99) — never "CA$12.99" in tool args. The app formats prices for display.
+For grocery lists: put prices only in tool line items as numbers; do not write CA$/US$ in chat — no grand total until the user agrees to create the pending order.
 Do NOT call a tool for general questions or chit-chat.
 
 BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern). Always assume bedtime 11:00 PM unless the user explicitly names another — never infer bedtime from duration. "N hours before bedtime" = window ending at bedtime (3h → 8:00–11:00 PM, 2h → 9:00–11:00 PM), not now+N hours. Nothing after bedtime. No food within 4h of bedtime. No 12:00 AM–1:00 AM blocks for before-bed requests.
@@ -379,6 +383,14 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     const ordersForApproval = shouldCreateOrderApproval(data.message)
       ? pickSingleOrderForApproval(data.message, pendingOrders)
       : [];
+
+    const ordersForReplyFormatting = collectUsdOrdersFromChatResult({
+      pendingOrders,
+      actions,
+    });
+    reply = applyChatCurrencyToReply(reply, ordersForReplyFormatting, {
+      userMessage: data.message,
+    });
 
     return { reply, actions, pendingOrders: ordersForApproval } satisfies ChatResponse;
   });
