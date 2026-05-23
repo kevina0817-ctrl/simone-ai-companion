@@ -25,13 +25,20 @@ describe("formatCurrency", () => {
 });
 
 describe("applyChatCurrencyToReply", () => {
-  it("rewrites grocery US$ to CA$ and adds one summary", () => {
+  it("grocery proposal strips total; confirm turn shows estimated total", () => {
     const order = sampleOrder({});
-    const reply = applyChatCurrencyToReply("Total: US$128.50 (USD).", [order]);
-    expect(reply).not.toMatch(/US\$|USD/i);
-    expect(reply).toContain("CA$128.50");
-    expect(reply).toContain("Estimated grocery total: CA$128.50");
-    expect((reply.match(/Estimated grocery total/g) ?? []).length).toBe(1);
+    const proposal = applyChatCurrencyToReply(
+      "### Total Estimated Price: CA$128.50\n\nShall I create the order?",
+      [],
+      { userMessage: "Suggest a grocery list for Whole Foods" },
+    );
+    expect(proposal).not.toMatch(/Total Estimated Price/i);
+    expect(proposal).not.toMatch(/Estimated grocery total/i);
+
+    const confirmed = applyChatCurrencyToReply("Creating your pending grocery order.", [order], {
+      userMessage: "Yes, create the pending grocery order",
+    });
+    expect(confirmed).toContain("Estimated grocery total: CA$128.50");
   });
 
   it("LV reply shows single CA$ price only", () => {

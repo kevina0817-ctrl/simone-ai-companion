@@ -78,6 +78,7 @@ Never call create_pending_order multiple times for multiple recommended options 
 For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
 (name, qty, estimated_price). Quote every price in Canadian dollars only (CA$ format, e.g. "CA$128.50") — never US$, USD, or conversion text.
+GROCERY LIST (first response): show item names, quantities, and per-item prices only. Do NOT include a grand total, "Total Estimated Price", or "Estimated grocery total" line — ask if they want you to create a pending grocery order. Only state the full order total after they explicitly agree to create the order.
 For Amazon, grocery, luxury, and all other retailers: use CA$ only in chat. State each price once; do not repeat price paragraphs.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
@@ -477,7 +478,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       pendingOrders: ordersForApproval,
       actions,
     });
-    reply = applyChatCurrencyToReply(reply, usdOrders);
+    reply = applyChatCurrencyToReply(reply, usdOrders, { userMessage: data.message });
 
     await supabase.from("chat_messages").insert({
       user_id: userId,

@@ -175,6 +175,40 @@ export function isShoppingOrOrderChatIntent(userMessage: string): boolean {
   return false;
 }
 
+/** User is asking for a grocery list / proposal — not yet confirming order creation. */
+export function isGroceryListIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t) return false;
+  if (!/\bgrocer(?:y|ies)\b/i.test(t) && !GROCERY_OR_SHOPPING_LIST.test(t)) return false;
+  if (
+    /\b(cancel|remove|delete|reschedule|schedule|book)\b/i.test(t) &&
+    /\b(meeting|event|appointment|calendar|class|session)\b/i.test(t)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** User explicitly agreed to create a pending grocery order (show total on this turn). */
+export function isGroceryOrderConfirmTurn(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || !/\bgrocer(?:y|ies)\b/i.test(t)) return false;
+  if (PENDING_ORDER_FLOW.test(t)) return true;
+  return (
+    /\b(?:yes|yeah|yep|sure|go\s+ahead|please|do\s+it)\b/i.test(t) &&
+    /\b(?:create|pending|order|add)\b/i.test(t)
+  );
+}
+
+/**
+ * First-turn grocery UX: items + per-unit prices + approval question only (no order total yet).
+ */
+export function isInitialGroceryProposalTurn(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || !isGroceryListIntent(t)) return false;
+  return !isGroceryOrderConfirmTurn(t);
+}
+
 /** Scheduling, bedtime routine, wellness evening plans, or calendar changes. */
 export function isSchedulingWellnessIntent(userMessage: string): boolean {
   const t = userMessage.trim();

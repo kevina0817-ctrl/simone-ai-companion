@@ -154,7 +154,7 @@ function ChatPage() {
       const usdOrders = collectUsdOrdersFromChatResult(result);
       const replyText = backendAvailable
         ? result.reply
-        : applyChatCurrencyToReply(result.reply, usdOrders);
+        : applyChatCurrencyToReply(result.reply, usdOrders, { userMessage: t });
 
       const {
         committed,

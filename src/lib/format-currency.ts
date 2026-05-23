@@ -40,6 +40,9 @@ export function stripChatPriceBlocks(text: string): string {
   const linePatterns = [
     /^[^\n]*\bPrice estimate\b[^\n]*$/gim,
     /^[^\n]*\bEstimated grocery total\b[^\n]*$/gim,
+    /^#{1,6}\s*Total\s+Estimated\s+Price:?\s*.*$/gim,
+    /^Total\s+Estimated\s+Price:?\s*.*$/gim,
+    /^[^\n]*\b(?:Grand\s+)?total\s*(?:estimated)?:?\s*CA\$[^\n]*$/gim,
     /^[^\n]*\bIf you approve\b[^\n]*$/gim,
     /^[^\n]*\bconverted from\b[^\n]*$/gim,
     /^[^\n]*\bUS\$[\d,.]+\s*→\s*CA\$[\d,.]+[^\n]*$/gim,
@@ -49,6 +52,22 @@ export function stripChatPriceBlocks(text: string): string {
     /^[^\n]*\bexchange rate\b[^\n]*$/gim,
   ];
   for (const pattern of linePatterns) {
+    out = out.replace(pattern, "");
+  }
+  return out.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Remove order-level totals from first grocery proposal copy (per-item prices stay). */
+export function stripGroceryTotalFromReply(text: string): string {
+  let out = text;
+  const patterns = [
+    /^#{1,6}\s*Total\s+Estimated\s+Price:?\s*.*$/gim,
+    /^Total\s+Estimated\s+Price:?\s*.*$/gim,
+    /^[^\n]*\bEstimated\s+(?:grocery\s+)?total\b[^\n]*$/gim,
+    /^[^\n]*\b(?:Grand\s+)?total\s*(?:estimated)?:?\s*CA\$[^\n]*$/gim,
+    /^[^\n]*\bTotal\s+(?:estimated\s+)?(?:price|cost):?\s*CA\$[^\n]*$/gim,
+  ];
+  for (const pattern of patterns) {
     out = out.replace(pattern, "");
   }
   return out.replace(/\n{3,}/g, "\n\n").trim();
