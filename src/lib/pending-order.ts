@@ -78,15 +78,16 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
   const title = parsed.data.title.trim();
   const store = parsed.data.store?.trim() || "Whole Foods";
 
+  const category = inferOrderCategory(store, title);
   const order: PendingOrder = {
     id: generateOrderId(),
     title,
     store,
-    category: inferOrderCategory(store, title),
+    category,
     items,
     totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
-    amountCurrency: "USD",
+    amountCurrency: category === "grocery" || category === "amazon" ? "CAD" : "USD",
     createdAt: new Date().toISOString(),
   };
 
@@ -134,15 +135,16 @@ export function parseOrderFromUserMessage(userMessage: string): PendingOrder | n
         ];
 
   const normalizedTitle = title.charAt(0).toUpperCase() + title.slice(1);
+  const category = inferOrderCategory(store, normalizedTitle);
   const order: PendingOrder = {
     id: generateOrderId(),
     title: normalizedTitle,
     store,
-    category: inferOrderCategory(store, normalizedTitle),
+    category,
     items,
     totalEstimatedPrice: computeOrderTotal(items),
     status: "pending_approval",
-    amountCurrency: "USD",
+    amountCurrency: category === "grocery" || category === "amazon" ? "CAD" : "USD",
     createdAt: new Date().toISOString(),
   };
 

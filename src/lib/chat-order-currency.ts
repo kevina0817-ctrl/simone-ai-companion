@@ -1,76 +1,38 @@
 import { inferOrderCategory } from "@/lib/order-category";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
-import { USD_TO_CAD_RATE } from "@/lib/order-prepare";
+import {
+  formatCurrencyByCategory,
+  stripChatPriceBlocks,
+  normalizeCurrencyInReplyForOrder,
+  type OriginalCurrency,
+} from "@/lib/format-currency-by-category";
 import type { PendingOrder } from "@/lib/pending-order";
 
-function roundMoney(n: number) {
-  return Math.round(n * 100) / 100;
+function orderOriginalCurrency(order: PendingOrder): OriginalCurrency {
+  if (order.amountCurrency === "CAD") return "CAD";
+  return "USD";
 }
 
-function escapeRegex(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Amount strings the model may use in prose (950, 950.00, etc.). */
-function amountVariants(amount: number): string[] {
-  const uniq = new Set([
-    amount.toFixed(2),
-    amount.toFixed(0),
-    String(Math.round(amount)),
-  ]);
-  return [...uniq];
-}
-
-/** Replace CAD-labeled amounts that are still USD estimates from the tool. */
-function fixUsdAmountLabelsInText(text: string, amount: number): string {
-  let out = text;
-  for (const amt of amountVariants(amount)) {
-    const e = escapeRegex(amt);
-    out = out.replace(new RegExp(`CA\\$\\s*${e}\\b`, "gi"), `US$${amt}`);
-    out = out.replace(new RegExp(`CA\\$${e}\\b`, "gi"), `US$${amt}`);
-    out = out.replace(new RegExp(`\\b${e}\\s*CAD\\b`, "gi"), `US$${amt}`);
-    out = out.replace(new RegExp(`\\bCAD\\s*${e}\\b`, "gi"), `US$${amt}`);
-    out = out.replace(new RegExp(`\\$\\s*${e}\\s*CAD\\b`, "gi"), `US$${amt}`);
-    out = out.replace(
-      new RegExp(`\\b${e}\\s*Canadian dollars?\\b`, "gi"),
-      `US$${amt}`,
-    );
-    out = out.replace(
-      new RegExp(`approximately\\s+${e}\\s*CAD\\b`, "gi"),
-      `approximately US$${amt}`,
-    );
-  }
-  return out;
-}
-
-function fixOrderUsdLabelsInReply(text: string, order: PendingOrder): string {
-  let out = fixUsdAmountLabelsInText(text, order.totalEstimatedPrice);
-  for (const item of order.items) {
-    out = fixUsdAmountLabelsInText(out, item.estimatedPrice);
-    out = fixUsdAmountLabelsInText(out, roundMoney(item.estimatedPrice * item.qty));
-  }
-  return out;
-}
-
-/** One-line price disclosure for chat (USD estimate; CAD only after conversion for Other). */
+/** One canonical price line per order — no CAD+USD mix, no conversion copy. */
 export function formatChatOrderPriceSummary(order: PendingOrder): string {
   const category = order.category ?? inferOrderCategory(order.store, order.title);
-  const usdTotal = order.totalEstimatedPrice;
-  const usdLabel = `US$${usdTotal.toFixed(2)}`;
+  const original = orderOriginalCurrency(order);
+  const total = order.totalEstimatedPrice;
+  const label = formatCurrencyByCategory(category, total, original);
 
-  if (category === "grocery" || category === "amazon") {
-    return `Price estimate: approximately ${usdLabel} (USD).`;
+  if (category === "grocery") {
+    return `Estimated grocery total: ${label}`;
   }
-
-  const cadTotal = roundMoney(usdTotal * USD_TO_CAD_RATE);
-  return (
-    `Price estimate: approximately ${usdLabel}. ` +
-    `If you approve, it will be saved as about CA$${cadTotal.toFixed(2)} after conversion.`
-  );
+  if (category === "amazon") {
+    return `Price estimate: ${label}`;
+  }
+  return `Price estimate: approximately ${label}.`;
 }
 
-/** Collect tool-created orders still in USD (before Approvals conversion). */
-export function collectUsdOrdersFromChatResult(result: Pick<ChatResponse, "pendingOrders" | "actions">): PendingOrder[] {
+/** Collect tool-created orders for currency normalization. */
+export function collectUsdOrdersFromChatResult(
+  result: Pick<ChatResponse, "pendingOrders" | "actions">,
+): PendingOrder[] {
   const seen = new Set<string>();
   const orders: PendingOrder[] = [];
 
@@ -91,17 +53,34 @@ export function collectUsdOrdersFromChatResult(result: Pick<ChatResponse, "pendi
   return orders;
 }
 
+function summaryAlreadyPresent(text: string, summary: string): boolean {
+  const core = summary.replace(/\.$/, "").trim();
+  return text.includes(core);
+}
+
 /**
- * Fix assistant reply currency labels and append clear USD / converted CAD wording.
+ * Apply strict category currency rules to assistant chat copy.
+ * Budget CAD conversion stays in order-prepare / approvals — not shown here.
  */
 export function applyChatCurrencyToReply(reply: string, orders: PendingOrder[]): string {
   if (orders.length === 0) return reply;
 
-  let text = reply.trim();
+  let text = stripChatPriceBlocks(reply.trim());
+
   for (const order of orders) {
-    text = fixOrderUsdLabelsInReply(text, order);
+    const category = order.category ?? inferOrderCategory(order.store, order.title);
+    const original = orderOriginalCurrency(order);
+    text = normalizeCurrencyInReplyForOrder(text, category, order, original);
   }
 
-  const summaries = orders.map(formatChatOrderPriceSummary).join("\n");
-  return `${text}\n\n${summaries}`;
+  const summaries: string[] = [];
+  for (const order of orders) {
+    const summary = formatChatOrderPriceSummary(order);
+    if (!summaryAlreadyPresent(text, summary)) {
+      summaries.push(summary);
+    }
+  }
+
+  if (summaries.length === 0) return text;
+  return `${text}\n\n${summaries.join("\n")}`.trim();
 }

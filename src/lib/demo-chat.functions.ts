@@ -76,8 +76,9 @@ When the user asks to buy a specific product they already chose, ONLY CALL creat
 Do not split product names or prices into fake calendar events.
 Never create multiple pending orders for multiple recommended options in one turn.
 Order title and item names must be real products only — never assistant filler phrases.
-Quote prices as US dollars (e.g. "approximately US$950") — never call unconverted tool estimates CAD.
-For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
+Grocery and Amazon: quote Canadian dollars only (CA$/CAD) — never US$ or USD in chat.
+Luxury / other (e.g. Louis Vuitton): quote US dollars only (US$/USD) — never CAD or conversion text in chat.
+State each price once; do not repeat price paragraphs.
 Do NOT call a tool for general questions or chit-chat.
 
 BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern). Always assume bedtime 11:00 PM unless the user explicitly names another — never infer bedtime from duration. "N hours before bedtime" = window ending at bedtime (3h → 8:00–11:00 PM, 2h → 9:00–11:00 PM), not now+N hours. Nothing after bedtime. No food within 4h of bedtime. No 12:00 AM–1:00 AM blocks for before-bed requests.

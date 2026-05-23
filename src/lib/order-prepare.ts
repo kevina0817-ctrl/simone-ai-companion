@@ -18,9 +18,10 @@ function stripBudgetFlags(order: PendingOrder): PendingOrder {
   return rest;
 }
 
-/** Convert USD-priced “other” orders to CAD before Approvals. Grocery/Amazon stay as-is. */
+/** Convert USD-priced “other” orders to CAD before Approvals (silent budget normalization). */
 export function convertOtherOrderToCad(order: PendingOrder): PendingOrder {
   if (order.category !== "other") return stripBudgetFlags(order);
+  if (order.amountCurrency === "CAD" && order.originalTotalUsd != null) return stripBudgetFlags(order);
   if (order.amountCurrency === "CAD") return stripBudgetFlags(order);
 
   const originalTotalUsd = order.totalEstimatedPrice;
@@ -38,6 +39,16 @@ export function convertOtherOrderToCad(order: PendingOrder): PendingOrder {
   };
 }
 
+/** Grocery / Amazon tool estimates are Canadian list prices — store as CAD for budget. */
+export function normalizeGroceryAmazonOrderCurrency(order: PendingOrder): PendingOrder {
+  if (order.category !== "grocery" && order.category !== "amazon") return order;
+  return {
+    ...stripBudgetFlags(order),
+    amountCurrency: "CAD",
+    originalTotalUsd: undefined,
+  };
+}
+
 /** Queue in Approvals — no budget flags until the user taps Approve. */
 export function prepareOrderForApprovals(order: PendingOrder): PendingOrder {
   const base = clonePendingOrder(order);
@@ -46,7 +57,7 @@ export function prepareOrderForApprovals(order: PendingOrder): PendingOrder {
     : { ...base, category: inferOrderCategory(base.store, base.title) };
   const normalized =
     withCategory.category === "grocery" || withCategory.category === "amazon"
-      ? stripBudgetFlags(withCategory)
+      ? normalizeGroceryAmazonOrderCurrency(withCategory)
       : convertOtherOrderToCad(withCategory);
   return {
     ...normalized,
