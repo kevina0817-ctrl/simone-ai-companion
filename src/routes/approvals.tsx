@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Calendar, Check, DollarSign, Filter, Package, ShoppingBag, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Calendar, Check, Filter, Package, ShoppingBag, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,7 +41,7 @@ export const Route = createFileRoute("/approvals")({
   component: () => <RequireAuth><ApprovalsPage /></RequireAuth>,
 });
 
-type Tab = "needs" | "all";
+type Tab = "pending" | "completed";
 
 type Activity = {
   id: string;
@@ -51,15 +51,6 @@ type Activity = {
   when: string;
   status: "approved" | "declined" | "auto";
 };
-
-const recentActivity: Activity[] = [
-  { id: "a1", icon: <ShoppingBag className="h-4 w-4 text-success" />, title: "Grocery reorder", detail: "$48.10 • Whole Foods", when: "2h ago", status: "approved" },
-  { id: "a2", icon: <Calendar className="h-4 w-4 text-primary" />, title: "Moved yoga to 7 AM", detail: "Calendar adjustment", when: "Today", status: "approved" },
-  { id: "a3", icon: <Package className="h-4 w-4 text-champagne" />, title: "Amazon: AirPods case", detail: "$24.99 • 1-day shipping", when: "Yesterday", status: "approved" },
-  { id: "a4", icon: <DollarSign className="h-4 w-4 text-success" />, title: "Paused dining budget alert", detail: "Threshold raised to $900", when: "Yesterday", status: "auto" },
-  { id: "a5", icon: <Sparkles className="h-4 w-4 text-primary" />, title: "Booked recovery session", detail: "Sauna + cold plunge • 5:30 PM", when: "2 days ago", status: "approved" },
-  { id: "a6", icon: <Package className="h-4 w-4 text-muted-foreground" />, title: "Skipped Amazon subscription", detail: "Coffee pods • monthly", when: "3 days ago", status: "declined" },
-];
 
 const statusChip: Record<Activity["status"], string> = {
   approved: "bg-success/15 text-success",
@@ -91,7 +82,7 @@ function ActivityRow({ a }: { a: Activity }) {
 }
 
 function ApprovalsPage() {
-  const [tab, setTab] = useState<Tab>("needs");
+  const [tab, setTab] = useState<Tab>("pending");
   const pending = usePending();
 
   return (
@@ -112,8 +103,8 @@ function ApprovalsPage() {
 
         <div className="flex gap-1 rounded-full bg-card/60 p-1">
           {[
-            { id: "needs", label: "Needs your review" },
-            { id: "all", label: "All activity" },
+            { id: "pending", label: "Pending" },
+            { id: "completed", label: "Completed" },
           ].map((t) => (
             <button
               key={t.id}
@@ -127,7 +118,7 @@ function ApprovalsPage() {
           ))}
         </div>
 
-        {tab === "needs" ? <NeedsReview /> : <AllActivity />}
+        {tab === "pending" ? <PendingTab /> : <CompletedTab />}
       </div>
     </MobileFrame>
   );
@@ -639,7 +630,7 @@ function ApproveAllBar() {
   );
 }
 
-function NeedsReview() {
+function PendingTab() {
   const pending = usePending();
   const schedulePending = pending.filter(isScheduleApproval);
   const orderPending = pending.filter(isShoppingApproval);
@@ -672,8 +663,7 @@ function NeedsReview() {
   );
 }
 
-function AllActivity() {
-  const pending = usePending();
+function CompletedTab() {
   const decisions = useRecentDecisions();
 
   const iconFor = (item: PendingItem) =>
@@ -685,7 +675,7 @@ function AllActivity() {
       <ShoppingBag className="h-4 w-4 text-champagne" />
     );
 
-  const justDecided: Activity[] = decisions.map((d) => ({
+  const completed: Activity[] = decisions.map((d) => ({
     id: d.id,
     icon: iconFor(d),
     title: d.title,
@@ -694,39 +684,31 @@ function AllActivity() {
     status: d.status,
   }));
 
-  return (
-    <>
-      <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-xs font-medium text-muted-foreground">Pending</div>
-          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
-            {pending.length} waiting
-          </span>
+  if (completed.length === 0) {
+    return (
+      <div className="mt-6 rounded-3xl bg-card/60 p-8 text-center">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-secondary/60">
+          <Check className="h-5 w-5 text-muted-foreground" />
         </div>
-        {pending.length > 0 ? (
-          <ul className="space-y-2">
-            {pending.map((p) => (
-              <ActivityRow
-                key={p.id}
-                a={{ id: p.id, icon: iconFor(p), title: p.title, detail: p.detail, when: "Now", status: "auto" }}
-              />
-            ))}
-          </ul>
-        ) : (
-          <p className="px-1 py-2 text-xs text-muted-foreground">Nothing waiting on you.</p>
-        )}
+        <div className="text-sm font-medium">No completed approvals yet</div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Approved and declined items will appear here.
+        </p>
       </div>
+    );
+  }
 
-      <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-xs font-medium text-muted-foreground">Recent</div>
-          <span className="text-[10px] text-muted-foreground">{justDecided.length + recentActivity.length} items</span>
-        </div>
-        <ul className="space-y-2">
-          {justDecided.map((a) => <ActivityRow key={a.id} a={a} />)}
-          {recentActivity.map((a) => <ActivityRow key={a.id} a={a} />)}
-        </ul>
+  return (
+    <div className="mt-4 rounded-3xl bg-card/70 p-4 shadow-card">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs font-medium text-muted-foreground">Completed</div>
+        <span className="text-[10px] text-muted-foreground">{completed.length} items</span>
       </div>
-    </>
+      <ul className="space-y-2">
+        {completed.map((a) => (
+          <ActivityRow key={a.id} a={a} />
+        ))}
+      </ul>
+    </div>
   );
 }
