@@ -41,8 +41,23 @@ const orderToolSchema = z.object({
   items: z.array(lineItemSchema).min(1).max(40),
 });
 
+/** Line total = quantity × unit price (estimatedPrice is always per unit). */
+export function computeLineTotal(item: OrderLineItem): number {
+  return Math.round(item.estimatedPrice * item.qty * 100) / 100;
+}
+
 export function computeOrderTotal(items: OrderLineItem[]): number {
-  return Math.round(items.reduce((sum, i) => sum + i.estimatedPrice * i.qty, 0) * 100) / 100;
+  return Math.round(items.reduce((sum, i) => sum + computeLineTotal(i), 0) * 100) / 100;
+}
+
+/** Recompute total from line items — never trust LLM-stated order totals. */
+export function recomputePendingOrderTotals(order: PendingOrder): PendingOrder {
+  const items = order.items.map((item) => ({ ...item }));
+  return {
+    ...order,
+    items,
+    totalEstimatedPrice: computeOrderTotal(items),
+  };
 }
 
 /** Unique id per order — avoids collisions when multiple orders are created in the same millisecond. */

@@ -74,7 +74,7 @@ export function isValidPendingOrder(order: PendingOrder): boolean {
   if (!order.items.every(isValidLineItem)) return false;
   if (!Number.isFinite(order.totalEstimatedPrice) || order.totalEstimatedPrice <= 0) return false;
 
-  const sum = order.items.reduce((s, i) => s + i.estimatedPrice * i.qty, 0);
+  const sum = order.items.reduce((s, i) => s + i.estimatedPrice * Math.max(1, i.qty), 0);
   if (Math.abs(sum - order.totalEstimatedPrice) > 0.05 * Math.max(order.totalEstimatedPrice, 1)) {
     return false;
   }

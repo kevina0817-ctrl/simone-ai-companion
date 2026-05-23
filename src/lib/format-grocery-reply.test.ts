@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyChatCurrencyToReply } from "@/lib/chat-order-currency";
-import { formatGroceryListBlock, rebuildReplyWithGroceryItems } from "@/lib/format-grocery-reply";
+import { applyChatCurrencyToReply, formatChatOrderPriceSummary } from "@/lib/chat-order-currency";
+import { formatGroceryListBlock, formatShoppingItemLine, rebuildReplyWithGroceryItems } from "@/lib/format-grocery-reply";
 import { formatCurrency, repairCorruptedCurrency } from "@/lib/format-currency";
-import type { PendingOrder } from "@/lib/pending-order";
+import { computeOrderTotal, type OrderLineItem, type PendingOrder } from "@/lib/pending-order";
 
 function groceryOrder(items: PendingOrder["items"]): PendingOrder {
   return {
@@ -26,6 +26,37 @@ describe("formatGroceryListBlock", () => {
     expect(block).toBe(
       "1. Chicken Breast (CA$12.99)\n2. Ground Turkey (CA$7.99)",
     );
+  });
+
+  it("shows qty × unit = line total when qty > 1", () => {
+    expect(formatShoppingItemLine(1, { name: "Chicken Breast", qty: 2, estimatedPrice: 9 })).toBe(
+      "1. Chicken Breast — 2 × CA$9.00 = CA$18.00",
+    );
+    expect(formatShoppingItemLine(8, { name: "Canned Tuna", qty: 4, estimatedPrice: 6 })).toBe(
+      "8. Canned Tuna — 4 × CA$6.00 = CA$24.00",
+    );
+  });
+});
+
+const PROTEIN_GROCERY_ITEMS: OrderLineItem[] = [
+  { name: "Chicken Breast", qty: 2, estimatedPrice: 9 },
+  { name: "Brown Rice", qty: 2, estimatedPrice: 4 },
+  { name: "Quinoa", qty: 1, estimatedPrice: 3.5 },
+  { name: "Broccoli", qty: 1, estimatedPrice: 2 },
+  { name: "Spinach", qty: 1, estimatedPrice: 3 },
+  { name: "Eggs", qty: 1, estimatedPrice: 2.5 },
+  { name: "Greek Yogurt", qty: 1, estimatedPrice: 5 },
+  { name: "Canned Tuna", qty: 4, estimatedPrice: 6 },
+  { name: "Almonds", qty: 1, estimatedPrice: 8 },
+  { name: "Protein Powder", qty: 1, estimatedPrice: 25 },
+];
+
+describe("grocery order total from line items", () => {
+  it("reports CA$99.00 for the protein grocery example", () => {
+    expect(computeOrderTotal(PROTEIN_GROCERY_ITEMS)).toBe(99);
+    const order = groceryOrder(PROTEIN_GROCERY_ITEMS);
+    order.totalEstimatedPrice = 66;
+    expect(formatChatOrderPriceSummary(order)).toBe("Estimated Total Price: CA$99.00");
   });
 });
 
@@ -62,6 +93,18 @@ describe("applyChatCurrencyToReply — no corrupted prices", () => {
     expect(out).not.toMatch(/Total Estimated Price/i);
   });
 
+  it("replaces LLM unit-sum total with qty-weighted total on confirm", () => {
+    const order = groceryOrder(PROTEIN_GROCERY_ITEMS);
+    const out = applyChatCurrencyToReply(
+      "Estimated Total Price: $66.00\n\nShall I create the order?",
+      [order],
+      { userMessage: "Yes, create the pending grocery order" },
+    );
+    expect(out).toContain("Estimated Total Price: CA$99.00");
+    expect(out).not.toContain("$66.00");
+    expect(out).toContain("2 × CA$9.00 = CA$18.00");
+  });
+
   it("shows grocery total only after confirm", () => {
     const order = groceryOrder([{ name: "Spinach", qty: 1, estimatedPrice: 4.5 }]);
     order.totalEstimatedPrice = 4.5;
@@ -69,7 +112,7 @@ describe("applyChatCurrencyToReply — no corrupted prices", () => {
     const confirmed = applyChatCurrencyToReply("Order created.", [order], {
       userMessage: "Yes, create the pending grocery order",
     });
-    expect(confirmed).toContain("Estimated grocery total: CA$4.50");
+    expect(confirmed).toContain("Estimated Total Price: CA$4.50");
   });
 });
 

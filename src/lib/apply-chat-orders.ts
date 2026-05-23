@@ -3,6 +3,7 @@ import type { PendingOrder } from "@/lib/pending-order";
 import {
   clonePendingOrder,
   parseOrderFromUserMessage,
+  recomputePendingOrderTotals,
 } from "@/lib/pending-order";
 import {
   pickSingleOrderForApproval,
@@ -29,8 +30,9 @@ export function applyChatOrderResult(
   const seenProducts = new Set<string>();
 
   const push = (raw: PendingOrder) => {
-    if (!isValidPendingOrder(raw)) return;
-    const order = prepareOrderForApprovals(clonePendingOrder(raw));
+    const recomputed = recomputePendingOrderTotals(raw);
+    if (!isValidPendingOrder(recomputed)) return;
+    const order = prepareOrderForApprovals(clonePendingOrder(recomputed));
     const productKey = orderDedupeKey(order);
     if (seenIds.has(order.id) || seenProducts.has(productKey)) return;
     seenIds.add(order.id);

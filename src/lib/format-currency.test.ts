@@ -39,12 +39,12 @@ describe("applyChatCurrencyToReply", () => {
       { userMessage: "Suggest a grocery list for Whole Foods" },
     );
     expect(proposal).not.toMatch(/Total Estimated Price/i);
-    expect(proposal).not.toMatch(/Estimated grocery total/i);
+    expect(proposal).not.toMatch(/Estimated Total Price/i);
 
     const confirmed = applyChatCurrencyToReply("Creating your pending grocery order.", [order], {
       userMessage: "Yes, create the pending grocery order",
     });
-    expect(confirmed).toContain("Estimated grocery total: CA$128.50");
+    expect(confirmed).toContain("Estimated Total Price: CA$128.50");
   });
 
   it("LV reply shows single CA$ price only", () => {
@@ -52,6 +52,7 @@ describe("applyChatCurrencyToReply", () => {
       title: "Louis Vuitton Neverfull",
       store: "Louis Vuitton",
       category: "other",
+      items: [{ name: "Louis Vuitton Neverfull", qty: 1, estimatedPrice: 2700 }],
       totalEstimatedPrice: 2700,
     });
     const messy =
@@ -72,6 +73,7 @@ describe("applyChatCurrencyToReply", () => {
       category: "amazon",
       store: "Amazon",
       title: "AirPods",
+      items: [{ name: "AirPods", qty: 1, estimatedPrice: 349.99 }],
       totalEstimatedPrice: 349.99,
     });
     expect(formatChatOrderPriceSummary(order)).toBe("Amazon order total: CA$349.99");

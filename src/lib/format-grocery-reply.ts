@@ -1,11 +1,15 @@
 import { inferOrderCategory, isCadDefaultOrderCategory } from "@/lib/order-category";
 import { formatCurrency } from "@/lib/format-currency";
-import type { OrderLineItem, PendingOrder } from "@/lib/pending-order";
+import { computeLineTotal, type OrderLineItem, type PendingOrder } from "@/lib/pending-order";
 
-/** One shopping line from numeric unit price — format at display time only. */
+/** One shopping line from numeric unit + qty — format at display time only. */
 export function formatShoppingItemLine(index: number, item: OrderLineItem): string {
-  const qtyLabel = item.qty > 1 ? ` — ${item.qty}×` : "";
-  return `${index}. ${item.name}${qtyLabel} (${formatCurrency(item.estimatedPrice)})`;
+  const unit = item.estimatedPrice;
+  const lineTotal = computeLineTotal(item);
+  if (item.qty > 1) {
+    return `${index}. ${item.name} — ${item.qty} × ${formatCurrency(unit)} = ${formatCurrency(lineTotal)}`;
+  }
+  return `${index}. ${item.name} (${formatCurrency(unit)})`;
 }
 
 export function formatGroceryItemLine(index: number, item: OrderLineItem): string {

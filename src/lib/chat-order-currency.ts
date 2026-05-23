@@ -18,15 +18,16 @@ import {
   stripChatPriceBlocks,
   stripGroceryTotalFromReply,
 } from "@/lib/format-currency";
-import type { PendingOrder } from "@/lib/pending-order";
+import { recomputePendingOrderTotals, type PendingOrder } from "@/lib/pending-order";
 
-/** One canonical price line per order — shown after user confirms grocery order creation. */
+/** One canonical price line per order — totals computed server-side (qty × unit). */
 export function formatChatOrderPriceSummary(order: PendingOrder): string {
-  const category = order.category ?? inferOrderCategory(order.store, order.title);
-  const total = formatCurrency(order.totalEstimatedPrice);
+  const normalized = recomputePendingOrderTotals(order);
+  const category = normalized.category ?? inferOrderCategory(normalized.store, normalized.title);
+  const total = formatCurrency(normalized.totalEstimatedPrice);
 
   if (category === "grocery") {
-    return `Estimated grocery total: ${total}`;
+    return `Estimated Total Price: ${total}`;
   }
   if (category === "amazon") {
     return `Amazon order total: ${total}`;
@@ -108,7 +109,11 @@ function finalizeCadShoppingReply(
   orders: PendingOrder[],
   userMessage: string,
 ): string {
-  let out = appendOrderSummaries(text, orders, userMessage);
+  let out = text;
+  if (groceryOrdersFromPending(orders).length > 0 && shouldAppendGroceryOrderTotal(userMessage, orders)) {
+    out = stripGroceryTotalFromReply(out);
+  }
+  out = appendOrderSummaries(out, orders, userMessage);
   if (shouldApplyCadShoppingSanitizer(userMessage, orders)) {
     out = sanitizeCadShoppingText(out);
   }
@@ -119,6 +124,10 @@ function finalizeCadShoppingReply(
  * Format chat reply prices from structured order numbers — never re-format CA$ strings in prose.
  * Grocery and Amazon line items render once via formatCurrency(estimatedPrice).
  */
+function withRecomputedTotals(orders: PendingOrder[]): PendingOrder[] {
+  return orders.map(recomputePendingOrderTotals);
+}
+
 export function applyChatCurrencyToReply(
   reply: string,
   orders: PendingOrder[],
@@ -127,17 +136,18 @@ export function applyChatCurrencyToReply(
   const userMessage = opts?.userMessage ?? "";
   const initialGroceryProposal = isInitialGroceryProposalTurn(userMessage);
   const cadShopping = shouldApplyCadShoppingSanitizer(userMessage, orders);
+  const normalizedOrders = withRecomputedTotals(orders);
 
   let text = repairCorruptedCurrency(stripChatPriceBlocks(reply.trim()));
 
-  const cadItems = collectCadShoppingLineItems(orders);
+  const cadItems = collectCadShoppingLineItems(normalizedOrders);
 
   if (cadItems.length > 0) {
     text = rebuildReplyWithCadShoppingItems(text, cadItems);
     if (initialGroceryProposal) {
       text = stripGroceryTotalFromReply(text);
     }
-    return finalizeCadShoppingReply(text, orders, userMessage);
+    return finalizeCadShoppingReply(text, normalizedOrders, userMessage);
   }
 
   if (initialGroceryProposal) {
@@ -145,9 +155,9 @@ export function applyChatCurrencyToReply(
     return cadShopping ? sanitizeCadShoppingText(text) : repairCorruptedCurrency(text);
   }
 
-  if (orders.length > 0) {
+  if (normalizedOrders.length > 0) {
     text = cadShopping ? sanitizeCadShoppingText(text) : normalizeCurrencyInText(text);
-    return finalizeCadShoppingReply(text, orders, userMessage);
+    return finalizeCadShoppingReply(text, normalizedOrders, userMessage);
   }
 
   return cadShopping ? sanitizeCadShoppingText(text) : text;
