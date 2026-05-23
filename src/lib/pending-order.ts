@@ -185,7 +185,7 @@ export function parseOrderFromUserMessage(userMessage: string): PendingOrder | n
           ? "Amazon"
           : "Online";
 
-  const priceMatch = trimmed.match(/(?:CA\$|US\$|USD|\$)\s*([\d,]+(?:\.\d{2})?)/i);
+  const priceMatch = trimmed.match(/(?:CA\$|\$)\s*([\d,]+(?:\.\d{2})?)/i);
   const unitPrice = priceMatch ? Number.parseFloat(priceMatch[1].replace(/,/g, "")) : 0;
 
   const items: OrderLineItem[] =

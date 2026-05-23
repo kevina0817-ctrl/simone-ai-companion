@@ -6,8 +6,9 @@ import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import {
   applyChatCurrencyToReply,
-  collectUsdOrdersFromChatResult,
+  collectOrdersFromChatResult,
 } from "@/lib/chat-order-currency";
+import { DEFAULT_CURRENCY } from "@/lib/format-currency";
 import {
   buildBoredomPlanningContextBlock,
   EVENING_PLAN_TIMEZONE,
@@ -65,6 +66,7 @@ const inputSchema = z.object({
 });
 
 const SYSTEM_PROMPT = `You are Simone, a calm, perceptive AI life concierge.
+PLATFORM CURRENCY: ${DEFAULT_CURRENCY} only (CA$). Never write US$, USD, plain $, or conversion text — the app formats all order prices in CAD.
 You help the user balance their schedule, wellness, orders, budget, and daily life.
 Be concise (1-3 short sentences), warm, perceptive, and proactive. Reference their wellness signals when relevant.
 Answer ANY question intelligently — small talk, advice, planning, recommendations, reflection prompts, summaries of their day, etc.
@@ -384,7 +386,7 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       ? pickSingleOrderForApproval(data.message, pendingOrders)
       : [];
 
-    const ordersForReplyFormatting = collectUsdOrdersFromChatResult({
+    const ordersForReplyFormatting = collectOrdersFromChatResult({
       pendingOrders,
       actions,
     });

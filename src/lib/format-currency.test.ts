@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { applyChatCurrencyToReply, formatChatOrderPriceSummary } from "@/lib/chat-order-currency";
 import {
-  containsUsdCurrencyMarkers,
+  containsForbiddenOrderCurrency,
+  DEFAULT_CURRENCY,
   formatCurrency,
-  normalizeCurrencyInText,
-  sanitizeCadShoppingText,
   stripChatPriceBlocks,
+  stripForbiddenOrderCurrencyLines,
 } from "@/lib/format-currency";
 import type { PendingOrder } from "@/lib/pending-order";
 
@@ -24,14 +24,15 @@ function sampleOrder(overrides: Partial<PendingOrder>): PendingOrder {
 }
 
 describe("formatCurrency", () => {
-  it("formats amounts as CA$", () => {
+  it("defaults to CAD formatting", () => {
+    expect(DEFAULT_CURRENCY).toBe("CAD");
     expect(formatCurrency(2700)).toBe("CA$2,700.00");
     expect(formatCurrency(128.5)).toBe("CA$128.50");
   });
 });
 
 describe("applyChatCurrencyToReply", () => {
-  it("grocery proposal strips total; confirm turn shows estimated total", () => {
+  it("grocery proposal strips LLM totals; confirm shows server total", () => {
     const order = sampleOrder({});
     const proposal = applyChatCurrencyToReply(
       "### Total Estimated Price: CA$128.50\n\nShall I create the order?",
@@ -39,15 +40,16 @@ describe("applyChatCurrencyToReply", () => {
       { userMessage: "Suggest a grocery list for Whole Foods" },
     );
     expect(proposal).not.toMatch(/Total Estimated Price/i);
-    expect(proposal).not.toMatch(/Estimated Total Price/i);
+    expect(containsForbiddenOrderCurrency(proposal)).toBe(false);
 
     const confirmed = applyChatCurrencyToReply("Creating your pending grocery order.", [order], {
       userMessage: "Yes, create the pending grocery order",
     });
-    expect(confirmed).toContain("Estimated Total Price: CA$128.50");
+    expect(confirmed).toContain("Total Estimated Price: CA$128.50");
+    expect(containsForbiddenOrderCurrency(confirmed)).toBe(false);
   });
 
-  it("LV reply shows single CA$ price only", () => {
+  it("luxury order strips LLM USD and injects CA$ estimate only", () => {
     const order = sampleOrder({
       title: "Louis Vuitton Neverfull",
       store: "Louis Vuitton",
@@ -60,11 +62,12 @@ describe("applyChatCurrencyToReply", () => {
       "Price estimate: approximately US$2700.00.\n" +
       "US$2700.00 → CA$3672.00\n" +
       "If you approve, it will be saved as about CA$3672.00 after conversion.";
-    const reply = applyChatCurrencyToReply(messy, [order]);
-    expect(reply).toContain("CA$2,700.00");
-    expect(reply).not.toMatch(/US\$|USD/i);
-    expect(reply).not.toMatch(/→/);
-    expect(reply).not.toMatch(/after conversion/i);
+    const reply = applyChatCurrencyToReply(messy, [order], {
+      userMessage: "I want the Louis Vuitton Neverfull",
+    });
+    expect(containsForbiddenOrderCurrency(reply)).toBe(false);
+    expect(reply).toContain("Price estimate: approximately CA$2,700.00");
+    expect(reply).not.toMatch(/US\$|USD|→|conversion/i);
     expect((reply.match(/Price estimate/g) ?? []).length).toBe(1);
   });
 
@@ -79,7 +82,7 @@ describe("applyChatCurrencyToReply", () => {
     expect(formatChatOrderPriceSummary(order)).toBe("Amazon order total: CA$349.99");
   });
 
-  it("sanitizes grocery proposal with US$ labels", () => {
+  it("removes US$ from grocery proposal without structured orders", () => {
     const messy =
       "Weekly groceries:\n\n" +
       "1. Eggs — US$6.99 (USD)\n" +
@@ -89,12 +92,12 @@ describe("applyChatCurrencyToReply", () => {
     const out = applyChatCurrencyToReply(messy, [], {
       userMessage: "What groceries should I get?",
     });
-    expect(containsUsdCurrencyMarkers(out)).toBe(false);
-    expect(out).toContain("CA$");
-    expect(out).not.toMatch(/Converted to/i);
+    expect(containsForbiddenOrderCurrency(out)).toBe(false);
+    expect(out).not.toMatch(/US\$|USD/i);
+    expect(out).toContain("Shall I create the order?");
   });
 
-  it("sanitizes Amazon order reply", () => {
+  it("amazon order strips LLM USD and shows structured total", () => {
     const order = sampleOrder({
       category: "amazon",
       store: "Amazon",
@@ -107,32 +110,25 @@ describe("applyChatCurrencyToReply", () => {
       [order],
       { userMessage: "Order AirPods from Amazon" },
     );
-    expect(containsUsdCurrencyMarkers(out)).toBe(false);
+    expect(containsForbiddenOrderCurrency(out)).toBe(false);
     expect(out).toContain("Amazon order total: CA$349.99");
     expect(out).toContain("(CA$349.99)");
   });
 });
 
-describe("sanitizeCadShoppingText", () => {
-  it("rewrites US$ and strips conversion copy", () => {
-    const out = sanitizeCadShoppingText(
-      "Estimated Price: US$12.00 (USD). Converted to CA$16.00.",
+describe("stripForbiddenOrderCurrencyLines", () => {
+  it("removes lines with US$ / USD / conversion — does not rewrite", () => {
+    const out = stripForbiddenOrderCurrencyLines(
+      "Nice pick.\nPrice estimate: approximately US$349.99 (USD).\nConverted to CA$16.00.\nDone.",
     );
-    expect(containsUsdCurrencyMarkers(out)).toBe(false);
-    expect(out).toContain("CA$12.00");
+    expect(out).not.toMatch(/US\$|USD|Converted/i);
+    expect(out).toContain("Nice pick.");
+    expect(out).toContain("Done.");
   });
 });
 
-describe("normalizeCurrencyInText", () => {
+describe("stripChatPriceBlocks", () => {
   it("strips conversion blocks", () => {
     expect(stripChatPriceBlocks("Hi\nIf you approve, saved as CA$100")).toBe("Hi");
-  });
-
-  it("normalizes US$ labels without touching existing CA$", () => {
-    const out = normalizeCurrencyInText("About US$349.99 on Amazon. Already CA$12.99.");
-    expect(out).toContain("CA$349.99");
-    expect(out).toContain("CA$12.99");
-    expect(out).not.toMatch(/US\$/);
-    expect(out).not.toMatch(/CACA/);
   });
 });

@@ -4,7 +4,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs, findScheduleEventForCancel } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
-import { applyChatCurrencyToReply, collectUsdOrdersFromChatResult } from "@/lib/chat-order-currency";
+import { applyChatCurrencyToReply, collectOrdersFromChatResult } from "@/lib/chat-order-currency";
+import { DEFAULT_CURRENCY } from "@/lib/format-currency";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
 import {
   buildBoredomPlanningContextBlock,
@@ -45,6 +46,7 @@ const inputSchema = z.object({
 });
 
 const SYSTEM_PROMPT = `You are Simone, a calm, perceptive AI life assistant in the style of an attentive concierge.
+PLATFORM CURRENCY: ${DEFAULT_CURRENCY} only (displayed as CA$). All order prices are Canadian dollars. Never write US$, USD, plain $ amounts, "(USD)", or currency conversion text — the app formats every price in CA$.
 You help the user balance their schedule, wellness, and daily orders.
 Be warm, thoughtful, and proactive. Reference the user's wellness signals and upcoming schedule when relevant.
 Answer with as much depth as the question requires — a quick check-in can be a sentence, but planning, advice,
@@ -79,8 +81,7 @@ For create_pending_order: title and item names must be real product names only (
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
 (name, quantity, unit, estimated_price, optional pricing_mode). estimated_price is UNIT price in CAD. For groceries: use quantity + unit (e.g. quantity 3, unit "lbs") — app uses pricing_mode: per_unit multiplies (3×9), package uses flat price (dozen, oz, bag, bottle). Never sum prices or state order totals in chat.
 GROCERY LIST: call create_pending_order with structured line items (quantity, unit, estimated_price). App renders line totals and Total Estimated Price in CAD — do not calculate totals yourself.
-AMAZON ORDERS: always CAD. Use numeric estimated_price in tools; the app shows CA$ only. Never US$, USD, US dollars, or conversion text in chat.
-For luxury/other retailers outside grocery and Amazon: you may mention one price estimate in prose when not using line items — still use CA$ only, never US$ or conversion text.
+AMAZON / LUXURY / ALL ORDERS: numeric estimated_price in CAD in tools only. Do not write prices in chat prose — the app injects "Price estimate: approximately CA$…" or order totals from your tool data.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
@@ -149,7 +150,10 @@ const tools = [
                   description:
                     "per_unit: line = quantity × estimated_price. package: line = estimated_price only (dozen, oz, bag, bottle, …).",
                 },
-                estimated_price: { type: "number", description: "Unit price in CAD (per lb, per cup, or flat package price)" },
+                estimated_price: {
+                  type: "number",
+                  description: `Unit price in ${DEFAULT_CURRENCY} (per lb, per cup, or flat package price)`,
+                },
               },
               required: ["name"],
             },
@@ -490,7 +494,7 @@ export const sendChatMessage = createServerFn({ method: "POST" })
       ? pickSingleOrderForApproval(data.message, pendingOrders)
       : [];
 
-    const ordersForReplyFormatting = collectUsdOrdersFromChatResult({
+    const ordersForReplyFormatting = collectOrdersFromChatResult({
       pendingOrders,
       actions,
     });

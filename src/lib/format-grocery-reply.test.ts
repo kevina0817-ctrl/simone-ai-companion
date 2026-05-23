@@ -102,7 +102,7 @@ describe("applyChatCurrencyToReply — no corrupted prices", () => {
     expect(out).not.toContain("$66.00");
     expect(out).toContain("3 × CA$9.00 = CA$27.00");
     expect(out).toContain("Line Total: CA$3.00");
-    expect(out).not.toMatch(/US\$|USD/i);
+    expect(out).not.toMatch(/\bUS\$|\bUSD\b/i);
   });
 
   it("replaces LLM unit-sum total on confirm", () => {

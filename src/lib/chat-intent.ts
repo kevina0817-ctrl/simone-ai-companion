@@ -193,6 +193,20 @@ export function isGroceryOrAmazonShoppingIntent(userMessage: string): boolean {
   return isGroceryListIntent(userMessage) || isAmazonShoppingIntent(userMessage);
 }
 
+/** Any order/shopping chat turn — prices must come from formatCurrency (CAD) only. */
+export function isOrderRelatedChatContext(
+  userMessage: string,
+  orders: { length: number },
+): boolean {
+  if (orders.length > 0) return true;
+  const t = userMessage.trim();
+  if (!t) return false;
+  if (isShoppingOrOrderChatIntent(t)) return true;
+  if (isPurchaseOrderIntent(t)) return true;
+  if (isProductRecommendationRequest(t) && SHOPPING_NOUNS.test(t)) return true;
+  return false;
+}
+
 /** User is asking for a grocery list / proposal — not yet confirming order creation. */
 export function isGroceryListIntent(userMessage: string): boolean {
   const t = userMessage.trim();
