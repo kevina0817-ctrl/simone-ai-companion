@@ -38,17 +38,35 @@ export function formatRoutineInstant(
   return formatZonedTime(getZonedClock(new Date(iso), timeZone));
 }
 
-/** Chat line: "9:30 PM - Light stretching" */
+/** Chat line: "Light stretching: 9:30 PM - 10:00 PM" */
 export function formatRoutineActivityLine(
   activity: RoutineActivity,
   timeZone: string = EVENING_PLAN_TIMEZONE,
 ): string {
-  return `${formatRoutineInstant(activity.startTime, timeZone)} - ${activity.title}`;
+  const start = formatRoutineInstant(activity.startTime, timeZone);
+  const end = formatRoutineInstant(activity.endTime, timeZone);
+  return `${activity.title}: ${start} - ${end}`;
 }
 
 export function formatProposedRoutineChatBlock(routine: ProposedRoutine): string {
   const lines = routine.activities.map((a) => formatRoutineActivityLine(a, routine.timeZone));
   return lines.join("\n");
+}
+
+/** JSON-friendly copy for model context — exact times only. */
+export function formatRoutineEventsForModelContext(routine: ProposedRoutine): string {
+  return JSON.stringify(
+    routine.activities.map((a) => ({
+      title: a.title,
+      description: a.description,
+      startTime: formatRoutineInstant(a.startTime, routine.timeZone),
+      endTime: formatRoutineInstant(a.endTime, routine.timeZone),
+      category: a.category,
+      requiresApproval: a.requiresApproval,
+    })),
+    null,
+    2,
+  );
 }
 
 export function buildProposedRoutine(
@@ -97,7 +115,24 @@ const STRUCTURED_SCHEDULE_LINE =
 const TIME_DASH_TITLE_LINE =
   /^(?:[-*•]\s+)?(?:\d+[.)]\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*[-–—]\s*(.+)$/i;
 
-/** Remove duplicate schedule lines from the model reply before injecting the canonical routine block. */
+const TIME_RANGE_ONLY_LINE =
+  /^(?:[-*•]\s+)?(?:\d+[.)]\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*$/i;
+
+const TITLE_COLON_TIME_RANGE_LINE =
+  /^(?:[-*•]\s+)?(?:\d+[.)]\s+)?[^:]+:\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*$/i;
+
+function isScheduleTimeLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  return (
+    STRUCTURED_SCHEDULE_LINE.test(t) ||
+    TIME_DASH_TITLE_LINE.test(t) ||
+    TIME_RANGE_ONLY_LINE.test(t) ||
+    TITLE_COLON_TIME_RANGE_LINE.test(t)
+  );
+}
+
+/** Remove LLM-invented schedule/time lines from prose (keep intro only). */
 export function stripStructuredScheduleLinesFromReply(text: string): string {
   const kept: string[] = [];
   for (const rawLine of text.split("\n")) {
@@ -106,9 +141,7 @@ export function stripStructuredScheduleLinesFromReply(text: string): string {
       kept.push(rawLine);
       continue;
     }
-    if (STRUCTURED_SCHEDULE_LINE.test(line) || TIME_DASH_TITLE_LINE.test(line)) {
-      continue;
-    }
+    if (isScheduleTimeLine(line)) continue;
     kept.push(rawLine);
   }
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -119,17 +152,42 @@ export function mergeChatReplyWithProposedRoutine(
   routine: ProposedRoutine,
   opts?: { approvalsNote?: boolean },
 ): string {
-  const intro = stripStructuredScheduleLinesFromReply(reply);
+  return buildDeterministicRoutineReply(routine, reply, opts);
+}
+
+/**
+ * Canonical chat copy for a bedtime routine — never use LLM-invented times.
+ */
+export function buildDeterministicRoutineReply(
+  routine: ProposedRoutine,
+  llmIntro?: string | null,
+  opts?: { approvalsNote?: boolean },
+): string {
+  const intro = llmIntro ? stripStructuredScheduleLinesFromReply(llmIntro) : "";
   const block = formatProposedRoutineChatBlock(routine);
   const note =
     opts?.approvalsNote !== false && routine.activities.some((a) => a.requiresApproval)
       ? "\n\nI've added these to your Approvals — confirm each one to place them on today's schedule."
       : "";
 
-  if (!intro) {
-    return `Here's your wind-down routine:\n\n${block}${note}`;
+  const header =
+    intro.trim() ||
+    "Here's your wind-down routine before bed (America/Toronto times):";
+
+  return `${header}\n\n${block}${note}`.trim();
+}
+
+/** Validate chat copy; replace entire schedule section if times do not match routine. */
+export function enforceRoutineTimesInReply(reply: string, routine: ProposedRoutine): string {
+  const check = verifyProposedRoutineChatAlignment(reply, routine);
+  if (check.ok) {
+    const block = formatProposedRoutineChatBlock(routine);
+    if (reply.includes(block)) return reply;
   }
-  return `${intro}\n\n${block}${note}`;
+  if (import.meta.env?.DEV && !check.ok) {
+    console.warn("[proposed-routine] replacing mismatched schedule copy", check.mismatches);
+  }
+  return buildDeterministicRoutineReply(routine, reply);
 }
 
 export type RoutineAlignmentCheck = {
@@ -146,8 +204,9 @@ export function verifyProposedRoutineChatAlignment(
 
   for (const activity of routine.activities) {
     const expectedLine = formatRoutineActivityLine(activity, routine.timeZone);
-    const timeLabel = formatRoutineInstant(activity.startTime, routine.timeZone);
-    const foundTime = chatText.includes(timeLabel);
+    const startLabel = formatRoutineInstant(activity.startTime, routine.timeZone);
+    const endLabel = formatRoutineInstant(activity.endTime, routine.timeZone);
+    const foundTime = chatText.includes(startLabel) && chatText.includes(endLabel);
     const foundTitle = chatText.includes(activity.title);
     if (!foundTime || !foundTitle) {
       mismatches.push({

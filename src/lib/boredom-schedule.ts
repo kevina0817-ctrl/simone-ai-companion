@@ -665,6 +665,7 @@ export function buildBoredomPlanningContextBlock(opts: {
     `- Schedule at most ${maxEvents} activities in this window.`,
     "- Space activities sequentially from the first start time until bedtime (do not extend past bedtime).",
     "- Call schedule_event once per activity with start_time and end_time as ISO datetimes on TODAY's calendar date in Eastern Time.",
+    "- Do NOT list specific times in your chat message for this routine — only activity titles and brief notes. Exact times are assigned by the app and shown to the user.",
     "- Set level to Low for every activity in this rest-of-night / tired / before-bedtime plan (green priority) — never High or Medium.",
   ];
 

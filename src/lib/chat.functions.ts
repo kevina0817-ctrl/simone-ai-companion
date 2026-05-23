@@ -20,6 +20,9 @@ import {
   shouldCreateOrderApproval,
   shouldRequireScheduleApproval,
 } from "@/lib/chat-intent";
+import { buildDeterministicRoutineReply } from "@/lib/proposed-routine";
+import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
+import type { ScheduleItem } from "@/lib/schedule-item";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -48,6 +51,7 @@ When the tool returns pending_approval: true, the event is waiting in Approvals 
 Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
 Schedule priority: High = spending, shopping, or events with others (meetings, dinner with friends, group plans). Low = hobbies, relaxation, entertainment. Medium = solo productive blocks only — do not use Medium for casual evening leisure. If the user is tired or planning before bedtime / rest of tonight, set level to Low for every activity.
 BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern) from planning context. Always assume bedtime is 11:00 PM unless the user explicitly names a different bedtime (e.g. "sleep at 10:30 PM") — never infer bedtime from duration or current time. "3 hours before bedtime" means schedule between 8:00 PM and 11:00 PM, NOT 10:00 PM–1:00 AM or "now plus 3 hours". "2 hours before bedtime" means 9:00 PM–11:00 PM. Nothing may start at or after bedtime. Never schedule food within 4 hours before bedtime (7:00 PM cutoff for 11:00 PM sleep). If they ask for dinner too late, suggest moving it earlier or a light wind-down.
+For tired / before-bed routines: call schedule_event once per activity (title + subtitle only). Do NOT write times in your chat message — the app assigns exact times and shows them to the user.
 When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
 For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
 When the user asks to add all events to Approvals, call schedule_event separately for each activity with title, start_time, and end_time.
@@ -246,6 +250,34 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     let todayEvents = events;
 
+    const toScheduleItems = (rows: typeof events): ScheduleItem[] =>
+      rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        start_time: row.start_time,
+        level: (row.level ?? "Low") as ScheduleItem["level"],
+      }));
+
+    const tryDeterministicBedtimeReply = (llmDraft?: string | null): boolean => {
+      if (!isRestOfNightBedtimePlanIntent(data.message)) return false;
+      const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
+      if (scheduleActions.length === 0) return false;
+
+      const resolved = resolveChatScheduleEvents({
+        actions,
+        userMessage: data.message,
+        assistantReply: llmDraft ?? undefined,
+        nowIso,
+        todayEvents: toScheduleItems(todayEvents),
+      });
+
+      if (!resolved.proposedRoutine) return false;
+
+      reply = buildDeterministicRoutineReply(resolved.proposedRoutine, llmDraft ?? undefined);
+      return true;
+    };
+
     for (let i = 0; i < 3; i++) {
       const json = await requestChatCompletion(messages, tools);
       const msg = json.choices?.[0]?.message;
@@ -345,6 +377,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             content: JSON.stringify(result),
           });
         }
+
+        if (tryDeterministicBedtimeReply(msg.content ?? undefined)) {
+          break;
+        }
         continue;
       }
 
@@ -353,6 +389,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     }
 
     if (!reply) reply = "Done.";
+
+    if (isRestOfNightBedtimePlanIntent(data.message) && actions.some((a) => a.kind === "schedule_event")) {
+      tryDeterministicBedtimeReply(reply);
+    }
 
     const ordersForApproval = shouldCreateOrderApproval(data.message)
       ? pickSingleOrderForApproval(data.message, pendingOrders)

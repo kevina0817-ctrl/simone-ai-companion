@@ -18,7 +18,7 @@ import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
 import { applyScheduleReplyOutcome } from "@/lib/chat-schedule-reply";
 import {
-  mergeChatReplyWithProposedRoutine,
+  enforceRoutineTimesInReply,
   verifyProposedRoutineChatAlignment,
 } from "@/lib/proposed-routine";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
@@ -177,10 +177,11 @@ function ChatPage() {
         removedFood,
         foodBedtime,
         userMessage: t,
+        proposedRoutine,
       });
 
       if (proposedRoutine && proposedRoutine.activities.length > 0) {
-        displayReply = mergeChatReplyWithProposedRoutine(displayReply, proposedRoutine);
+        displayReply = enforceRoutineTimesInReply(displayReply, proposedRoutine);
         verifyProposedRoutineChatAlignment(displayReply, proposedRoutine);
       }
 
@@ -238,7 +239,8 @@ function ChatPage() {
         ...(old ?? []),
         aiMessage,
       ]);
-      void qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+      // Do not refetch chat history here — the server may have stored pre-merge copy on older builds,
+      // and refetch would replace canonical routine times shown in Approvals.
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Simone couldn't connect to backend");
     } finally {

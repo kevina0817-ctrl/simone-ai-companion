@@ -11,42 +11,16 @@ import {
   upsertTodayEventInCache,
 } from "@/lib/schedule-timeline-cache";
 import {
-  parseScheduleFromText,
-  parseStructuredSchedulesFromText,
   parseCancelFromText,
   findScheduleEventForCancel,
-  dedupeScheduleEventsByTitle,
-  generateScheduleId,
-  isValidStructuredScheduleEvent,
-  normalizeScheduleEventTitle,
-  wantsBulkScheduleApprovals,
   isSameCalendarDay,
   type ScheduleItem,
   type CancelMatchCriteria,
 } from "@/lib/schedule-item";
-import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
-
-import {
-  EVENING_PLAN_TIMEZONE,
-  coerceBoredomScheduleEvents,
-  enforceFoodBedtimeSchedule,
-  isEveningPlanIntent,
-  isRestOfNightBedtimePlanIntent,
-  userExplicitlyWantsTomorrow,
-  type FoodBedtimeEnforcementResult,
-} from "@/lib/boredom-schedule";
-import {
-  buildProposedRoutine,
-  proposedRoutineToScheduleItems,
-  verifyProposedRoutineChatAlignment,
-  type ProposedRoutine,
-} from "@/lib/proposed-routine";
-import {
-  shouldParseStructuredScheduleFromReply,
-  shouldRequireScheduleApproval,
-  shouldRunScheduleTextFallbacks,
-  shouldSuppressScheduleApprovals,
-} from "@/lib/chat-intent";
+import type { FoodBedtimeEnforcementResult } from "@/lib/boredom-schedule";
+import type { ProposedRoutine } from "@/lib/proposed-routine";
+import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
+import { shouldSuppressScheduleApprovals } from "@/lib/chat-intent";
 import type { ChatScheduleAction } from "@/lib/chat-actions";
 
 export type { ChatScheduleAction } from "@/lib/chat-actions";
@@ -61,22 +35,6 @@ type ApplyInput = {
 };
 
 
-function toScheduleItem(
-  action: Extract<ChatScheduleAction, { kind: "schedule_event" }>,
-  priorityContext?: ReturnType<typeof buildSchedulePriorityContext>,
-): ScheduleItem {
-  const subtitle = action.subtitle ?? null;
-  const base = {
-    id: action.id ?? generateScheduleId(),
-    title: action.title,
-    subtitle,
-    start_time: new Date(action.start_time).toISOString(),
-    end_time: action.end_time ? new Date(action.end_time).toISOString() : undefined,
-    level: "Low" as const,
-  };
-  return applySchedulePriorityToItems([base], priorityContext ? { ...priorityContext, subtitle } : { subtitle })[0]!;
-}
-
 function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_event" }>): CancelMatchCriteria {
   return {
     id: action.id,
@@ -84,25 +42,6 @@ function cancelCriteria(action: Extract<ChatScheduleAction, { kind: "cancel_even
     title: action.title,
     start_time: action.start_time,
   };
-}
-
-function collectScheduleApprovals(
-  items: ScheduleItem[],
-  byTitle: Map<string, ScheduleItem>,
-): void {
-  const valid: ScheduleItem[] = [];
-  for (const raw of items) {
-    const item: ScheduleItem = {
-      ...raw,
-      id: raw.id || generateScheduleId(),
-    };
-    if (!isValidStructuredScheduleEvent(item)) continue;
-    valid.push(item);
-  }
-  for (const item of dedupeScheduleEventsByTitle(valid)) {
-    const key = normalizeScheduleEventTitle(item.title);
-    if (key) byTitle.set(key, item);
-  }
 }
 
 async function fetchTodayTimelineEvents(userId: string): Promise<ScheduleItem[]> {
@@ -242,82 +181,24 @@ export async function applyChatScheduleResult(
   let removedFood: ScheduleItem[] = [];
   let foodBedtime: ApplyChatScheduleResult["foodBedtime"];
   let proposedRoutine: ProposedRoutine | undefined;
-  const byTitle = new Map<string, ScheduleItem>();
   let todayEvents = await fetchTodayTimelineEvents(userId);
 
-  const suppressSchedule = shouldSuppressScheduleApprovals(userMessage);
-  const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
-  const priorityContext = buildSchedulePriorityContext(userMessage);
-  let assistantParsedCount = 0;
-
-  if (!suppressSchedule) {
-    collectScheduleApprovals(
-      scheduleActions.map((a) => toScheduleItem(a, priorityContext)),
-      byTitle,
-    );
-
-    if (shouldRunScheduleTextFallbacks(userMessage)) {
-      if (wantsBulkScheduleApprovals(userMessage)) {
-        collectScheduleApprovals(parseStructuredSchedulesFromText(userMessage), byTitle);
-      } else if (byTitle.size === 0) {
-        const parsed = parseScheduleFromText(userMessage);
-        if (parsed) collectScheduleApprovals([parsed], byTitle);
-      }
-    }
-
-    if (
-      assistantReply?.trim() &&
-      shouldParseStructuredScheduleFromReply(userMessage, scheduleActions.length)
-    ) {
-      const fromReply = parseStructuredSchedulesFromText(assistantReply);
-      assistantParsedCount = fromReply.length;
-      collectScheduleApprovals(fromReply, byTitle);
-    }
-
-    let events = [...byTitle.values()].sort(
-      (a, b) => +new Date(a.start_time) - +new Date(b.start_time),
-    );
-
-    const eveningPlan = priorityContext?.eveningLeisurePlan ?? isEveningPlanIntent(userMessage);
-
-    if (events.length > 0 && eveningPlan) {
-      events = coerceBoredomScheduleEvents(events, {
-        nowIso,
-        userMessage,
-        todayEvents,
-      });
-    }
-
-    const foodEnforced = enforceFoodBedtimeSchedule(events, {
-      nowIso,
+  if (!shouldSuppressScheduleApprovals(userMessage)) {
+    const resolved = resolveChatScheduleEvents({
+      actions,
       userMessage,
-      eveningPlan,
-    });
-    events = foodEnforced.events;
-    removedFood = foodEnforced.removedFood;
-    foodBedtime = { bedtime: foodEnforced.bedtime, foodCutoff: foodEnforced.foodCutoff };
-
-    events = applySchedulePriorityToItems(events, priorityContext);
-
-    const useApprovals = shouldRequireScheduleApproval(userMessage, events.length, {
-      assistantParsedCount,
-      toolCallCount: scheduleActions.length,
+      assistantReply,
+      nowIso,
+      todayEvents,
     });
 
-    const useRoutinePipeline =
-      events.length > 0 &&
-      (isRestOfNightBedtimePlanIntent(userMessage) || eveningPlan);
-
-    if (useRoutinePipeline) {
-      proposedRoutine = buildProposedRoutine(events, {
-        timeZone: EVENING_PLAN_TIMEZONE,
-        requiresApproval: useApprovals,
-      });
-      events = proposedRoutineToScheduleItems(proposedRoutine);
-    }
+    let { events } = resolved;
+    proposedRoutine = resolved.proposedRoutine;
+    removedFood = resolved.removedFood;
+    foodBedtime = resolved.foodBedtime;
 
     if (events.length > 0) {
-      if (useApprovals) {
+      if (resolved.useApprovals) {
         addPendingScheduleApprovals(events);
         pendingApproval.push(...events);
       } else {

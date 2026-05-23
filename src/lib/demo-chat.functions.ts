@@ -17,6 +17,9 @@ import {
   shouldCreateOrderApproval,
   shouldRequireScheduleApproval,
 } from "@/lib/chat-intent";
+import { buildDeterministicRoutineReply } from "@/lib/proposed-routine";
+import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
+import type { ScheduleItem } from "@/lib/schedule-item";
 
 const eventSchema = z.object({
   id: z.string(),
@@ -66,7 +69,8 @@ Quote prices as US dollars (e.g. "approximately US$950") — never call unconver
 For other-category / luxury items, note CAD is applied when the order is saved to Approvals.
 Do NOT call a tool for general questions or chit-chat.
 
-BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern). Always assume bedtime 11:00 PM unless the user explicitly names another — never infer bedtime from duration. "N hours before bedtime" = window ending at bedtime (3h → 8:00–11:00 PM, 2h → 9:00–11:00 PM), not now+N hours. Nothing after bedtime. No food within 4h of bedtime. No 12:00 AM–1:00 AM blocks for before-bed requests.`;
+BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern). Always assume bedtime 11:00 PM unless the user explicitly names another — never infer bedtime from duration. "N hours before bedtime" = window ending at bedtime (3h → 8:00–11:00 PM, 2h → 9:00–11:00 PM), not now+N hours. Nothing after bedtime. No food within 4h of bedtime. No 12:00 AM–1:00 AM blocks for before-bed requests.
+For tired / before-bed routines: call schedule_event per activity; do NOT write times in chat — the app assigns exact times.`;
 
 const tools = [
   {
@@ -227,6 +231,32 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     const pendingOrders: ChatResponse["pendingOrders"] = [];
     let reply = "";
 
+    const todaySchedule: ScheduleItem[] = data.events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      subtitle: e.subtitle ?? null,
+      start_time: e.start_time,
+      level: "Low" as const,
+    }));
+
+    const tryDeterministicBedtimeReply = (llmDraft?: string | null): boolean => {
+      if (!isRestOfNightBedtimePlanIntent(data.message)) return false;
+      if (!actions.some((a) => a.kind === "schedule_event")) return false;
+
+      const resolved = resolveChatScheduleEvents({
+        actions,
+        userMessage: data.message,
+        assistantReply: llmDraft ?? undefined,
+        nowIso,
+        todayEvents: todaySchedule,
+      });
+
+      if (!resolved.proposedRoutine) return false;
+
+      reply = buildDeterministicRoutineReply(resolved.proposedRoutine, llmDraft ?? undefined);
+      return true;
+    };
+
     for (let i = 0; i < 3; i++) {
       const json = await requestChatCompletion(messages, tools);
       const msg = json.choices?.[0]?.message;
@@ -272,11 +302,19 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
             content: JSON.stringify(toolPayload),
           });
         }
+
+        if (tryDeterministicBedtimeReply(msg.content ?? undefined)) {
+          break;
+        }
         continue;
       }
 
       reply = msg.content?.trim() ?? "";
       break;
+    }
+
+    if (isRestOfNightBedtimePlanIntent(data.message) && actions.some((a) => a.kind === "schedule_event")) {
+      tryDeterministicBedtimeReply(reply);
     }
 
     if (!reply) {

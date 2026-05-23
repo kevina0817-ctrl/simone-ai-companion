@@ -3,6 +3,11 @@ import {
   userRequestedLateFood,
   type FoodBedtimeEnforcementResult,
 } from "@/lib/boredom-schedule";
+import {
+  formatProposedRoutineChatBlock,
+  stripStructuredScheduleLinesFromReply,
+  type ProposedRoutine,
+} from "@/lib/proposed-routine";
 import { formatScheduleTimeRange, type ScheduleItem } from "@/lib/schedule-item";
 
 const APPROVAL_PHRASE =
@@ -70,6 +75,7 @@ export function applyScheduleReplyOutcome(
     removedFood?: ScheduleItem[];
     userMessage?: string;
     foodBedtime?: Pick<FoodBedtimeEnforcementResult, "bedtime" | "foodCutoff">;
+    proposedRoutine?: ProposedRoutine;
   },
 ): string {
   const trimmed = reply.trim();
@@ -101,6 +107,18 @@ export function applyScheduleReplyOutcome(
     }
 
     return withFoodNotice(`${stripped}\n\n${followUp}`);
+  }
+
+  if (outcome.pendingApproval.length > 0 && outcome.proposedRoutine) {
+    const block = formatProposedRoutineChatBlock(outcome.proposedRoutine);
+    const intro = stripStructuredScheduleLinesFromReply(stripScheduleApprovalPhrases(trimmed));
+    const header =
+      intro.length > 40 && !/^\s*done\b/i.test(intro)
+        ? intro
+        : "Here's your wind-down routine before bed:";
+    return withFoodNotice(
+      `${header}\n\n${block}\n\nI've added these to your Approvals — confirm each one to place them on today's schedule.`,
+    );
   }
 
   return withFoodNotice(trimmed);
