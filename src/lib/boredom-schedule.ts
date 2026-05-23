@@ -13,7 +13,7 @@ const EVENING_PLAN_INTENT =
 
 /** Tired / bedtime / low-effort wind-down planning — forces Low priority on all generated events. */
 const BEDTIME_WIND_DOWN_INTENT =
-  /\b(?:i\s*(?:'m|am)\s+)?tired\b|\b(?:feeling\s+)?(?:tired|exhausted|wiped|drained)\b|\b(?:plans?|planning|activities?|events?|give\s+me|help\s+me|generate|suggest)\b.*\b(?:before\s+)?(?:bed(?:time)?|sleep)\b|\b(?:before\s+)?(?:bed(?:time)?|sleep)\b.*\b(?:plan|plans|activit|suggest|ideas?)\b|\blow[\s-]?effort\s+activit|\bplan\s+my\s+evening\b|\bevening\s+before\s+sleep\b|\bwind[\s-]?down\b.*\b(?:tonight|before\s+bed|before\s+sleep)\b|\bgenerate\s+events?\s+from\s+now\b/i;
+  /\b(?:i\s*(?:'m|am)\s+)?tired\b|\b(?:feeling\s+)?(?:tired|exhausted|wiped|drained)\b|\b(?:plans?|planning|activities?|events?|give\s+me|help\s+me|generate|suggest|arrange)\b.*\b(?:before\s+)?(?:bed(?:time)?|sleep)\b|\b(?:before\s+)?(?:bed(?:time)?|sleep)\b.*\b(?:plan|plans|activit|suggest|ideas?|schedule)\b|\b(?:plan|arrange|schedule)\b.*\b(?:before\s+(?:bed(?:time)?|sleep)|before\s+bed|evening\s+before\s+bed)\b|\b(?:before\s+(?:bed(?:time)?|sleep)|before\s+bed)\b.*\b(?:plan|schedule|activit|evening)\b|\blow[\s-]?effort\s+activit|\bplan\s+my\s+(?:schedule\s+)?(?:before\s+)?(?:bed(?:time)?|evening)\b|\bevening\s+before\s+(?:sleep|bed)\b|\bwind[\s-]?down\b.*\b(?:tonight|before\s+bed|before\s+sleep)\b|\bgenerate\s+events?\s+from\s+now\b|\b\d{1,2}\s*(?:hours?|hrs?|h)\s+before\s+(?:bed(?:time)?|sleep)\b/i;
 
 const TOMORROW_EXPLICIT =
   /\b(?:tomorrow|next\s+day|the\s+morning)\b/i;
@@ -39,9 +39,12 @@ const FOOD_EVENT_PATTERN =
 const WIND_DOWN_ACTIVITY_PATTERN =
   /\b(?:read(?:ing)?|stretch(?:ing)?|light\s+walk|evening\s+walk|journal(?:ing)?|meditat(?:e|ion)?|skincare|prepar(?:e|ing)\s+for\s+tomorrow|tomorrow\s+prep|relaxing\s+music|listen\s+to\s+music|wind[\s-]?down|breathwork|gentle\s+yoga|light\s+yoga|calm\s+down|bedtime\s+routine|pack\s+(?:bag|gym)|lay\s+out\s+clothes)\b/i;
 
+/** Explicit user bedtime only — never match "N hours before bedtime". */
 const BEDTIME_AT_PATTERN =
-  /\b(?:bed(?:time)?|sleep)\s*(?:at|by|around|is|:)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
+  /\b(?:my\s+)?(?:bed(?:time)?|sleep)\s*(?:at|by|around|is|:)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
 const IN_BED_BY_PATTERN = /\bin\s+bed\s+by\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i;
+const HOURS_BEFORE_BED_PATTERN =
+  /\b(\d{1,2})\s*(?:hours?|hrs?|h)\s+before\s+(?:bed(?:time)?|sleep)\b/i;
 
 export type ZonedClock = {
   timeZone: string;
@@ -229,8 +232,26 @@ function wallHour24(hour12: number, meridiem: "am" | "pm"): number {
   return hour12 === 12 ? 12 : hour12 + 12;
 }
 
-/** Parse an explicit bedtime from the user message (Toronto local wall clock). */
-export function parseBedtimeFromMessage(
+/** Hours in "3 hours before bedtime" — window length, NOT the bedtime itself. */
+export function parseHoursBeforeBedtimeFromMessage(userMessage: string): number | null {
+  const t = userMessage.trim();
+  if (!t) return null;
+  const match = t.match(HOURS_BEFORE_BED_PATTERN);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  if (!Number.isFinite(hours) || hours < 1 || hours > 12) return null;
+  return hours;
+}
+
+/** True when the user is scheduling relative to bedtime (default 11:00 PM). */
+export function isBedtimeRelativeScheduleIntent(userMessage: string): boolean {
+  const t = userMessage.trim();
+  if (!t || userExplicitlyWantsTomorrow(t)) return false;
+  return isEveningPlanIntent(t) && /\b(?:before\s+(?:bed(?:time)?|sleep)|before\s+bed|bed(?:time)?|sleep)\b/i.test(t);
+}
+
+/** Parse an explicit bedtime the user provided (e.g. "bedtime at 10:30 PM") — not duration-based. */
+export function parseExplicitUserBedtimeFromMessage(
   userMessage: string,
   now: ZonedClock,
 ): ZonedClock | null {
@@ -248,26 +269,72 @@ export function parseBedtimeFromMessage(
   return withClockTime(now, hour, minute, 0);
 }
 
-/** Default 11:00 PM Toronto tonight unless the user names a bedtime or late night. */
+/** @deprecated Use parseExplicitUserBedtimeFromMessage */
+export function parseBedtimeFromMessage(userMessage: string, now: ZonedClock): ZonedClock | null {
+  return parseExplicitUserBedtimeFromMessage(userMessage, now);
+}
+
+export function getDefaultBedtimeClock(now: ZonedClock): ZonedClock {
+  return withClockTime(now, DEFAULT_BEDTIME_HOUR, DEFAULT_BEDTIME_MINUTE, 0);
+}
+
+/**
+ * Bedtime for before-bed scheduling: always 11:00 PM unless the user explicitly names a different bedtime.
+ * Never inferred from "N hours before bedtime" or current time.
+ */
 export function getEveningBedtimeClock(
   now: ZonedClock,
   userMessage?: string,
 ): ZonedClock {
   if (userMessage) {
-    const parsed = parseBedtimeFromMessage(userMessage, now);
-    if (parsed) return parsed;
+    const explicit = parseExplicitUserBedtimeFromMessage(userMessage, now);
+    if (explicit) return explicit;
   }
-  let hour = DEFAULT_BEDTIME_HOUR;
-  let minute = DEFAULT_BEDTIME_MINUTE;
-  if (userMessage && userExplicitlyWantsLateEvening(userMessage)) {
-    hour = 23;
-    minute = 30;
-  }
-  return withClockTime(now, hour, minute, 0);
+  return getDefaultBedtimeClock(now);
 }
 
 export function resolveBedtimeClock(now: ZonedClock, userMessage?: string): ZonedClock {
   return getEveningBedtimeClock(now, userMessage);
+}
+
+function resolvePlanStartForBedtimeRequest(
+  instant: Date,
+  now: ZonedClock,
+  bedtime: ZonedClock,
+  userMessage?: string,
+  timeZone: string = EVENING_PLAN_TIMEZONE,
+): ZonedClock {
+  const hoursBeforeBed = userMessage ? parseHoursBeforeBedtimeFromMessage(userMessage) : null;
+
+  if (hoursBeforeBed != null) {
+    const windowStart = subtractMinutesFromClock(bedtime, hoursBeforeBed * 60);
+    const quarterNow = roundUpToNextQuarterHour(instant, timeZone);
+    if (totalMinutes(quarterNow) < totalMinutes(windowStart)) {
+      return windowStart;
+    }
+    if (totalMinutes(quarterNow) >= totalMinutes(bedtime)) {
+      return subtractMinutesFromClock(bedtime, 15);
+    }
+    return alignPlanStartWithNow(quarterNow, now, instant);
+  }
+
+  if (userMessage && isBedtimeRelativeScheduleIntent(userMessage)) {
+    const quarterNow = roundUpToNextQuarterHour(instant, timeZone);
+    return alignPlanStartWithNow(quarterNow, now, instant);
+  }
+
+  let planStart = roundUpToNextQuarterHour(instant, timeZone);
+  planStart = alignPlanStartWithNow(planStart, now, instant);
+  return planStart;
+}
+
+export function isEventStartAtOrAfterBedtime(
+  event: Pick<ScheduleItem, "start_time">,
+  bedtime: ZonedClock,
+): boolean {
+  if (!isSameTorontoCalendarDay(event.start_time, bedtime)) return false;
+  const start = getZonedClock(new Date(event.start_time), bedtime.timeZone);
+  return totalMinutes(start) >= totalMinutes(bedtime);
 }
 
 export function subtractMinutesFromClock(clock: ZonedClock, minutes: number): ZonedClock {
@@ -339,6 +406,11 @@ export function enforceFoodBedtimeSchedule(
   const removedFood: ScheduleItem[] = [];
 
   for (const ev of events) {
+    if (isEventStartAtOrAfterBedtime(ev, bedtime)) {
+      if (isFoodRelatedScheduleEvent(ev.title, ev.subtitle)) removedFood.push(ev);
+      continue;
+    }
+
     const isFood = isFoodRelatedScheduleEvent(ev.title, ev.subtitle);
     const tooLateForFood = isFood && isEventStartAtOrAfterFoodCutoff(ev, foodCutoff);
 
@@ -379,6 +451,9 @@ export type EveningPlanLimits = {
   planStart: ZonedClock;
   bedtime: ZonedClock;
   foodCutoff: ZonedClock;
+  /** Set when user asked for "N hours before bedtime" (e.g. 3 → 8:00 PM–11:00 PM). */
+  hoursBeforeBedtime: number | null;
+  scheduleWindowStart: ZonedClock;
   minutesUntilBedtime: number;
   nearBedtime: boolean;
   veryNearBedtime: boolean;
@@ -394,9 +469,18 @@ export function getEveningPlanLimits(
   timeZone: string = EVENING_PLAN_TIMEZONE,
 ): EveningPlanLimits {
   const now = getZonedClock(instant, timeZone);
-  let planStart = roundUpToNextQuarterHour(instant, timeZone);
-  planStart = alignPlanStartWithNow(planStart, now, instant);
   const bedtime = resolveBedtimeClock(now, userMessage);
+  const hoursBeforeBedtime = userMessage ? parseHoursBeforeBedtimeFromMessage(userMessage) : null;
+  const scheduleWindowStart =
+    hoursBeforeBedtime != null
+      ? subtractMinutesFromClock(bedtime, hoursBeforeBedtime * 60)
+      : subtractMinutesFromClock(bedtime, WIND_DOWN_ONLY_HOURS_BEFORE_BED * 60);
+  let planStart = resolvePlanStartForBedtimeRequest(instant, now, bedtime, userMessage, timeZone);
+
+  if (totalMinutes(planStart) >= totalMinutes(bedtime)) {
+    planStart = subtractMinutesFromClock(bedtime, 15);
+  }
+
   const foodCutoff = getFoodCutoffClock(bedtime);
   const planStartInstant = clockToInstant(planStart);
   const bedtimeInstant = clockToInstant(bedtime);
@@ -406,9 +490,12 @@ export function getEveningPlanLimits(
   );
   const veryNearBedtime = minutesUntilBedtime <= 30;
   const nearBedtime = minutesUntilBedtime <= 60;
-  const within3HoursOfBedtime = minutesUntilBedtime <= WIND_DOWN_ONLY_HOURS_BEFORE_BED * 60;
+  const within3HoursOfBedtime =
+    hoursBeforeBedtime == null && minutesUntilBedtime <= WIND_DOWN_ONLY_HOURS_BEFORE_BED * 60;
   const lightActivitiesOnly =
-    veryNearBedtime || within3HoursOfBedtime || totalMinutes(planStart) >= 22 * 60;
+    veryNearBedtime ||
+    (within3HoursOfBedtime && hoursBeforeBedtime == null) ||
+    totalMinutes(planStart) >= 22 * 60;
 
   let maxEvents = 4;
   let maxBlockMinutes = 45;
@@ -427,6 +514,8 @@ export function getEveningPlanLimits(
     planStart,
     bedtime,
     foodCutoff,
+    hoursBeforeBedtime,
+    scheduleWindowStart,
     minutesUntilBedtime,
     nearBedtime,
     veryNearBedtime,
@@ -536,6 +625,8 @@ export function buildBoredomPlanningContextBlock(opts: {
     planStart,
     bedtime,
     foodCutoff,
+    hoursBeforeBedtime,
+    scheduleWindowStart,
     lightActivitiesOnly,
     veryNearBedtime,
     nearBedtime,
@@ -555,18 +646,24 @@ export function buildBoredomPlanningContextBlock(opts: {
   const planStartIso = clockToInstant(planStart).toISOString();
   const bedtimeIso = clockToInstant(bedtime).toISOString();
 
+  const bedtimeRule =
+    hoursBeforeBedtime != null
+      ? `- BEDTIME WINDOW (mandatory): User asked for ${hoursBeforeBedtime} hour(s) before bedtime. Assume bedtime is ${formatZonedTime(bedtime)} unless they explicitly named a different bedtime. Schedule ONLY between ${formatZonedTime(scheduleWindowStart)} and ${formatZonedTime(bedtime)} — e.g. 3 hours before 11:00 PM means 8:00 PM–11:00 PM, NOT 10:00 PM–1:00 AM and NOT "now plus 3 hours".`
+      : `- BEDTIME (mandatory): Assume bedtime is ${formatZonedTime(bedtime)} unless the user explicitly named a different bedtime (e.g. "sleep at 10:30 PM"). Never infer bedtime from how many hours they asked for or from the current clock.`;
+
   const lines = [
     "BOREDOM / EVENING ACTIVITY PLANNING (mandatory for this message):",
     `- Use ${tzLabel} for all times. Now and schedule blocks must match this timezone (not UTC).`,
     `- Plan ONLY for ${todayDate} (today). Do NOT use tomorrow's date unless the user explicitly asked for tomorrow.`,
     `- Current Eastern Time now: ${formatZonedTime(now)}.`,
-    `- First activity starts at ${formatZonedTime(planStart)} (next quarter-hour from now — NOT midnight unless it is actually near midnight).`,
+    bedtimeRule,
+    `- First activity starts at ${formatZonedTime(planStart)} (within the bedtime window; use quarter-hour times on today's date — NOT midnight unless it is actually near midnight).`,
     `- Example first start_time ISO: ${planStartIso}`,
-    `- Last activity must end by ${formatZonedTime(bedtime)} (healthy default bedtime unless the user named one; example end bound: ${bedtimeIso}).`,
+    `- Last activity must end by ${formatZonedTime(bedtime)} (example end bound: ${bedtimeIso}). Nothing may start at or after bedtime.`,
     `- FOOD CUTOFF: Do NOT schedule any food-related activity at or after ${formatZonedTime(foodCutoff)} (${FOOD_CUTOFF_HOURS_BEFORE_BED} hours before bedtime). This includes dinner, lunch, snacks, meal prep, groceries, restaurants, drinks/late-night food, or eating with friends.`,
-    "- Never schedule optional activities after 11:00 PM or after midnight (no 12:00 AM–1:00 AM blocks when the user is planning their evening).",
+    "- Never schedule activities after 11:00 PM unless the user explicitly gave a later bedtime. No 12:00 AM–1:00 AM blocks for before-bedtime requests.",
     `- Schedule at most ${maxEvents} activities in this window.`,
-    "- Space activities sequentially from the quarter-hour start until bedtime.",
+    "- Space activities sequentially from the first start time until bedtime (do not extend past bedtime).",
     "- Call schedule_event once per activity with start_time and end_time as ISO datetimes on TODAY's calendar date in Eastern Time.",
     "- Set level to Low for every activity in this rest-of-night / tired / before-bedtime plan (green priority) — never High or Medium.",
   ];
