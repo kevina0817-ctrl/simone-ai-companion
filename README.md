@@ -120,7 +120,7 @@ Full template: [`.env.example`](.env.example)
 
 ## Demo URL
 
-**Demo URL:** [Insert deployment URL]
+**Demo URL:** https://simone-ai-companion.lovable.app
 
 ---
 
