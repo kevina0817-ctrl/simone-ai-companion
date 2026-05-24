@@ -4,6 +4,7 @@ import {
   containsForbiddenOrderCurrency,
   DEFAULT_CURRENCY,
   formatCurrency,
+  sanitizeOrderConfirmationReply,
   stripChatPriceBlocks,
   stripForbiddenOrderCurrencyLines,
 } from "@/lib/format-currency";
@@ -45,7 +46,8 @@ describe("applyChatCurrencyToReply", () => {
     const confirmed = applyChatCurrencyToReply("Creating your pending grocery order.", [order], {
       userMessage: "Yes, create the pending grocery order",
     });
-    expect(confirmed).toContain("Total Estimated Price: CA$128.50");
+    expect(confirmed).toContain("Finalized price: approximately CA$128.50.");
+    expect(confirmed).not.toMatch(/Price estimate/i);
     expect(containsForbiddenOrderCurrency(confirmed)).toBe(false);
   });
 
@@ -149,5 +151,15 @@ describe("stripForbiddenOrderCurrencyLines", () => {
 describe("stripChatPriceBlocks", () => {
   it("strips conversion blocks", () => {
     expect(stripChatPriceBlocks("Hi\nIf you approve, saved as CA$100")).toBe("Hi");
+  });
+});
+
+describe("sanitizeOrderConfirmationReply", () => {
+  it("removes USD markers and Price estimate label from grocery confirmations", () => {
+    const out = sanitizeOrderConfirmationReply(
+      "Order sent.\n\nPrice estimate: approximately US$160.00 (USD).",
+    );
+    expect(out).not.toMatch(/US\$|USD|\(USD\)|Price estimate/i);
+    expect(out).toContain("Order sent.");
   });
 });

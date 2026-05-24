@@ -65,6 +65,27 @@ export function stripForbiddenOrderCurrencyLines(text: string): string {
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/**
+ * Final pass on order/grocery confirmation replies: remove LLM price labels and USD markers.
+ * Server appends formatFinalizedOrderPrice / formatCurrency lines afterward.
+ */
+export function sanitizeOrderConfirmationReply(text: string): string {
+  let out = repairCorruptedCurrency(text);
+  out = stripChatPriceBlocks(out);
+  out = stripForbiddenOrderCurrencyLines(out);
+  out = stripGroceryTotalFromReply(out);
+  out = out.replace(
+    /\s*Price\s+estimate\s*:?\s*approximately\s*(?:US\$|USD|\$|CA\$)\s*[\d,]+(?:\.\d{2})?(?:\s*\(USD\))?\s*\.?/gi,
+    "",
+  );
+  out = out.replace(/\bPrice\s+estimate\b/gi, "Finalized price");
+  out = out.replace(/\bUS\$/gi, "CA$");
+  out = out.replace(/\s*\(\s*USD\s*\)\s*\.?/gi, "");
+  out = out.replace(/\s*\(\s*in\s+USD\s*\)\s*\.?/gi, "");
+  out = out.replace(/\bUSD\b/gi, "");
+  return out.replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Remove duplicate / conversion pricing blocks from assistant copy. */
 export function stripChatPriceBlocks(text: string): string {
   let out = text;

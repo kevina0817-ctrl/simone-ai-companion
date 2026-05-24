@@ -221,15 +221,25 @@ export function isGroceryListIntent(userMessage: string): boolean {
   return true;
 }
 
-/** User explicitly agreed to create a pending grocery order (show total on this turn). */
+/** User agreed to create/send a pending order (grocery or generic "create order" confirm). */
 export function isGroceryOrderConfirmTurn(userMessage: string): boolean {
   const t = userMessage.trim();
-  if (!t || !/\bgrocer(?:y|ies)\b/i.test(t)) return false;
+  if (!t) return false;
   if (PENDING_ORDER_FLOW.test(t)) return true;
-  return (
+  if (
+    /\b(?:yes|yeah|yep|sure|go\s+ahead|please|do\s+it)\b/i.test(t) &&
+    /\b(?:create|pending|order|add|approval|approve|send)\b/i.test(t)
+  ) {
+    return true;
+  }
+  if (
+    /\bgrocer(?:y|ies)\b/i.test(t) &&
     /\b(?:yes|yeah|yep|sure|go\s+ahead|please|do\s+it)\b/i.test(t) &&
     /\b(?:create|pending|order|add)\b/i.test(t)
-  );
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

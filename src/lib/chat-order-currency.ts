@@ -14,22 +14,32 @@ import {
   formatCurrency,
   formatFinalizedOrderPrice,
   repairCorruptedCurrency,
+  sanitizeOrderConfirmationReply,
   stripChatPriceBlocks,
   stripForbiddenOrderCurrencyLines,
   stripGroceryTotalFromReply,
 } from "@/lib/format-currency";
 import { recomputePendingOrderTotals, type PendingOrder } from "@/lib/pending-order";
 
-/** Canonical order price line — always CA$ from numeric totals (never LLM copy). */
-export function formatChatOrderPriceSummary(order: PendingOrder): string {
+/** Grocery list proposal (first pass) vs order creation confirmation (Approvals). */
+export function formatChatOrderPriceSummary(order: PendingOrder, userMessage = ""): string {
   const normalized = recomputePendingOrderTotals(order);
   const category = normalized.category ?? inferOrderCategory(normalized.store, normalized.title);
-  const total = formatCurrency(normalized.totalEstimatedPrice);
 
   if (category === "grocery") {
-    return `Total Estimated Price: ${total}`;
+    if (isGroceryOrderCreationTurn(userMessage, [order])) {
+      return formatFinalizedOrderPrice(normalized.totalEstimatedPrice);
+    }
+    return `Total Estimated Price: ${formatCurrency(normalized.totalEstimatedPrice)}`;
   }
   return formatFinalizedOrderPrice(normalized.totalEstimatedPrice);
+}
+
+/** Grocery order exists and user is confirming creation / approval (not first list-only turn). */
+export function isGroceryOrderCreationTurn(userMessage: string, orders: PendingOrder[]): boolean {
+  if (groceryOrdersFromPending(orders).length === 0) return false;
+  if (isInitialGroceryProposalTurn(userMessage)) return false;
+  return isGroceryOrderConfirmTurn(userMessage);
 }
 
 export function collectOrdersFromChatResult(
@@ -60,17 +70,23 @@ export const collectUsdOrdersFromChatResult = collectOrdersFromChatResult;
 
 function summaryAlreadyPresent(text: string, summary: string): boolean {
   const core = summary.replace(/\.$/, "").trim();
-  return text.includes(core);
+  if (text.includes(core)) return true;
+  const amountMatch = core.match(/CA\$[\d,]+(?:\.\d{2})?/);
+  if (amountMatch && text.includes(amountMatch[0])) {
+    return /\bFinalized price\b/i.test(text) || /\bTotal Estimated Price\b/i.test(text);
+  }
+  return false;
 }
 
 function shouldAppendGroceryOrderTotal(userMessage: string, orders: PendingOrder[]): boolean {
   if (orders.length === 0) return false;
   const grocery = groceryOrdersFromPending(orders);
   if (grocery.length === 0) return !isInitialGroceryProposalTurn(userMessage);
+  if (isGroceryOrderCreationTurn(userMessage, orders)) return true;
   const items = grocery.flatMap((o) => o.items);
   const hasStructuredGrocery = items.some((i) => i.unit != null || i.pricingMode != null);
-  if (hasStructuredGrocery) return true;
-  return isGroceryOrderConfirmTurn(userMessage);
+  if (hasStructuredGrocery && isInitialGroceryProposalTurn(userMessage)) return true;
+  return false;
 }
 
 function appendOrderSummaries(
@@ -85,7 +101,7 @@ function appendOrderSummaries(
     const category = order.category ?? inferOrderCategory(order.store, order.title);
     if (category === "grocery" && !showGroceryTotal) continue;
 
-    const summary = formatChatOrderPriceSummary(order);
+    const summary = formatChatOrderPriceSummary(order, userMessage);
     if (!summaryAlreadyPresent(text, summary)) {
       summaries.push(summary);
     }
@@ -100,7 +116,7 @@ function finalizeOrderReply(
   orders: PendingOrder[],
   userMessage: string,
 ): string {
-  let out = stripForbiddenOrderCurrencyLines(text);
+  let out = sanitizeOrderConfirmationReply(text);
   if (groceryOrdersFromPending(orders).length > 0 && shouldAppendGroceryOrderTotal(userMessage, orders)) {
     out = stripGroceryTotalFromReply(out);
   }
@@ -114,7 +130,6 @@ function withRecomputedTotals(orders: PendingOrder[]): PendingOrder[] {
 
 /**
  * Order chat replies: strip LLM currency text; render prices only via formatCurrency (CAD).
- * No US$/USD replacement — structured order data is the single source of truth.
  */
 export function applyChatCurrencyToReply(
   reply: string,
@@ -133,7 +148,8 @@ export function applyChatCurrencyToReply(
   }
 
   const cadItems = collectCadShoppingLineItems(normalizedOrders);
-  if (cadItems.length > 0) {
+  const skipListRebuild = isGroceryOrderCreationTurn(userMessage, normalizedOrders);
+  if (cadItems.length > 0 && !skipListRebuild) {
     text = rebuildReplyWithCadShoppingItems(text, cadItems);
   }
 

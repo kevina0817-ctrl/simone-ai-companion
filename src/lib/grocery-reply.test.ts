@@ -7,6 +7,7 @@ describe("grocery proposal reply", () => {
   it("detects initial grocery proposal turns", () => {
     expect(isInitialGroceryProposalTurn("What groceries should I get this week?")).toBe(true);
     expect(isGroceryOrderConfirmTurn("Yes, create the pending grocery order")).toBe(true);
+    expect(isGroceryOrderConfirmTurn("Yes, create an order and send it to approval")).toBe(true);
     expect(isInitialGroceryProposalTurn("Yes, create the pending grocery order")).toBe(false);
   });
 

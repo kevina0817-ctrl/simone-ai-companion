@@ -80,8 +80,8 @@ Never call create_pending_order multiple times for multiple recommended options 
 For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
 When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
 (name, quantity, unit, estimated_price, optional pricing_mode). estimated_price is UNIT price in CAD. For groceries: use quantity + unit (e.g. quantity 3, unit "lbs") — app uses pricing_mode: per_unit multiplies (3×9), package uses flat price (dozen, oz, bag, bottle). Never sum prices or state order totals in chat.
-GROCERY LIST: call create_pending_order with structured line items (quantity, unit, estimated_price). App renders line totals and Total Estimated Price in CAD — do not calculate totals yourself.
-AMAZON / LUXURY / ALL ORDERS: numeric estimated_price in CAD in tools only. Do not write prices in chat prose — the app injects "Finalized price: approximately CA$…" or grocery totals from your tool data.
+GROCERY LIST: call create_pending_order with structured line items (quantity, unit, estimated_price). App renders line totals; first list may show Total Estimated Price in CAD. After user confirms order creation, app injects "Finalized price: approximately CA$…" — never write Price estimate, US$, USD, or totals yourself.
+AMAZON / LUXURY / ALL ORDERS: numeric estimated_price in CAD in tools only. Do not write prices in chat prose — the app injects "Finalized price: approximately CA$…" from tool data.
 If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 

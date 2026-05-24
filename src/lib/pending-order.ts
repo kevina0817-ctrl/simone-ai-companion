@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { shouldCreateOrderApproval } from "@/lib/chat-intent";
-import { formatCurrency } from "@/lib/format-currency";
+import { DEFAULT_CURRENCY, formatCurrency } from "@/lib/format-currency";
 import {
   computeGroceryLineTotal,
   enrichGroceryLineItem,
@@ -37,6 +37,8 @@ export type PendingOrder = {
   category: OrderCategory;
   items: OrderLineItem[];
   totalEstimatedPrice: number;
+  /** Always CAD for grocery and other platform orders. */
+  currency?: typeof DEFAULT_CURRENCY;
   status: PendingOrderStatus;
   createdAt: string;
   /** Set at approve time when purchase would exceed monthly budget */
@@ -112,10 +114,12 @@ export function recomputePendingOrderTotals(order: PendingOrder): PendingOrder {
     const lineTotal = Math.round(copy.estimatedPrice * copy.qty * 100) / 100;
     return { ...copy, lineTotal };
   });
+  const category = order.category ?? inferOrderCategory(order.store, order.title);
   return {
     ...order,
     items,
     totalEstimatedPrice: computeOrderTotal(items),
+    currency: category === "grocery" ? DEFAULT_CURRENCY : (order.currency ?? DEFAULT_CURRENCY),
   };
 }
 
@@ -141,13 +145,15 @@ export function normalizeOrderFromToolArgs(args: unknown): PendingOrder | null {
   const title = parsed.data.title.trim();
   const store = parsed.data.store?.trim() || "Whole Foods";
 
+  const category = inferOrderCategory(store, title);
   const order: PendingOrder = {
     id: generateOrderId(),
     title,
     store,
-    category: inferOrderCategory(store, title),
+    category,
     items,
     totalEstimatedPrice: computeOrderTotal(items),
+    currency: DEFAULT_CURRENCY,
     status: "pending_approval",
     createdAt: new Date().toISOString(),
   };
@@ -205,6 +211,7 @@ export function parseOrderFromUserMessage(userMessage: string): PendingOrder | n
     category: inferOrderCategory(store, normalizedTitle),
     items,
     totalEstimatedPrice: computeOrderTotal(items),
+    currency: DEFAULT_CURRENCY,
     status: "pending_approval",
     createdAt: new Date().toISOString(),
   };

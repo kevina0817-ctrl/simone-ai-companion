@@ -112,8 +112,29 @@ describe("applyChatCurrencyToReply — no corrupted prices", () => {
       [order],
       { userMessage: "Yes, create the pending grocery order" },
     );
-    expect(out).toContain("Total Estimated Price: CA$99.00");
+    expect(out).toContain("Finalized price: approximately CA$99.00.");
     expect(out).not.toContain("$66.00");
+    expect(out).not.toMatch(/Price estimate/i);
+  });
+
+  it("grocery order confirmation strips USD and uses finalized CAD", () => {
+    const items = Array.from({ length: 13 }, (_, i) => ({
+      name: `Item ${i + 1}`,
+      qty: 1,
+      estimatedPrice: i < 12 ? 12.31 : 12.28,
+    }));
+    const order = groceryOrder(items);
+    expect(computeOrderTotal(items)).toBe(160);
+
+    const out = applyChatCurrencyToReply(
+      "I've created your grocery order for the muscle-building meal prep and sent it to your approvals queue. The order includes 13 items.\n\nPrice estimate: approximately US$160.00 (USD).",
+      [order],
+      { userMessage: "Yes, create an order and send it to approval" },
+    );
+    expect(out).toContain("approvals queue");
+    expect(out).toContain("13 items");
+    expect(out).toContain("Finalized price: approximately CA$160.00.");
+    expect(out).not.toMatch(/Price estimate|US\$|USD|\(USD\)/i);
   });
 });
 
