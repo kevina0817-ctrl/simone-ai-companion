@@ -18,6 +18,11 @@ export function formatCurrency(amount: number): string {
   return `CA$${formatted}`;
 }
 
+/** Order confirmation / luxury / Amazon summary line (CAD only). */
+export function formatFinalizedOrderPrice(amount: number): string {
+  return `Finalized price: approximately ${formatCurrency(amount)}.`;
+}
+
 /** Parse a numeric amount — never pass formatted strings like "CA$12.99". */
 export function parseMoneyAmount(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return roundMoney(value);
@@ -65,6 +70,7 @@ export function stripChatPriceBlocks(text: string): string {
   let out = text;
   const linePatterns = [
     /^[^\n]*\bPrice estimate\b[^\n]*$/gim,
+    /^[^\n]*\bFinalized price\b[^\n]*$/gim,
     /^[^\n]*\bEstimated grocery total\b[^\n]*$/gim,
     /^#{1,6}\s*Total\s+Estimated\s+Price:?\s*.*$/gim,
     /^Total\s+Estimated\s+Price:?\s*.*$/gim,

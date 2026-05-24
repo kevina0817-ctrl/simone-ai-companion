@@ -49,7 +49,7 @@ describe("applyChatCurrencyToReply", () => {
     expect(containsForbiddenOrderCurrency(confirmed)).toBe(false);
   });
 
-  it("luxury order strips LLM USD and injects CA$ estimate only", () => {
+  it("luxury order strips LLM USD and injects finalized CAD price only", () => {
     const order = sampleOrder({
       title: "Louis Vuitton Neverfull",
       store: "Louis Vuitton",
@@ -66,12 +66,13 @@ describe("applyChatCurrencyToReply", () => {
       userMessage: "I want the Louis Vuitton Neverfull",
     });
     expect(containsForbiddenOrderCurrency(reply)).toBe(false);
-    expect(reply).toContain("Price estimate: approximately CA$2,700.00");
-    expect(reply).not.toMatch(/US\$|USD|→|conversion/i);
-    expect((reply.match(/Price estimate/g) ?? []).length).toBe(1);
+    expect(reply).toContain("Finalized price: approximately CA$2,700.00.");
+    expect(reply).not.toMatch(/Price estimate/i);
+    expect(reply).not.toMatch(/US\$|USD|→|conversion|\(USD\)/i);
+    expect((reply.match(/Finalized price/g) ?? []).length).toBe(1);
   });
 
-  it("amazon summary uses CA$ only", () => {
+  it("amazon summary uses finalized CAD label", () => {
     const order = sampleOrder({
       category: "amazon",
       store: "Amazon",
@@ -79,7 +80,24 @@ describe("applyChatCurrencyToReply", () => {
       items: [{ name: "AirPods", qty: 1, estimatedPrice: 349.99 }],
       totalEstimatedPrice: 349.99,
     });
-    expect(formatChatOrderPriceSummary(order)).toBe("Amazon order total: CA$349.99");
+    expect(formatChatOrderPriceSummary(order)).toBe("Finalized price: approximately CA$349.99.");
+  });
+
+  it("formats $71 luxury confirmation as finalized CAD", () => {
+    const order = sampleOrder({
+      category: "other",
+      title: "Running shoes",
+      store: "Sport Chek",
+      items: [{ name: "Running shoes", qty: 1, estimatedPrice: 71 }],
+      totalEstimatedPrice: 71,
+    });
+    const out = applyChatCurrencyToReply(
+      "Price estimate: approximately US$71.00 (USD).",
+      [order],
+      { userMessage: "Yes, create the order for those shoes" },
+    );
+    expect(out).toBe("Finalized price: approximately CA$71.00.");
+    expect(out).not.toMatch(/Price estimate|US\$|USD|\(USD\)/i);
   });
 
   it("removes US$ from grocery proposal without structured orders", () => {
@@ -97,7 +115,7 @@ describe("applyChatCurrencyToReply", () => {
     expect(out).toContain("Shall I create the order?");
   });
 
-  it("amazon order strips LLM USD and shows structured total", () => {
+  it("amazon order strips LLM USD and shows finalized CAD total", () => {
     const order = sampleOrder({
       category: "amazon",
       store: "Amazon",
@@ -111,7 +129,8 @@ describe("applyChatCurrencyToReply", () => {
       { userMessage: "Order AirPods from Amazon" },
     );
     expect(containsForbiddenOrderCurrency(out)).toBe(false);
-    expect(out).toContain("Amazon order total: CA$349.99");
+    expect(out).toContain("Finalized price: approximately CA$349.99.");
+    expect(out).not.toMatch(/Price estimate/i);
     expect(out).toContain("(CA$349.99)");
   });
 });

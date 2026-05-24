@@ -12,6 +12,7 @@ import {
 } from "@/lib/format-grocery-reply";
 import {
   formatCurrency,
+  formatFinalizedOrderPrice,
   repairCorruptedCurrency,
   stripChatPriceBlocks,
   stripForbiddenOrderCurrencyLines,
@@ -28,10 +29,7 @@ export function formatChatOrderPriceSummary(order: PendingOrder): string {
   if (category === "grocery") {
     return `Total Estimated Price: ${total}`;
   }
-  if (category === "amazon") {
-    return `Amazon order total: ${total}`;
-  }
-  return `Price estimate: approximately ${total}`;
+  return formatFinalizedOrderPrice(normalized.totalEstimatedPrice);
 }
 
 export function collectOrdersFromChatResult(
