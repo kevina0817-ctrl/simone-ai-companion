@@ -129,11 +129,13 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` with placeholder values replaced by your own keys. See [Environment variables](#environment-variables).
+## Environment Variables
 
-**Demo without Supabase:** leave `VITE_SUPABASE_*` empty to enable demo mode with sample personas.
+In the .env file in the backend directory, replace your_agnic_token_here with your real token:
 
-### Start the app (one command)
+AGNIC_TOKEN=your_agnic_token_here
+
+You can obtain an AGNIC token from the AGNIC AI Gateway dashboard.
 
 ```bash
 npm run dev
