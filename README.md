@@ -7,6 +7,11 @@
 Simone is an autonomous AI life companion that understands your schedule, energy, budget, household needs, routines, and boundaries, then helps orchestrate life before everything becomes manual work. It gives users time back by noticing what needs to happen, preparing the next step, and acting on low-risk tasks while knowing when to ask for approval. In this prototype, Simone coordinates scheduling, budget-setting, approvals, and order-ready planning as one connected life-logistics experience. The larger vision is a privacy-first companion layer that can connect to real-life data, act across services, and eventually let each user's Simone coordinate with others' Simones to handle shared plans and logistics.
 
 ---
+## Demo URL
+
+**Demo URL:** https://simone-ai-companion.lovable.app
+
+---
 
 ## Core Features
 
@@ -87,12 +92,6 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 | **Backend (API)** | Python FastAPI + Uvicorn (optional helpers; e.g. Render deployment) |
 | **APIs / services** | Supabase (auth & data), Agnic AI, Lovable AI Gateway |
 | **Deployment** | Lovable / Cloudflare (frontend), Render (optional FastAPI backend) |
-
----
-
-## Demo URL
-
-**Demo URL:** https://simone-ai-companion.lovable.app
 
 ---
 
