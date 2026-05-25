@@ -30,6 +30,72 @@ If Supabase is not configured, Simone runs in **demo mode** with rich sample dat
 
 ---
 
+## Current Project Status
+
+### ✅ Working Features
+
+- Conversational AI assistant interface
+- Natural language chat interaction with Simone
+- Grocery list generation based on:
+  - wellness data
+  - fitness goals
+  - meal-prep requests
+  - budgeting preferences
+- AI-generated meal planning workflows
+- Order generation flow from grocery recommendations
+- Approval queue workflow for generated orders
+- Frontend timeline and dashboard UI
+- Mock user profiles and lifestyle simulation
+- Health / readiness / sleep contextual logic
+- React + TypeScript frontend architecture
+- Python FastAPI backend integration
+- API communication between frontend and backend
+- Environment variable support for secure API keys
+- Render deployment support
+- GitHub collaborative workflow and version control
+
+---
+
+### ⚠️ Partially Working / In Progress
+
+- Timeline auto-sync after AI creates calendar events
+- Order page auto-population from live chat outputs
+- Persistent database storage
+- Real-time state synchronization across pages
+- Authentication / user account system
+- Full mobile optimization
+- Advanced memory/context retention between sessions
+- Error handling and fallback workflows
+- Multi-user scalability testing
+
+---
+
+### 🚧 Planned / TBD Features
+
+- Apple Health integration
+- Calendar API integration
+- Smart scheduling and automatic appointment booking
+- Budget tracking and financial insights
+- Real grocery ordering integrations
+- Payment approval workflows
+- Multi-agent orchestration system
+- Long-term personalized AI memory
+- Cross-platform integrations
+- Voice interaction
+- Push notifications
+- Agent-to-agent ecosystem architecture
+- Enterprise/team collaboration workflows
+
+---
+
+### Known Limitations
+
+- Some workflows currently rely on mock/demo data
+- Backend services may require manual restart during local development
+- Certain frontend actions are not yet fully connected to persistent backend state
+- Production-grade security and authentication are still under development
+---
+
 ## Tech Stack
 
 | Layer | Technologies |
