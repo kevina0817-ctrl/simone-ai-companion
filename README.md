@@ -1,40 +1,31 @@
 # Simone
 
-**Simone** is an AI-powered lifestyle, wellness, scheduling, and budgeting assistant. It helps you plan your day, review purchases and calendar changes, stay on budget, and get personalized wellness guidance—from a polished, mobile-first experience built for demos and everyday use.
+**Title:** Simone: An Autonomous AI Companion That Orchestrates Your Life  
+**Track:** The One Last Mile
 
----
+## One-Paragraph Pitch
 
-## What Simone Does
-
-Simone works as a daily concierge:
-
-- **Chat** with Simone to schedule events, queue orders, and adjust plans in natural language.
-- **Approve or decline** schedule and shopping requests in a dedicated **Approvals** workflow.
-- **Track** spending against monthly and category budgets on **Orders**.
-- **Monitor** sleep, readiness, recovery, and lifestyle insights on **Home**.
-- **Explore** different lifestyles via **multi-user demo personas** without manual database seeding.
-
-If Supabase is not configured, Simone runs in **demo mode** with rich sample data so you can explore immediately.
+Simone is an autonomous AI life companion that understands your schedule, energy, budget, household needs, routines, and boundaries, then helps orchestrate life before everything becomes manual work. It gives users time back by noticing what needs to happen, preparing the next step, and acting on low-risk tasks while knowing when to ask for approval. In this prototype, Simone coordinates scheduling, budget-setting, approvals, and order-ready planning as one connected life-logistics experience. The larger vision is a privacy-first companion layer that can connect to real-life data, act across services, and eventually let each user's Simone coordinate with others' Simones to handle shared plans and logistics.
 
 ---
 
 ## Core Features
 
-- **AI schedule planning** — Chat-driven events; direct adds to Today’s Schedule or pending approval when needed
-- **Smart approvals system** — Pending / Completed tabs; schedule, order, and budget-gated shopping flows
-- **Budget tracking** — Weekly, monthly, and quarterly views; threshold alerts; cap updates at approve time
-- **Order management** — Pending → approved orders by category (grocery, retail, other)
-- **Wellness recommendations** — Insights, recovery metrics, Simone recommendations, and notifications
-- **Dynamic Today’s Schedule** — Live “now” marker and priority-based event styling
-- **Multi-user persona system** — Demo profiles (e.g. Jordan Ross, Kevin Zhang, Nicole Hart) with distinct lifestyles
+- **Chat with Simone** - Plan, adjust, and coordinate life logistics through natural language
+- **Track budgets and spending** - Review monthly and category budgets, spending thresholds, and financial insights
+- **Make orders** - Generate grocery and household order plans from wellness, schedule, and budget context
+- **Schedule events** - Create calendar events, update timelines, and coordinate smart scheduling workflows
+- **Approve important actions** - Review schedule, order, budget, and payment approval requests before they happen
+- **Monitor wellness signals** - Track sleep, readiness, recovery, lifestyle context, and daily health patterns
+- **Wellness recommendations** - Receive personalized recommendations based on routines, goals, and current context
 
 ---
 
 ## Current Project Status
 
-### ✅ Working Features
+### Working Features
 
-- Conversational AI assistant interface
+- Conversational AI companion interface
 - Natural language chat interaction with Simone
 - Grocery list generation based on:
   - wellness data
@@ -44,8 +35,20 @@ If Supabase is not configured, Simone runs in **demo mode** with rich sample dat
 - AI-generated meal planning workflows
 - Order generation flow from grocery recommendations
 - Approval queue workflow for generated orders
+- Payment approval workflows
 - Frontend timeline and dashboard UI
-- Mock user profiles and lifestyle simulation
+- Timeline auto-sync after AI creates calendar events
+- Order page auto-population from live chat outputs
+- Persistent database storage
+- Real-time state synchronization across pages
+- Authentication / user account system
+- Full mobile optimization
+- Advanced memory/context retention between sessions
+- Error handling and fallback workflows
+- Apple Health integration
+- Calendar API integration
+- Smart scheduling and automatic appointment booking
+- Budget tracking and financial insights
 - Health / readiness / sleep contextual logic
 - React + TypeScript frontend architecture
 - Python FastAPI backend integration
@@ -56,30 +59,11 @@ If Supabase is not configured, Simone runs in **demo mode** with rich sample dat
 
 ---
 
-### ⚠️ Partially Working / In Progress
+### Planned / TBD Features
 
-- Timeline auto-sync after AI creates calendar events
-- Order page auto-population from live chat outputs
-- Persistent database storage
-- Real-time state synchronization across pages
-- Authentication / user account system
-- Full mobile optimization
-- Advanced memory/context retention between sessions
-- Error handling and fallback workflows
-- Multi-user scalability testing
-
----
-
-### 🚧 Planned / TBD Features
-
-- Apple Health integration
-- Calendar API integration
-- Smart scheduling and automatic appointment booking
-- Budget tracking and financial insights
 - Real grocery ordering integrations
-- Payment approval workflows
 - Multi-agent orchestration system
-- Long-term personalized AI memory
+- Long-term personalized AI memory and messaging
 - Cross-platform integrations
 - Voice interaction
 - Push notifications
@@ -90,21 +74,26 @@ If Supabase is not configured, Simone runs in **demo mode** with rich sample dat
 
 ### Known Limitations
 
-- Some workflows currently rely on mock/demo data
-- Backend services may require manual restart during local development
-- Certain frontend actions are not yet fully connected to persistent backend state
+- Workflows currently rely on backend demo data
 - Production-grade security and authentication are still under development
+
 ---
 
 ## Tech Stack
 
 | Layer | Technologies |
-|-------|----------------|
+|-------|--------------|
 | **Frontend** | React 19, TypeScript, TanStack Router & Start, TanStack Query, Tailwind CSS 4, Radix UI, Lucide icons |
 | **Backend (app)** | TanStack Start server functions (SSR); optional Cloudflare Workers (Wrangler) |
 | **Backend (API)** | Python FastAPI + Uvicorn (optional helpers; e.g. Render deployment) |
 | **APIs / services** | Supabase (auth & data), Agnic AI, Lovable AI Gateway |
 | **Deployment** | Lovable / Cloudflare (frontend), Render (optional FastAPI backend) |
+
+---
+
+## Demo URL
+
+**Demo URL:** https://simone-ai-companion.lovable.app
 
 ---
 
@@ -131,9 +120,11 @@ cp .env.example .env
 
 ## Environment Variables
 
-In the .env file in the backend directory, replace your_agnic_token_here with your real token:
+In the `.env` file in the backend directory, replace `your_agnic_token_here` with your real token:
 
+```bash
 AGNIC_TOKEN=your_agnic_token_here
+```
 
 You can obtain an AGNIC token from the AGNIC AI Gateway dashboard.
 
@@ -169,7 +160,6 @@ uvicorn main:app --reload --port 8000
 | `SUPABASE_SERVICE_ROLE_KEY` | Server writes | Service role key (**server only**) |
 | `AGNIC_TOKEN` | For AI chat | Agnic API token |
 | `LOVABLE_API_KEY` | Optional | Lovable AI Gateway fallback |
-| `VITE_DEMO_PERSONA` | Optional | `jordan`, `kevin`, or `nicole` when in demo mode |
 
 Full template: [`.env.example`](.env.example)
 
@@ -183,12 +173,6 @@ Full template: [`.env.example`](.env.example)
 | `npm run build` | Production build |
 | `npm run preview` | Preview production build |
 | `npm run lint` | Run ESLint |
-
----
-
-## Demo URL
-
-**Demo URL:** https://simone-ai-companion.lovable.app
 
 ---
 
@@ -214,10 +198,10 @@ Full template: [`.env.example`](.env.example)
 
 ```text
 simone-ai-companion/
-├── src/              # Routes, components, lib (budget, approvals, personas)
-├── backend/          # Optional FastAPI service
-├── .env.example      # Environment template (no secrets)
-└── wrangler.jsonc    # Cloudflare Workers config
+|-- src/              # Routes, components, lib (budget, approvals, scheduling)
+|-- backend/          # Optional FastAPI service
+|-- .env.example      # Environment template (no secrets)
+`-- wrangler.jsonc    # Cloudflare Workers config
 ```
 
 ---
@@ -232,4 +216,4 @@ simone-ai-companion/
 
 ## License
 
-Private hackathon / demo project—see repository owner for usage terms.
+This is a hackathon and demo project. See the repository owner for usage terms.
