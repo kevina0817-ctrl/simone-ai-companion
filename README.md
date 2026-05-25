@@ -95,6 +95,24 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 
 ---
 
+## Team & Roles
+
+### Shanshan Ao
+
+- Product ideation and business concept
+- User scenarios and feature planning
+- UI/UX design and frontend development
+- Product management and project planning
+
+### Mark Qian
+
+- Backend development
+- AI workflow and approval logic integration
+- Frontend/backend integration
+- System architecture and feature implementation
+  
+---
+  
 ## Quick Start
 
 ### Prerequisites
@@ -172,23 +190,6 @@ Full template: [`.env.example`](.env.example)
 | `npm run preview` | Preview production build |
 | `npm run lint` | Run ESLint |
 
----
-
-## Team & Roles
-
-### Shanshan Ao
-
-- Product ideation and business concept
-- User scenarios and feature planning
-- UI/UX design and frontend development
-- Product management and project planning
-
-### Mark Qian
-
-- Backend development
-- AI workflow and approval logic integration
-- Frontend/backend integration
-- System architecture and feature implementation
 
 ---
 
