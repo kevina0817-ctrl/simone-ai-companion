@@ -1,28 +1,42 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { jordanRossPersona } from "@/lib/jordan-ross-sample";
+import { kevinZhangPersona } from "@/lib/kevin-zhang-sample";
+import { nicoleHartPersona } from "@/lib/nicole-hart-sample";
+import { resolvePersonaByEmail } from "@/lib/persona-registry";
 
-// Seeds today's wellness data + a sample schedule so the UI feels alive.
+function emailFromClaims(claims: unknown): string | null {
+  if (!claims || typeof claims !== "object") return null;
+  const e = (claims as { email?: string }).email;
+  return typeof e === "string" ? e : null;
+}
+
+// Seeds today's wellness + persona schedule for Supabase users.
 export const seedDemoData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
+    const { supabase, userId, claims } = context;
+    const email = emailFromClaims(claims);
+    const persona = resolvePersonaByEmail(email) ?? jordanRossPersona;
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
+    const w = persona.wellness;
 
     await supabase.from("wellness_data").upsert(
       {
         user_id: userId,
         date: todayStr,
-        sleep_score: 82,
-        sleep_duration_min: 7 * 60 + 23,
-        readiness_score: 76,
+        sleep_score: w.sleep_score,
+        sleep_duration_min: w.sleep_duration_min,
+        readiness_score: w.readiness_score,
       },
       { onConflict: "user_id,date" },
     );
 
-    // Clear and re-insert today's events
-    const startOfDay = new Date(today); startOfDay.setHours(0,0,0,0);
-    const endOfDay = new Date(today); endOfDay.setHours(23,59,59,999);
+    const startOfDay = new Date(today);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(today);
+    endOfDay.setHours(23, 59, 59, 999);
     await supabase
       .from("schedule_events")
       .delete()
@@ -30,16 +44,18 @@ export const seedDemoData = createServerFn({ method: "POST" })
       .gte("start_time", startOfDay.toISOString())
       .lte("start_time", endOfDay.toISOString());
 
-    const at = (h: number, m = 0) => {
-      const d = new Date(today); d.setHours(h, m, 0, 0); return d.toISOString();
-    };
-    await supabase.from("schedule_events").insert([
-      { user_id: userId, start_time: at(8, 0), title: "Focus time", subtitle: "Deep work", level: "High" },
-      { user_id: userId, start_time: at(10, 30), title: "Client check-in", subtitle: "Zoom meeting", level: "High" },
-      { user_id: userId, start_time: at(12, 30), title: "Lunch with Mira", subtitle: "Break", level: "Medium" },
-      { user_id: userId, start_time: at(14, 0), title: "Project review", subtitle: "Plan next steps", level: "Medium" },
-      { user_id: userId, start_time: at(16, 30), title: "Evening walk", subtitle: "Movement", level: "Low" },
-    ]);
+    const schedule = persona.scheduleToday();
+    await supabase.from("schedule_events").insert(
+      schedule.map((e) => ({
+        user_id: userId,
+        start_time: e.start_time,
+        title: e.title,
+        subtitle: e.subtitle,
+        level: e.level,
+      })),
+    );
 
-    return { ok: true };
+    return { ok: true, persona: persona.id };
   });
+
+export { kevinZhangPersona, jordanRossPersona, nicoleHartPersona };

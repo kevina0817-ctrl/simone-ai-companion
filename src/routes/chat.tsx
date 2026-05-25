@@ -3,9 +3,11 @@ import { Calendar, DollarSign, Menu, Mic, Moon, Package, Send, Sparkles, Trash2 
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { ChatMessageInput } from "@/components/ChatMessageInput";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { useResolvedDisplayName } from "@/hooks/useResolvedDisplayName";
 import { supabase } from "@/integrations/supabase/client";
 import { clearChatHistory, sendChatMessage } from "@/lib/chat.functions";
 import { clearChatDraft, readChatDraft, writeChatDraft } from "@/lib/chat-draft";
@@ -14,6 +16,11 @@ import { sendDemoChatMessage } from "@/lib/demo-chat.functions";
 import { toast } from "sonner";
 import { toScheduleActions } from "@/lib/chat-actions";
 import { applyChatScheduleResult } from "@/lib/apply-chat-schedule";
+import { applyScheduleReplyOutcome } from "@/lib/chat-schedule-reply";
+import {
+  enforceRoutineTimesInReply,
+  verifyProposedRoutineChatAlignment,
+} from "@/lib/proposed-routine";
 import { applyChatOrderResult } from "@/lib/apply-chat-orders";
 import { filterEventsForToday, getLocalCalendarDayBounds } from "@/lib/schedule-context";
 import {
@@ -22,7 +29,7 @@ import {
   clearDemoMessages,
   getDemoEvents,
   getDemoMessages,
-  demoWellness,
+  resolveHomeWellness,
 } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/chat")({
@@ -39,6 +46,7 @@ const quick = [
 
 function ChatPage() {
   const { user } = useAuth();
+  const displayName = useResolvedDisplayName();
   const qc = useQueryClient();
   const send = useServerFn(sendChatMessage);
   const sendDemo = useServerFn(sendDemoChatMessage);
@@ -131,7 +139,7 @@ function ChatPage() {
               nowIso,
               history: getDemoMessages().map((m) => ({ role: m.role, content: m.content })),
               events: filterEventsForToday(getDemoEvents()),
-              wellness: demoWellness,
+              wellness: resolveHomeWellness(user?.email, null),
             },
           });
 
@@ -139,18 +147,60 @@ function ChatPage() {
         addDemoMessage({ role: "user", content: t });
       }
 
-      const { scheduled, cancelled } = await applyChatScheduleResult(qc, {
+      const replyText = result.reply;
+
+      const {
+        committed,
+        pendingApproval,
+        cancelled,
+        removedFood,
+        foodBedtime,
+        proposedRoutine,
+        routineProposal,
+        displayReplyOverride,
+      } = await applyChatScheduleResult(qc, {
         actions: toScheduleActions(result.actions),
         userMessage: t,
-        assistantReply: result.reply,
+        assistantReply: replyText,
         userId: user!.id,
+        nowIso,
+        routineProposal: result.routineProposal,
+        routineScheduleConfirmed: result.routineScheduleConfirmed,
       });
 
-      if (scheduled.length > 0) {
+      let displayReply =
+        displayReplyOverride ??
+        applyScheduleReplyOutcome(replyText, {
+          committed,
+          pendingApproval,
+          removedFood,
+          foodBedtime,
+          userMessage: t,
+          proposedRoutine,
+        });
+
+      if (proposedRoutine && !routineProposal && proposedRoutine.activities.length > 0) {
+        displayReply = enforceRoutineTimesInReply(displayReply, proposedRoutine);
+        verifyProposedRoutineChatAlignment(displayReply, proposedRoutine);
+      }
+
+      if (routineProposal) {
+        toast.success("Wind-down routine ready — reply in chat or approve on Approvals to schedule times");
+      }
+
+      if (committed.length > 0) {
         toast.success(
-          scheduled.length === 1
-            ? `“${scheduled[0].title}” sent for approval — add to today's schedule from Approvals`
-            : `${scheduled.length} events sent for approval`,
+          committed.length === 1
+            ? `Added “${committed[0].title}” to today's schedule`
+            : `Added ${committed.length} events to today's schedule`,
+        );
+      }
+
+      if (pendingApproval.length > 0) {
+        toast.success(
+          pendingApproval.length === 1
+            ? `“${pendingApproval[0].title}” sent for approval — review on Approvals`
+            : `${pendingApproval.length} events sent for approval`,
         );
       }
 
@@ -166,41 +216,34 @@ function ChatPage() {
         pendingOrders: result.pendingOrders,
         actions: result.actions,
         userMessage: t,
-        assistantReply: result.reply,
+        assistantReply: replyText,
       });
 
       if (orders.length > 0) {
-        const overBudget = orders.filter((o) => o.exceedsBudget);
         toast.success(
           orders.length === 1
-            ? `Order “${orders[0].title}” sent for approval`
-            : `${orders.length} orders sent for approval`,
+            ? `Order “${orders[0].title}” sent for approval — budget checked when you approve`
+            : `${orders.length} orders sent for approval — budget checked when you approve`,
         );
-        if (overBudget.length > 0) {
-          toast.warning(
-            overBudget.length === 1
-              ? "This order exceeds your monthly budget — review under Approvals"
-              : `${overBudget.length} orders exceed your monthly budget — review under Approvals`,
-          );
-        }
       }
 
       const aiMessage = {
         id: `ai-${Date.now()}`,
         role: "assistant",
-        content: result.reply,
+        content: displayReply,
         created_at: new Date().toISOString(),
       };
 
       if (!backendAvailable) {
-        addDemoMessage({ role: "assistant", content: result.reply });
+        addDemoMessage({ role: "assistant", content: displayReply });
       }
 
       qc.setQueryData(["chat", user!.id], (old: typeof messages | undefined) => [
         ...(old ?? []),
         aiMessage,
       ]);
-      void qc.invalidateQueries({ queryKey: ["chat", user!.id] });
+      // Do not refetch chat history here — the server may have stored pre-merge copy on older builds,
+      // and refetch would replace canonical routine times shown in Approvals.
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Simone couldn't connect to backend");
     } finally {
@@ -216,7 +259,7 @@ function ChatPage() {
         <header className="flex items-center justify-between pb-3">
           <button className="rounded-full bg-card/70 p-2"><Menu className="h-4 w-4" /></button>
           <div className="text-center">
-            <div className="font-display text-lg">Simone</div>
+            <div className="font-display text-lg">Simone for {displayName}</div>
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-success">
               <span className="h-1.5 w-1.5 rounded-full bg-success" /> Online
             </div>
@@ -287,20 +330,23 @@ function ChatPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 rounded-full bg-card/70 px-2 py-2 shadow-card">
-          <input
+        <div className="flex items-end gap-1 rounded-2xl bg-card/70 px-2 py-2 shadow-card sm:gap-2">
+          <ChatMessageInput
             value={text}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="Message your AI concierge…"
-            className="flex-1 bg-transparent px-3 text-sm placeholder:text-muted-foreground focus:outline-none"
+            onChange={setDraft}
+            onSubmit={() => submit()}
             disabled={pending || clearing}
+            className="flex-1"
           />
-          <button className="p-2 text-muted-foreground"><Mic className="h-4 w-4" /></button>
+          <button type="button" className="mb-0.5 shrink-0 p-2 text-muted-foreground" aria-label="Voice input">
+            <Mic className="h-4 w-4" />
+          </button>
           <button
+            type="button"
             onClick={() => submit()}
             disabled={pending || clearing}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow disabled:opacity-50"
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow disabled:opacity-50"
+            aria-label="Send message"
           >
             <Send className="h-4 w-4" />
           </button>

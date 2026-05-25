@@ -1,20 +1,34 @@
 import type { User } from "@supabase/supabase-js";
 import type { CancelMatchCriteria } from "@/lib/schedule-item";
 import { findScheduleEventForCancel, isSameCalendarDay } from "@/lib/schedule-item";
+import { buildJordanRossSchedule, jordanRossUser } from "@/lib/jordan-ross-sample";
+import { buildKevinZhangSchedule, kevinZhangUser } from "@/lib/kevin-zhang-sample";
+import { buildNicoleHartSchedule, nicoleHartUser } from "@/lib/nicole-hart-sample";
+import {
+  applyJordanRossSampleData,
+  getInsightForEmail,
+  getWellnessForEmail,
+  jordanRossInsight,
+  jordanRossProfile,
+  jordanRossWellness,
+  resolvePersonaByEmail,
+  resolveHomeWellness,
+  getSleepRingMeta,
+  getReadinessRingMeta,
+} from "@/lib/persona-registry";
 
 export const backendAvailable = Boolean(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
 );
 
-export const demoUser = {
-  id: "demo-user",
-  aud: "authenticated",
-  role: "authenticated",
-  email: "demo@simone.local",
-  app_metadata: {},
-  user_metadata: { display_name: "Alex" },
-  created_at: "2026-05-18T00:00:00.000Z",
-} as User;
+const demoPersonaEnv = import.meta.env.VITE_DEMO_PERSONA?.toLowerCase();
+
+export const demoUser =
+  demoPersonaEnv === "kevin" || demoPersonaEnv === "kzhang"
+    ? kevinZhangUser
+    : demoPersonaEnv === "nicole" || demoPersonaEnv === "hart"
+      ? nicoleHartUser
+      : jordanRossUser;
 
 export type DemoEvent = {
   id: string;
@@ -31,39 +45,41 @@ export type DemoMessage = {
   created_at: string;
 };
 
-export const demoProfile = { display_name: "Alex" };
+export const demoProfile = jordanRossProfile;
 
-export const demoWellness = {
-  sleep_score: 82,
-  readiness_score: 76,
-  sleep_duration_min: 455,
+export const demoWellness = jordanRossWellness;
+
+export {
+  jordanRossInsight,
+  getInsightForEmail,
+  getWellnessForEmail,
+  resolveHomeWellness,
+  getSleepRingMeta,
+  getReadinessRingMeta,
 };
+
+export function getDemoWellnessForUser(email?: string | null) {
+  return getWellnessForEmail(email ?? demoUser.email) ?? jordanRossWellness;
+}
+
+export function getDemoProfileForUser(email?: string | null) {
+  return resolvePersonaByEmail(email ?? demoUser.email)?.profile ?? jordanRossProfile;
+}
+
+export function getDemoInsightForUser(email?: string | null) {
+  return getInsightForEmail(email ?? demoUser.email) ?? jordanRossInsight;
+}
 
 const eventsKey = "simone-demo-events";
 const messagesKey = "simone-demo-messages";
 
-const todayAt = (hour: number, minute: number) => {
-  const date = new Date();
-  date.setHours(hour, minute, 0, 0);
-  return date.toISOString();
+const defaultEvents = (): DemoEvent[] => {
+  if (demoUser.id === kevinZhangUser.id) return buildKevinZhangSchedule();
+  if (demoUser.id === nicoleHartUser.id) return buildNicoleHartSchedule();
+  return buildJordanRossSchedule();
 };
 
-const defaultEvents = (): DemoEvent[] => [
-  {
-    id: "demo-1",
-    title: "Client check-in",
-    subtitle: "Review next steps",
-    start_time: todayAt(15, 30),
-    level: "High",
-  },
-  {
-    id: "demo-2",
-    title: "Recovery session",
-    subtitle: "Sauna + cold plunge",
-    start_time: todayAt(17, 30),
-    level: "Medium",
-  },
-];
+export { applyJordanRossSampleData };
 
 const safeRead = <T,>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;

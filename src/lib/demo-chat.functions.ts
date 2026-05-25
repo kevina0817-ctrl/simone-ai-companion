@@ -4,7 +4,38 @@ import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
+import {
+  applyChatCurrencyToReply,
+  collectOrdersFromChatResult,
+} from "@/lib/chat-order-currency";
+import { DEFAULT_CURRENCY } from "@/lib/format-currency";
+import {
+  buildBoredomPlanningContextBlock,
+  EVENING_PLAN_TIMEZONE,
+  isEveningPlanIntent,
+  isRestOfNightBedtimePlanIntent,
+} from "@/lib/boredom-schedule";
+import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
+import {
+  isAffirmativeRoutineConfirmText,
+  isTiredEveningRoutineProposalRequest,
+  pickSingleOrderForApproval,
+  shouldCreateOrderApproval,
+  shouldRequireScheduleApproval,
+} from "@/lib/chat-intent";
+import { buildDeterministicRoutineReply } from "@/lib/proposed-routine";
+import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
+import type { ScheduleItem } from "@/lib/schedule-item";
+import {
+  buildPhase2RoutineFromProposal,
+  buildTiredEveningProposalReply,
+  buildTiredEveningRoutineProposal,
+} from "@/lib/routine-proposal-flow";
+import type { RoutineProposal } from "@/lib/routine-proposal";
+
+const DEMO_ROUTINE_KEY = "demo";
+const demoPendingRoutine = new Map<string, RoutineProposal>();
 
 const eventSchema = z.object({
   id: z.string(),
@@ -35,33 +66,50 @@ const inputSchema = z.object({
 });
 
 const SYSTEM_PROMPT = `You are Simone, a calm, perceptive AI life concierge.
+PLATFORM CURRENCY: ${DEFAULT_CURRENCY} only (CA$). Never write US$, USD, plain $, or conversion text — the app formats all order prices in CAD.
 You help the user balance their schedule, wellness, orders, budget, and daily life.
 Be concise (1-3 short sentences), warm, perceptive, and proactive. Reference their wellness signals when relevant.
 Answer ANY question intelligently — small talk, advice, planning, recommendations, reflection prompts, summaries of their day, etc.
 
 You CAN take real actions via tools when (and only when) the user clearly asks:
-- schedule_event: propose one event for Approvals (call once per activity; specific titles, never 'these events').
+- schedule_event: add one event (title + start_time + end_time ISO). One specific event for today → direct to Today's Schedule; multiple events or full plans → Approvals. For direct adds, confirm it is already scheduled — never say pending approval or "once you confirm".
 - cancel_event: remove an event from their schedule. Match against TODAY'S SCHEDULE by id/title/time.
-- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price).
+- create_pending_order: build a shopping order (title, store, items with name, qty, estimated_price in CAD).
 
-When the user asks to buy groceries or order products, CALL create_pending_order.
-Do NOT call a tool for general questions or chit-chat.`;
+RECOMMENDATION MODE: when the user wants suggestions or multiple options, list them in chat only — do NOT call create_pending_order.
+ORDER MODE: only after they pick one item ("I want the…", "buy this one", "second option") call create_pending_order once for that product.
+When the user asks to buy a specific product they already chose, ONLY CALL create_pending_order once — never schedule_event.
+Do not split product names or prices into fake calendar events.
+Never create multiple pending orders for multiple recommended options in one turn.
+Order title and item names must be real products only — never assistant filler phrases.
+For create_pending_order use quantity, unit, estimated_price (CAD unit price), and pricing_mode when needed. per_unit: multiply quantity × price (lbs, cups, heads). package: flat price (dozen, oz, bag, bottle). App computes totals — never sum prices in chat.
+For grocery: structured tool line items only; app shows CAD prices. Order confirmation uses Finalized price: approximately CA$… — never Price estimate or US$.
+Do NOT call a tool for general questions or chit-chat.
+
+BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern). Always assume bedtime 11:00 PM unless the user explicitly names another — never infer bedtime from duration. "N hours before bedtime" = window ending at bedtime (3h → 8:00–11:00 PM, 2h → 9:00–11:00 PM), not now+N hours. Nothing after bedtime. No food within 4h of bedtime. No 12:00 AM–1:00 AM blocks for before-bed requests.
+For tired / before-bed routines: call schedule_event per activity; do NOT write times in chat — the app assigns exact times.`;
 
 const tools = [
   {
     type: "function",
     function: {
       name: "schedule_event",
-      description: "Add a new event to the user's schedule.",
+      description:
+        "Add one schedule event. Single today adds go direct to timeline; multi-event plans go to Approvals.",
       parameters: {
         type: "object",
         properties: {
           title: { type: "string" },
           subtitle: { type: "string" },
-          start_time: { type: "string", description: "ISO 8601 datetime" },
-          level: { type: "string", enum: ["High", "Medium", "Low"] },
+          start_time: { type: "string", description: "ISO 8601 start datetime" },
+          end_time: { type: "string", description: "ISO 8601 end datetime" },
+          level: {
+            type: "string",
+            enum: ["High", "Medium", "Low"],
+            description: "High: purchases or social plans. Low: leisure. Medium: solo productive only.",
+          },
         },
-        required: ["title", "start_time"],
+        required: ["title", "start_time", "end_time"],
       },
     },
   },
@@ -82,7 +130,7 @@ const tools = [
               properties: {
                 name: { type: "string" },
                 qty: { type: "number" },
-                estimated_price: { type: "number" },
+                estimated_price: { type: "number", description: "Unit price in CAD" },
               },
               required: ["name"],
             },
@@ -111,25 +159,30 @@ const tools = [
 
 function collectActionsFromToolCalls(
   toolCalls: Array<{ function: { name: string; arguments: string } }>,
+  userMessage: string,
 ): { actions: ChatAction[]; pendingOrders: ChatResponse["pendingOrders"] } {
   const actions: ChatAction[] = [];
   const pendingOrders: ChatResponse["pendingOrders"] = [];
+  const priorityContext = buildSchedulePriorityContext(userMessage);
 
   for (const tc of toolCalls) {
     try {
       const args = JSON.parse(tc.function.arguments || "{}");
       if (tc.function.name === "schedule_event") {
-        const item = normalizeScheduleFromToolArgs(args);
+        const item = normalizeScheduleFromToolArgs(args, undefined, priorityContext ?? undefined);
         if (item) {
+          const [scheduled] = applySchedulePriorityToItems([item], priorityContext ?? undefined);
+          const leveled = scheduled ?? item;
           actions.push({
             kind: "schedule_event",
-            title: item.title,
-            subtitle: item.subtitle,
-            start_time: item.start_time,
-            level: item.level,
+            title: leveled.title,
+            subtitle: leveled.subtitle,
+            start_time: leveled.start_time,
+            end_time: leveled.end_time,
+            level: leveled.level,
           });
         }
-      } else if (tc.function.name === "create_pending_order") {
+      } else if (tc.function.name === "create_pending_order" && shouldCreateOrderApproval(userMessage)) {
         const order = normalizeOrderFromToolArgs(args);
         if (order) {
           actions.push({ kind: "create_pending_order", order });
@@ -155,7 +208,44 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => inputSchema.parse(input))
   .handler(async ({ data }) => {
     const nowIso = data.nowIso ?? new Date().toISOString();
-    const tz = data.timezone ?? "UTC";
+
+    if (isTiredEveningRoutineProposalRequest(data.message)) {
+      const proposal = buildTiredEveningRoutineProposal();
+      demoPendingRoutine.set(DEMO_ROUTINE_KEY, proposal);
+      return {
+        reply: buildTiredEveningProposalReply(proposal),
+        actions: [],
+        pendingOrders: [],
+        routineProposal: proposal,
+      } satisfies ChatResponse;
+    }
+
+    const pendingDemoRoutine = demoPendingRoutine.get(DEMO_ROUTINE_KEY);
+    if (pendingDemoRoutine && isAffirmativeRoutineConfirmText(data.message)) {
+      demoPendingRoutine.delete(DEMO_ROUTINE_KEY);
+      const todaySchedule: ScheduleItem[] = data.events.map((e) => ({
+        id: e.id,
+        title: e.title,
+        subtitle: e.subtitle ?? null,
+        start_time: e.start_time,
+        level: (e.level ?? "Low") as ScheduleItem["level"],
+      }));
+      const phase2 = buildPhase2RoutineFromProposal(pendingDemoRoutine, {
+        userMessage: data.message,
+        nowIso,
+        todayEvents: todaySchedule,
+      });
+      return {
+        reply: phase2.reply,
+        actions: phase2.actions,
+        pendingOrders: [],
+        routineScheduleConfirmed: true,
+      } satisfies ChatResponse;
+    }
+
+    const tz = isRestOfNightBedtimePlanIntent(data.message)
+      ? EVENING_PLAN_TIMEZONE
+      : (data.timezone ?? "UTC");
     const w = data.wellness;
 
     const wellnessLine = w
@@ -173,6 +263,18 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
+      ...(isRestOfNightBedtimePlanIntent(data.message)
+        ? [
+            {
+              role: "system",
+              content: buildBoredomPlanningContextBlock({
+                nowIso,
+                events: data.events,
+                userMessage: data.message,
+              }),
+            },
+          ]
+        : []),
       ...data.history.map((m) => ({ role: m.role, content: m.content })),
       { role: "user", content: data.message },
     ];
@@ -181,13 +283,40 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
     const pendingOrders: ChatResponse["pendingOrders"] = [];
     let reply = "";
 
+    const todaySchedule: ScheduleItem[] = data.events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      subtitle: e.subtitle ?? null,
+      start_time: e.start_time,
+      level: "Low" as const,
+    }));
+
+    const tryDeterministicBedtimeReply = (llmDraft?: string | null): boolean => {
+      if (isTiredEveningRoutineProposalRequest(data.message)) return false;
+      if (!isRestOfNightBedtimePlanIntent(data.message)) return false;
+      if (!actions.some((a) => a.kind === "schedule_event")) return false;
+
+      const resolved = resolveChatScheduleEvents({
+        actions,
+        userMessage: data.message,
+        assistantReply: llmDraft ?? undefined,
+        nowIso,
+        todayEvents: todaySchedule,
+      });
+
+      if (!resolved.proposedRoutine) return false;
+
+      reply = buildDeterministicRoutineReply(resolved.proposedRoutine, llmDraft ?? undefined);
+      return true;
+    };
+
     for (let i = 0; i < 3; i++) {
       const json = await requestChatCompletion(messages, tools);
       const msg = json.choices?.[0]?.message;
       if (!msg) break;
 
       if (msg.tool_calls?.length) {
-        const collected = collectActionsFromToolCalls(msg.tool_calls);
+        const collected = collectActionsFromToolCalls(msg.tool_calls, data.message);
         actions.push(...collected.actions);
         pendingOrders.push(...collected.pendingOrders);
 
@@ -197,17 +326,52 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
           tool_calls: msg.tool_calls,
         });
         for (const tc of msg.tool_calls) {
+          let toolPayload: Record<string, unknown> = { ok: true };
+          try {
+            const args = JSON.parse(tc.function.arguments || "{}");
+            if (tc.function.name === "schedule_event") {
+              const item = normalizeScheduleFromToolArgs(args);
+              if (item) {
+                const needsApproval = shouldRequireScheduleApproval(data.message, 1, {
+                  toolCallCount: 1,
+                });
+                toolPayload = needsApproval
+                  ? { ok: true, pending_approval: true, event: item }
+                  : {
+                      ok: true,
+                      added_to_today_schedule: true,
+                      message:
+                        "Event is already on today's schedule (no Approvals). Confirm directly.",
+                      event: item,
+                    };
+              }
+            }
+          } catch {
+            // keep { ok: true }
+          }
           messages.push({
             role: "tool",
             tool_call_id: tc.id,
-            content: JSON.stringify({ ok: true }),
+            content: JSON.stringify(toolPayload),
           });
+        }
+
+        if (tryDeterministicBedtimeReply(msg.content ?? undefined)) {
+          break;
         }
         continue;
       }
 
       reply = msg.content?.trim() ?? "";
       break;
+    }
+
+    if (
+      !isTiredEveningRoutineProposalRequest(data.message) &&
+      isRestOfNightBedtimePlanIntent(data.message) &&
+      actions.some((a) => a.kind === "schedule_event")
+    ) {
+      tryDeterministicBedtimeReply(reply);
     }
 
     if (!reply) {
@@ -218,5 +382,17 @@ export const sendDemoChatMessage = createServerFn({ method: "POST" })
       else reply = "Got it.";
     }
 
-    return { reply, actions, pendingOrders } satisfies ChatResponse;
+    const ordersForApproval = shouldCreateOrderApproval(data.message)
+      ? pickSingleOrderForApproval(data.message, pendingOrders)
+      : [];
+
+    const ordersForReplyFormatting = collectOrdersFromChatResult({
+      pendingOrders,
+      actions,
+    });
+    reply = applyChatCurrencyToReply(reply, ordersForReplyFormatting, {
+      userMessage: data.message,
+    });
+
+    return { reply, actions, pendingOrders: ordersForApproval } satisfies ChatResponse;
   });

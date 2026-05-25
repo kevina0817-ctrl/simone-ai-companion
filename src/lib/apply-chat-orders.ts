@@ -1,8 +1,17 @@
 import type { ChatAction } from "@/lib/chat-actions";
 import type { PendingOrder } from "@/lib/pending-order";
-import { normalizeOrderFromToolArgs, parseOrderFromText } from "@/lib/pending-order";
-import { orderWithBudgetFlags } from "@/lib/budget-store";
+import {
+  clonePendingOrder,
+  parseOrderFromUserMessage,
+  recomputePendingOrderTotals,
+} from "@/lib/pending-order";
+import {
+  pickSingleOrderForApproval,
+  shouldCreateOrderApproval,
+} from "@/lib/chat-intent";
+import { isValidPendingOrder, orderDedupeKey } from "@/lib/order-validation";
 import { addPendingOrderApproval } from "@/lib/approvals-store";
+import { prepareOrderForApprovals } from "@/lib/order-approval";
 
 export function applyChatOrderResult(
   input: {
@@ -12,37 +21,53 @@ export function applyChatOrderResult(
     assistantReply?: string;
   },
 ): PendingOrder[] {
+  if (!shouldCreateOrderApproval(input.userMessage)) {
+    return [];
+  }
+
   const created: PendingOrder[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenProducts = new Set<string>();
 
   const push = (raw: PendingOrder) => {
-    const order = orderWithBudgetFlags(raw);
-    if (seen.has(order.id)) return;
-    seen.add(order.id);
+    const recomputed = recomputePendingOrderTotals(raw);
+    if (!isValidPendingOrder(recomputed)) return;
+    const order = prepareOrderForApprovals(clonePendingOrder(recomputed));
+    const productKey = orderDedupeKey(order);
+    if (seenIds.has(order.id) || seenProducts.has(productKey)) return;
+    seenIds.add(order.id);
+    seenProducts.add(productKey);
     addPendingOrderApproval(order);
     created.push(order);
   };
 
-  for (const order of input.pendingOrders ?? []) {
+  const rawToolOrders: PendingOrder[] = [
+    ...(input.pendingOrders ?? []),
+    ...(input.actions ?? [])
+      .filter(
+        (a): a is Extract<ChatAction, { kind: "create_pending_order"; order: PendingOrder }> =>
+          a.kind === "create_pending_order" && "order" in a && Boolean(a.order),
+      )
+      .map((a) => a.order),
+  ];
+  const uniqueToolOrders: PendingOrder[] = [];
+  const seenToolKeys = new Set<string>();
+  for (const o of rawToolOrders) {
+    const key = orderDedupeKey(o);
+    if (seenToolKeys.has(key)) continue;
+    seenToolKeys.add(key);
+    uniqueToolOrders.push(o);
+  }
+  const toolOrders = pickSingleOrderForApproval(input.userMessage, uniqueToolOrders);
+
+  for (const order of toolOrders) {
     push(order);
   }
 
-  for (const action of input.actions ?? []) {
-    if (action.kind === "create_pending_order" && "order" in action && action.order) {
-      push(action.order);
-    }
-  }
-
   if (created.length === 0) {
-    const combined = `${input.userMessage}\n${input.assistantReply ?? ""}`;
-    const parsed = parseOrderFromText(combined);
-    const scheduleIntent =
-      /\b(schedule|book|add|cancel|remove|delete|meeting|appointment|event|session)\b/i.test(
-        combined,
-      );
-    if (parsed && !scheduleIntent) {
-      addPendingOrderApproval(parsed);
-      created.push(parsed);
+    const parsed = parseOrderFromUserMessage(input.userMessage);
+    if (parsed) {
+      push(parsed);
     }
   }
 

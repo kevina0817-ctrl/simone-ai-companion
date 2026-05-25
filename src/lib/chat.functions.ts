@@ -4,8 +4,38 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { requestChatCompletion } from "@/lib/ai-gateway";
 import { normalizeScheduleFromToolArgs, findScheduleEventForCancel } from "@/lib/schedule-item";
 import type { ChatAction, ChatResponse } from "@/lib/chat-actions";
+import { applyChatCurrencyToReply, collectOrdersFromChatResult } from "@/lib/chat-order-currency";
+import { DEFAULT_CURRENCY } from "@/lib/format-currency";
 import { normalizeOrderFromToolArgs } from "@/lib/pending-order";
+import {
+  buildBoredomPlanningContextBlock,
+  EVENING_PLAN_TIMEZONE,
+  getTorontoCalendarDayBounds,
+  isEveningPlanIntent,
+  isRestOfNightBedtimePlanIntent,
+} from "@/lib/boredom-schedule";
+import { applySchedulePriorityToItems, buildSchedulePriorityContext } from "@/lib/schedule-priority";
 import { buildScheduleContextBlock } from "@/lib/schedule-context";
+import {
+  isAffirmativeRoutineConfirmText,
+  isTiredEveningRoutineProposalRequest,
+  pickSingleOrderForApproval,
+  shouldCreateOrderApproval,
+  shouldRequireScheduleApproval,
+} from "@/lib/chat-intent";
+import { buildDeterministicRoutineReply } from "@/lib/proposed-routine";
+import { resolveChatScheduleEvents } from "@/lib/resolve-chat-schedule";
+import type { ScheduleItem } from "@/lib/schedule-item";
+import {
+  buildPhase2RoutineFromProposal,
+  buildTiredEveningProposalReply,
+  buildTiredEveningRoutineProposal,
+} from "@/lib/routine-proposal-flow";
+import {
+  clearServerPendingRoutineProposal,
+  getServerPendingRoutineProposal,
+  setServerPendingRoutineProposal,
+} from "@/lib/routine-proposal-store";
 
 const inputSchema = z.object({
   message: z.string().min(1).max(2000),
@@ -16,6 +46,7 @@ const inputSchema = z.object({
 });
 
 const SYSTEM_PROMPT = `You are Simone, a calm, perceptive AI life assistant in the style of an attentive concierge.
+PLATFORM CURRENCY: ${DEFAULT_CURRENCY} only (displayed as CA$). All order prices are Canadian dollars. Never write US$, USD, plain $ amounts, "(USD)", or currency conversion text — the app formats every price in CA$.
 You help the user balance their schedule, wellness, and daily orders.
 Be warm, thoughtful, and proactive. Reference the user's wellness signals and upcoming schedule when relevant.
 Answer with as much depth as the question requires — a quick check-in can be a sentence, but planning, advice,
@@ -27,14 +58,31 @@ You CAN take real actions using tools:
 - cancel_event: remove an event from the user's schedule when they ask to cancel, remove, drop, skip, or delete it.
 - create_pending_order: create a grocery or shopping order for user approval (not charged until they approve).
 
-When the user asks to book / schedule / add something, CALL schedule_event (it goes to their Approvals queue; after they approve it appears on today's schedule).
-For weekend plans, itineraries, or multiple activities: call schedule_event once per activity with a specific title and start_time — never one event named "these events" or "all events".
-When the user asks to add all events to Approvals, call schedule_event for each listed activity.
+SINGLE EVENT (direct to Today's Schedule): When the user asks to add/book/schedule ONE specific event for today (e.g. "Add gym at 7 PM today"), call schedule_event once — it is added directly to Today's Schedule with NO Approvals step. Confirm it is already on their schedule; NEVER say pending approval, awaiting confirmation, or "once you confirm".
+MULTI-EVENT / PLANS (Approvals): For full-day plans, adjusted schedules with multiple activities, weekend itineraries, or when they ask to add events to Approvals — call schedule_event once per activity; each goes to Approvals first. Only then mention Approvals or confirmation.
+When the schedule_event tool returns added_to_today_schedule: true, the event is already live — use past-tense direct confirmation only.
+When the tool returns pending_approval: true, the event is waiting in Approvals — you may mention reviewing or confirming there.
+Each schedule_event must include title, start_time, and end_time as ISO datetimes (real start/end of the block).
+Schedule priority: High = spending, shopping, or events with others (meetings, dinner with friends, group plans). Low = hobbies, relaxation, entertainment. Medium = solo productive blocks only — do not use Medium for casual evening leisure. If the user is tired or planning before bedtime / rest of tonight, set level to Low for every activity.
+BOREDOM / EVENING / BEFORE BEDTIME: Use America/Toronto (Eastern) from planning context. Always assume bedtime is 11:00 PM unless the user explicitly names a different bedtime (e.g. "sleep at 10:30 PM") — never infer bedtime from duration or current time. "3 hours before bedtime" means schedule between 8:00 PM and 11:00 PM, NOT 10:00 PM–1:00 AM or "now plus 3 hours". "2 hours before bedtime" means 9:00 PM–11:00 PM. Nothing may start at or after bedtime. Never schedule food within 4 hours before bedtime (7:00 PM cutoff for 11:00 PM sleep). If they ask for dinner too late, suggest moving it earlier or a light wind-down.
+For tired / before-bed routines: call schedule_event once per activity (title + subtitle only). Do NOT write times in your chat message — the app assigns exact times and shows them to the user.
+When suggesting a daily plan in chat only (no request to book), do NOT call schedule_event — use structured lines: "Title — 8:00 AM - 9:00 AM".
+For weekend plans with multiple activities they want queued: call schedule_event separately per activity — never one event named "these events".
+When the user asks to add all events to Approvals, call schedule_event separately for each activity with title, start_time, and end_time.
 When the user asks to cancel / remove / drop / skip a meeting or event, CALL cancel_event with the best match
 from today's schedule (use event id when shown, or title and/or time), then confirm. If nothing matches, ask which one to cancel.
-When the user asks to buy groceries, order items, or shop — CALL create_pending_order with title, store, and line items
-(name, qty, estimated_price in USD). Then confirm it was sent to their Approvals queue.
-If the purchase would exceed their monthly budget, still call create_pending_order — it goes to Approvals flagged as over budget.
+RECOMMENDATION MODE vs ORDER MODE:
+- When the user asks for suggestions, options, comparisons, or "what do you recommend" — stay in RECOMMENDATION MODE: list products in chat only. Do NOT call create_pending_order. Do not say items were sent to Approvals.
+- ORDER MODE — only after the user explicitly picks ONE product (e.g. "I want the Tiffany Pearl Necklace", "buy this one", "add the second option"): call create_pending_order exactly ONCE for that single product.
+When the user asks to buy, order, purchase, or shop for a specific product they already named — ONLY CALL create_pending_order once (never schedule_event).
+Do not turn product descriptions, prices, or shopping lists into calendar events.
+Never call create_pending_order multiple times for multiple recommended options in the same turn.
+For create_pending_order: title and item names must be real product names only (e.g. "Tiffany & Co. Pearl Necklace") — never conversational phrases like "for this item" or "let me know if you need assistance".
+When the user asks to buy groceries with a clear list — CALL create_pending_order once with title, store, and line items
+(name, quantity, unit, estimated_price, optional pricing_mode). estimated_price is UNIT price in CAD. For groceries: use quantity + unit (e.g. quantity 3, unit "lbs") — app uses pricing_mode: per_unit multiplies (3×9), package uses flat price (dozen, oz, bag, bottle). Never sum prices or state order totals in chat.
+GROCERY LIST: call create_pending_order with structured line items (quantity, unit, estimated_price). App renders line totals; first list may show Total Estimated Price in CAD. After user confirms order creation, app injects "Finalized price: approximately CA$…" — never write Price estimate, US$, USD, or totals yourself.
+AMAZON / LUXURY / ALL ORDERS: numeric estimated_price in CAD in tools only. Do not write prices in chat prose — the app injects "Finalized price: approximately CA$…" from tool data.
+If the purchase might exceed their monthly budget, still call create_pending_order — it goes to Approvals; budget is checked only when they approve.
 For budget-only alerts without specific items, say you'd add it to their Approvals queue.`;
 
 const tools = [
@@ -43,16 +91,22 @@ const tools = [
     function: {
       name: "schedule_event",
       description:
-        "Add one event to Approvals. Call separately for each activity in a plan. Title must name the activity (e.g. 'Farmers market'), not 'these events'.",
+        "Add one schedule event. Single direct adds (e.g. gym at 7 PM today) go to Today's Schedule; multi-event plans go to Approvals.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Short event title, e.g. 'Recovery session'" },
+          title: { type: "string", description: "Short event title only, e.g. 'Pilates' or 'Healthy Lunch'" },
           subtitle: { type: "string", description: "Optional short detail, e.g. 'Sauna + cold plunge'" },
-          start_time: { type: "string", description: "ISO 8601 datetime with timezone offset, e.g. 2026-05-18T17:30:00-07:00" },
-          level: { type: "string", enum: ["High", "Medium", "Low"], description: "Priority level, default Medium" },
+          start_time: { type: "string", description: "ISO 8601 start datetime with timezone offset" },
+          end_time: { type: "string", description: "ISO 8601 end datetime with timezone offset (after start_time)" },
+          level: {
+            type: "string",
+            enum: ["High", "Medium", "Low"],
+            description:
+              "High: purchases, budget, or social plans with others. Low: leisure/hobbies. Medium: solo productive work only. Rest-of-night plans: always Low.",
+          },
         },
-        required: ["title", "start_time"],
+        required: ["title", "start_time", "end_time"],
       },
     },
   },
@@ -65,16 +119,41 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Order title, e.g. Weekly grocery run" },
+          title: {
+            type: "string",
+            description:
+              "Real product name only (e.g. Tiffany & Co. Pearl Necklace). Never assistant filler or phrases like 'for this item' or 'need further assistance'.",
+          },
           store: { type: "string", description: "Store name, e.g. Whole Foods or Amazon" },
           items: {
             type: "array",
             items: {
               type: "object",
               properties: {
-                name: { type: "string" },
-                qty: { type: "number" },
-                estimated_price: { type: "number", description: "Unit price USD" },
+                name: {
+                  type: "string",
+                  description: "Line item product name only — same rules as order title",
+                },
+                qty: { type: "number", description: "Legacy count — prefer quantity + unit for groceries" },
+                quantity: {
+                  type: "number",
+                  description: "Grocery: numeric amount for the unit (e.g. 3 for 3 lbs, 32 for 32 oz)",
+                },
+                unit: {
+                  type: "string",
+                  description:
+                    "Grocery measure: lbs, cups, heads, medium, dozen, oz, bag, can, etc. App sets pricing_mode from unit.",
+                },
+                pricing_mode: {
+                  type: "string",
+                  enum: ["per_unit", "package"],
+                  description:
+                    "per_unit: line = quantity × estimated_price. package: line = estimated_price only (dozen, oz, bag, bottle, …).",
+                },
+                estimated_price: {
+                  type: "number",
+                  description: `Unit price in ${DEFAULT_CURRENCY} (per lb, per cup, or flat package price)`,
+                },
               },
               required: ["name"],
             },
@@ -114,22 +193,43 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     });
 
     const nowIso = data.nowIso ?? new Date().toISOString();
-    const tz = data.timezone ?? "UTC";
+
+    if (isTiredEveningRoutineProposalRequest(data.message)) {
+      const proposal = buildTiredEveningRoutineProposal();
+      setServerPendingRoutineProposal(userId, proposal);
+      const reply = buildTiredEveningProposalReply(proposal);
+      await supabase.from("chat_messages").insert({
+        user_id: userId,
+        role: "assistant",
+        content: reply,
+      });
+      return {
+        reply,
+        actions: [],
+        pendingOrders: [],
+        routineProposal: proposal,
+      } satisfies ChatResponse;
+    }
+
+    const eveningPlan = isRestOfNightBedtimePlanIntent(data.message);
+    const priorityContext = buildSchedulePriorityContext(data.message);
+    const tz = eveningPlan ? EVENING_PLAN_TIMEZONE : (data.timezone ?? "UTC");
     const ref = new Date(nowIso);
+    const torontoDay = getTorontoCalendarDayBounds(ref);
     const dayStartIso =
       data.dayStartIso ??
-      (() => {
+      (eveningPlan ? torontoDay.startIso : (() => {
         const s = new Date(ref);
         s.setHours(0, 0, 0, 0);
         return s.toISOString();
-      })();
+      })());
     const dayEndIso =
       data.dayEndIso ??
-      (() => {
+      (eveningPlan ? torontoDay.endIso : (() => {
         const e = new Date(ref);
         e.setHours(23, 59, 59, 999);
         return e.toISOString();
-      })();
+      })());
     const today = dayStartIso.slice(0, 10);
 
     const fetchTodayEvents = async () => {
@@ -155,6 +255,34 @@ export const sendChatMessage = createServerFn({ method: "POST" })
         .limit(12),
     ]);
 
+    const serverPendingRoutine = getServerPendingRoutineProposal(userId);
+    if (serverPendingRoutine && isAffirmativeRoutineConfirmText(data.message)) {
+      clearServerPendingRoutineProposal(userId);
+      const todayForRoutine: ScheduleItem[] = events.map((row) => ({
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        start_time: row.start_time,
+        level: (row.level ?? "Low") as ScheduleItem["level"],
+      }));
+      const phase2 = buildPhase2RoutineFromProposal(serverPendingRoutine, {
+        userMessage: data.message,
+        nowIso,
+        todayEvents: todayForRoutine,
+      });
+      await supabase.from("chat_messages").insert({
+        user_id: userId,
+        role: "assistant",
+        content: phase2.reply,
+      });
+      return {
+        reply: phase2.reply,
+        actions: phase2.actions,
+        pendingOrders: [],
+        routineScheduleConfirmed: true,
+      } satisfies ChatResponse;
+    }
+
     const wellnessLine = wellness
       ? `Sleep ${wellness.sleep_score ?? "?"}/100 (${wellness.sleep_duration_min ?? "?"} min), readiness ${wellness.readiness_score ?? "?"}/100.`
       : "No wellness data logged today.";
@@ -179,6 +307,18 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     const messages: Array<Record<string, unknown>> = [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "system", content: contextBlock },
+      ...(isEveningPlanIntent(data.message)
+        ? [
+            {
+              role: "system",
+              content: buildBoredomPlanningContextBlock({
+                nowIso,
+                events,
+                userMessage: data.message,
+              }),
+            },
+          ]
+        : []),
       ...thread,
     ];
 
@@ -187,6 +327,35 @@ export const sendChatMessage = createServerFn({ method: "POST" })
     let reply = "";
 
     let todayEvents = events;
+
+    const toScheduleItems = (rows: typeof events): ScheduleItem[] =>
+      rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        start_time: row.start_time,
+        level: (row.level ?? "Low") as ScheduleItem["level"],
+      }));
+
+    const tryDeterministicBedtimeReply = (llmDraft?: string | null): boolean => {
+      if (isTiredEveningRoutineProposalRequest(data.message)) return false;
+      if (!isRestOfNightBedtimePlanIntent(data.message)) return false;
+      const scheduleActions = actions.filter((a) => a.kind === "schedule_event");
+      if (scheduleActions.length === 0) return false;
+
+      const resolved = resolveChatScheduleEvents({
+        actions,
+        userMessage: data.message,
+        assistantReply: llmDraft ?? undefined,
+        nowIso,
+        todayEvents: toScheduleItems(todayEvents),
+      });
+
+      if (!resolved.proposedRoutine) return false;
+
+      reply = buildDeterministicRoutineReply(resolved.proposedRoutine, llmDraft ?? undefined);
+      return true;
+    };
 
     for (let i = 0; i < 3; i++) {
       const json = await requestChatCompletion(messages, tools);
@@ -204,15 +373,42 @@ export const sendChatMessage = createServerFn({ method: "POST" })
           try {
             const args = JSON.parse(tc.function.arguments || "{}");
             if (tc.function.name === "schedule_event") {
-              const item = normalizeScheduleFromToolArgs(args);
+              if (isTiredEveningRoutineProposalRequest(data.message)) {
+                result = {
+                  ok: false,
+                  error:
+                    "Tired routine: describe activities in chat only — do not call schedule_event until the user confirms.",
+                };
+                messages.push({
+                  role: "tool",
+                  tool_call_id: tc.id,
+                  content: JSON.stringify(result),
+                });
+                continue;
+              }
+              const item = normalizeScheduleFromToolArgs(args, undefined, priorityContext ?? undefined);
               if (!item) throw new Error("Invalid schedule fields");
-              result = { ok: true, pending_approval: true, event: item };
+              const [leveled] = applySchedulePriorityToItems([item], priorityContext ?? undefined);
+              const scheduled = leveled ?? item;
+              const needsApproval = shouldRequireScheduleApproval(data.message, 1, {
+                toolCallCount: 1,
+              });
+              result = needsApproval
+                ? { ok: true, pending_approval: true, event: scheduled }
+                : {
+                    ok: true,
+                    added_to_today_schedule: true,
+                    message:
+                      "Event is already on today's schedule (no Approvals). Confirm directly to the user.",
+                    event: scheduled,
+                  };
               actions.push({
                 kind: "schedule_event",
-                title: item.title,
-                subtitle: item.subtitle,
-                start_time: item.start_time,
-                level: item.level,
+                title: scheduled.title,
+                subtitle: scheduled.subtitle,
+                start_time: scheduled.start_time,
+                end_time: scheduled.end_time,
+                level: scheduled.level,
               });
             } else if (tc.function.name === "cancel_event") {
               const parsed = z
@@ -240,15 +436,29 @@ export const sendChatMessage = createServerFn({ method: "POST" })
               actions.push({ kind: "cancel_event", id: match.id, title: match.title });
               todayEvents = todayEvents.filter((e) => e.id !== match.id);
             } else if (tc.function.name === "create_pending_order") {
-              const order = normalizeOrderFromToolArgs(args);
-              if (!order) throw new Error("Invalid order fields");
-              result = { ok: true, orderId: order.id, itemCount: order.items.length };
-              pendingOrders.push(order);
-              actions.push({
-                kind: "create_pending_order",
-                orderId: order.id,
-                title: order.title,
-              });
+              if (!shouldCreateOrderApproval(data.message)) {
+                result = {
+                  ok: false,
+                  error:
+                    "Recommendation mode — describe options in chat only; call create_pending_order after the user picks one item",
+                };
+              } else {
+                const order = normalizeOrderFromToolArgs(args);
+                if (!order) {
+                  result = {
+                    ok: false,
+                    error: "Invalid order — use real product names only, not assistant filler text",
+                  };
+                } else {
+                  result = { ok: true, orderId: order.id, itemCount: order.items.length };
+                  pendingOrders.push(order);
+                  actions.push({
+                    kind: "create_pending_order",
+                    orderId: order.id,
+                    title: order.title,
+                  });
+                }
+              }
             }
           } catch (e) {
             result = { ok: false, error: e instanceof Error ? e.message : "Tool failed" };
@@ -259,6 +469,10 @@ export const sendChatMessage = createServerFn({ method: "POST" })
             content: JSON.stringify(result),
           });
         }
+
+        if (tryDeterministicBedtimeReply(msg.content ?? undefined)) {
+          break;
+        }
         continue;
       }
 
@@ -268,13 +482,33 @@ export const sendChatMessage = createServerFn({ method: "POST" })
 
     if (!reply) reply = "Done.";
 
+    if (
+      !isTiredEveningRoutineProposalRequest(data.message) &&
+      isRestOfNightBedtimePlanIntent(data.message) &&
+      actions.some((a) => a.kind === "schedule_event")
+    ) {
+      tryDeterministicBedtimeReply(reply);
+    }
+
+    const ordersForApproval = shouldCreateOrderApproval(data.message)
+      ? pickSingleOrderForApproval(data.message, pendingOrders)
+      : [];
+
+    const ordersForReplyFormatting = collectOrdersFromChatResult({
+      pendingOrders,
+      actions,
+    });
+    reply = applyChatCurrencyToReply(reply, ordersForReplyFormatting, {
+      userMessage: data.message,
+    });
+
     await supabase.from("chat_messages").insert({
       user_id: userId,
       role: "assistant",
       content: reply,
     });
 
-    return { reply, actions, pendingOrders } satisfies ChatResponse;
+    return { reply, actions, pendingOrders: ordersForApproval } satisfies ChatResponse;
   });
 
 export const clearChatHistory = createServerFn({ method: "POST" })

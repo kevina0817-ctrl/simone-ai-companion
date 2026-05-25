@@ -47,7 +47,8 @@ export function buildScheduleContextBlock(opts: {
   events: ScheduleContextEvent[];
   heading?: string;
 }): string {
-  const when = new Date(opts.nowIso).toLocaleString([], {
+  const when = new Date(opts.nowIso).toLocaleString("en-CA", {
+    timeZone: opts.timezone === "America/Toronto" ? "America/Toronto" : undefined,
     weekday: "short",
     month: "short",
     day: "numeric",

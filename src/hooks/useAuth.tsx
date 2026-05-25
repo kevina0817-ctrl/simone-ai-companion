@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { backendAvailable, demoUser } from "@/lib/demo-mode";
+import { applyPersonaForUser, ensurePersonaBudgetForEmail } from "@/lib/persona-registry";
+import { syncProfileDisplayNameFromUser } from "@/lib/user-display-name";
 
 type AuthCtx = {
   user: User | null;
@@ -17,7 +19,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(backendAvailable);
 
   useEffect(() => {
-    if (!backendAvailable) return;
+    if (!backendAvailable) {
+      applyPersonaForUser(demoUser);
+      return;
+    }
     let active = true;
     const fallback = window.setTimeout(() => {
       if (active) setLoading(false);
@@ -27,12 +32,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       setSession(s);
       setLoading(false);
+      applyPersonaForUser(s?.user);
+      ensurePersonaBudgetForEmail(s?.user?.email);
+      if (s?.user) void syncProfileDisplayNameFromUser(s.user);
     });
 
     supabase.auth.getSession()
       .then(({ data }) => {
         if (!active) return;
         setSession(data.session);
+        applyPersonaForUser(data.session?.user);
+        ensurePersonaBudgetForEmail(data.session?.user?.email);
+        if (data.session?.user) void syncProfileDisplayNameFromUser(data.session.user);
       })
       .catch(() => {
         if (active) setSession(null);

@@ -19,6 +19,7 @@ import { ComponentType, useEffect, useState } from "react";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { useResolvedDisplayName } from "@/hooks/useResolvedDisplayName";
 import { RETENTION_OPTIONS, RETENTION_STORAGE_KEY, getStoredRetentionLabel } from "./privacy.retention";
 
 export const Route = createFileRoute("/privacy")({
@@ -217,6 +218,7 @@ const access = [
 
 function PrivacyPage() {
   const { signOut, user } = useAuth();
+  const displayName = useResolvedDisplayName();
   const [toggles, setToggles] = useState([true, true, true, false]);
   const [retention, setRetention] = useState("12 months");
   useEffect(() => { setRetention(getStoredRetentionLabel()); }, []);
@@ -310,12 +312,24 @@ function PrivacyPage() {
           </div>
         </section>
 
+        <section className="mt-6 mb-2 rounded-3xl bg-card/70 px-4 py-4 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Account
+          </div>
+          {displayName !== "friend" && (
+            <div className="mt-2 font-display text-lg">{displayName}</div>
+          )}
+          {user?.email && (
+            <div className="mt-1 text-sm text-muted-foreground">{user.email}</div>
+          )}
+        </section>
+
         <button
           onClick={signOut}
-          className="mt-6 mb-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card/70 px-4 py-3 text-sm text-muted-foreground"
+          className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card/70 px-4 py-3 text-sm text-muted-foreground"
         >
           <LogOut className="h-4 w-4" />
-          Sign out{user?.email ? ` (${user.email})` : ""}
+          Sign out
         </button>
       </div>
     </MobileFrame>

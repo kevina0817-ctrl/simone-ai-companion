@@ -1,18 +1,39 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, Calendar, Cloud, Sparkles, Sprout } from "lucide-react";
+import { Bell, Sparkles, Sprout } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { MobileFrame } from "@/components/MobileFrame";
 import { RingScore } from "@/components/RingScore";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/hooks/useAuth";
+import { useResolvedDisplayName } from "@/hooks/useResolvedDisplayName";
 import { supabase } from "@/integrations/supabase/client";
 import { seedDemoData } from "@/lib/seed.functions";
 import { toast } from "sonner";
-import { useEffect } from "react";
-import { ScheduleEventActions } from "@/components/ScheduleEventActions";
+import { useEffect, useState } from "react";
+import { HomeCollapsibleSection } from "@/components/HomeCollapsibleSection";
+import { HomeSectionControls } from "@/components/HomeSectionControls";
+import { HomeStatusChips } from "@/components/HomeStatusChips";
+import { useHomeSectionCollapse } from "@/hooks/useHomeSectionCollapse";
+import { SchedulePriorityLegend } from "@/components/SchedulePriorityIndicator";
+import { TodayScheduleTimeline } from "@/components/TodayScheduleTimeline";
 import { loadTodayTimelineEvents, todayQueryKey } from "@/lib/schedule-timeline-cache";
-import { backendAvailable, clearTodayDemoEvents, DEMO_EVENTS_CHANGED, demoProfile, demoWellness } from "@/lib/demo-mode";
+import {
+  backendAvailable,
+  clearTodayDemoEvents,
+  DEMO_EVENTS_CHANGED,
+  getDemoInsightForUser,
+} from "@/lib/demo-mode";
+import { PersonaLifestyleCard } from "@/components/PersonaLifestyleCard";
+import {
+  applyPersonaForUser,
+  getHomePersonaLifestyle,
+  getReadinessRingMeta,
+  getSleepRingMeta,
+  resolveHomeWellness,
+  resolvePersonaByUser,
+  type StoredPersonaLifestyle,
+} from "@/lib/persona-registry";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,53 +45,54 @@ export const Route = createFileRoute("/")({
   component: () => <RequireAuth><Home /></RequireAuth>,
 });
 
-const levelDot: Record<string, string> = {
-  High: "bg-primary",
-  Medium: "bg-champagne",
-  Low: "bg-success",
-};
-const levelChip: Record<string, string> = {
-  High: "bg-primary/15 text-primary",
-  Medium: "bg-champagne/15 text-champagne",
-  Low: "bg-success/15 text-success",
-};
-
 function Home() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const seed = useServerFn(seedDemoData);
 
-  const { data: profile } = useQuery({
-    queryKey: ["profile", user!.id],
-    queryFn: async () => {
-      if (!backendAvailable) return demoProfile;
-      const { data } = await supabase.from("profiles").select("display_name").eq("id", user!.id).maybeSingle();
-      return data;
-    },
-  });
+  const displayName = useResolvedDisplayName();
+  const homeSections = useHomeSectionCollapse();
 
   const today = new Date().toISOString().slice(0, 10);
 
+  const [lifestyle, setLifestyle] = useState<StoredPersonaLifestyle | null>(null);
+
   useEffect(() => {
-    if (backendAvailable) return;
-    const refresh = () => {
+    if (!user) return;
+    applyPersonaForUser(user);
+    setLifestyle(getHomePersonaLifestyle(user.email, user.id));
+  }, [user?.id, user?.email]);
+
+  useEffect(() => {
+    const refreshTimeline = () => {
       void qc.invalidateQueries({ queryKey: todayQueryKey(user!.id) });
     };
-    window.addEventListener(DEMO_EVENTS_CHANGED, refresh);
-    return () => window.removeEventListener(DEMO_EVENTS_CHANGED, refresh);
-  }, [qc, user]);
+    const refreshWellness = () => {
+      void qc.invalidateQueries({ queryKey: ["wellness", user!.id, today] });
+      setLifestyle(getHomePersonaLifestyle(user?.email, user?.id));
+    };
+    window.addEventListener(DEMO_EVENTS_CHANGED, refreshTimeline);
+    window.addEventListener("simone-persona-wellness-changed", refreshWellness);
+    return () => {
+      window.removeEventListener(DEMO_EVENTS_CHANGED, refreshTimeline);
+      window.removeEventListener("simone-persona-wellness-changed", refreshWellness);
+    };
+  }, [qc, user, today]);
 
   const { data: wellness } = useQuery({
-    queryKey: ["wellness", user!.id, today],
+    queryKey: ["wellness", user!.id, today, user?.email],
+    placeholderData: () => resolveHomeWellness(user?.email, null) ?? undefined,
     queryFn: async () => {
-      if (!backendAvailable) return demoWellness;
+      if (!backendAvailable) {
+        return resolveHomeWellness(user?.email, null);
+      }
       const { data } = await supabase
         .from("wellness_data")
-        .select("*")
+        .select("sleep_score, readiness_score, sleep_duration_min")
         .eq("user_id", user!.id)
         .eq("date", today)
         .maybeSingle();
-      return data;
+      return resolveHomeWellness(user?.email, data);
     },
   });
 
@@ -119,12 +141,18 @@ function Home() {
 
   const greeting = (() => {
     const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
+    if (h < 12) return "Good Morning";
+    if (h < 18) return "Good Afternoon";
+    return "Good Evening";
   })();
 
-  const name = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
+  const persona = resolvePersonaByUser(user);
+  const resolvedLifestyle = lifestyle ?? getHomePersonaLifestyle(user?.email, user?.id);
+  const insight = resolvedLifestyle?.insight ?? getDemoInsightForUser(user?.email);
+  const showLifestyle = Boolean(persona && resolvedLifestyle);
+  const sleepRing = getSleepRingMeta(wellness);
+  const readinessRing = getReadinessRingMeta(wellness);
+  const showWellnessRings = Boolean(wellness?.sleep_score != null || wellness?.readiness_score != null);
 
   return (
     <MobileFrame>
@@ -134,7 +162,7 @@ function Home() {
             <h1 className="font-display text-3xl font-light leading-tight">
               {greeting},
               <br />
-              {name}
+              {displayName}
             </h1>
           </div>
           <Link to="/privacy" className="rounded-full bg-card/70 p-2.5">
@@ -142,17 +170,9 @@ function Home() {
           </Link>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-card/60 px-3 py-1.5">
-            <Calendar className="h-3 w-3" />
-            {new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-card/60 px-3 py-1.5">
-            <Cloud className="h-3 w-3" /> 18°C Partly cloudy
-          </span>
-        </div>
+        <HomeStatusChips />
 
-        {!wellness && (
+        {!showWellnessRings && (
           <button
             onClick={() => seedM.mutate()}
             disabled={seedM.isPending}
@@ -163,37 +183,50 @@ function Home() {
           </button>
         )}
 
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <RingScore
-            value={wellness?.sleep_score ?? 0}
-            label="Sleep"
-            status={wellness ? "Good" : "—"}
-            detail={wellness?.sleep_duration_min ? `${Math.floor(wellness.sleep_duration_min/60)}h ${wellness.sleep_duration_min%60}m` : "No data"}
-          />
-          <RingScore
-            value={wellness?.readiness_score ?? 0}
-            label="Readiness"
-            status={wellness ? "Steady" : "—"}
-            detail={wellness ? "Aligned" : "No data"}
-            color="champagne"
-          />
-        </div>
-
-        <div className="mt-5 rounded-3xl bg-card/70 p-5 shadow-card">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Insight for today
+        {showWellnessRings && (
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <RingScore
+              value={sleepRing.value}
+              label="Sleep"
+              status={sleepRing.status}
+              detail={sleepRing.detail}
+            />
+            <RingScore
+              value={readinessRing.value}
+              label="Readiness"
+              status={readinessRing.status}
+              detail={readinessRing.detail}
+              color="champagne"
+            />
           </div>
+        )}
+
+        <HomeSectionControls sections={homeSections} className="mt-5 flex items-center justify-end gap-4" />
+
+        <HomeCollapsibleSection
+          sectionId="insight"
+          sections={homeSections}
+          title="Insight for Today"
+          icon={<Sparkles className="h-4 w-4 text-primary" />}
+          className="mt-3"
+        >
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {wellness
-              ? "A calm start supports a focused day. Your afternoon looks busy — block a 15 min reset between 1–3 PM."
+            {showWellnessRings && insight
+              ? insight
               : "Log today's wellness to unlock personalized insights from Simone."}
           </p>
-        </div>
+        </HomeCollapsibleSection>
+
+        {showLifestyle && (
+          <PersonaLifestyleCard lifestyle={resolvedLifestyle!} sections={homeSections} />
+        )}
 
         <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-display text-xl">Today's schedule</h2>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-display text-xl">Today's schedule</h2>
+              <SchedulePriorityLegend className="mt-1" />
+            </div>
             <div className="flex items-center gap-3">
               {events && events.length > 0 && (
                 <button
@@ -212,35 +245,7 @@ function Home() {
           </div>
 
           <div className="relative rounded-3xl bg-card/60 p-4">
-            {events && events.length > 0 ? (
-              <>
-                <div className="absolute left-[42px] top-6 bottom-6 w-px bg-border" />
-                <ul className="space-y-4">
-                  {events.map((item) => (
-                    <li key={item.id} className="relative flex items-center gap-3">
-                      <span className="w-12 text-[11px] font-medium text-muted-foreground">
-                        {new Date(item.start_time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      <span className={`relative z-10 h-2.5 w-2.5 rounded-full ${levelDot[item.level]} ring-4 ring-card/60`} />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium leading-tight">{item.title}</div>
-                        <div className="text-xs text-muted-foreground">{item.subtitle}</div>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1.5">
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${levelChip[item.level]}`}>
-                          {item.level}
-                        </span>
-                        <ScheduleEventActions event={item} userId={user!.id} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <div className="py-6 text-center text-xs text-muted-foreground">
-                No events yet. Load a sample day above or ask Simone to plan one.
-              </div>
-            )}
+            <TodayScheduleTimeline events={events ?? []} userId={user!.id} />
           </div>
         </div>
       </div>
