@@ -4,7 +4,7 @@
 
 ## One-Paragraph Pitch
 
-Simone is an autonomous AI life companion that understands your schedule, energy, budget, household needs, routines, and boundaries, then helps orchestrate life before everything becomes manual work. It gives users time back by noticing what needs to happen, preparing the next step, and acting on low-risk tasks while knowing when to ask for approval. In this prototype, Simone coordinates scheduling, budget-setting, approvals, and order-ready planning as one connected life-logistics experience. The larger vision is a privacy-first companion layer that can connect to real-life data, act across services, and eventually let each user's Simone coordinate with others' Simones to handle shared plans and logistics.
+Simone is an AI life companion that understands your schedule, energy, household needs, routines, and boundaries, then helps orchestrate life before everyday logistics become manual work. It gives users time back by noticing what needs to happen, preparing the next step while knowing when to ask for approval. In this prototype, Simone coordinates scheduling, budget-setting, approvals as one connected intelligent experience. The larger vision is a privacy-first companion layer that can connect to real-life data, act across services, and eventually let each user's Simone coordinate with others' Simones to handle shared plans and logistics.
 
 ---
 ## Demo URL
@@ -15,13 +15,13 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 
 ## Core Features
 
+- **Monitor wellness signals** - Track sleep, readiness, recovery, lifestyle context, and daily health patterns
+- **Wellness recommendations** - Receive personalized recommendations based on routines, goals, and current context
 - **Chat with Simone** - Plan, adjust, and coordinate life logistics through natural language
 - **Track budgets and spending** - Review monthly and category budgets, spending thresholds, and financial insights
 - **Make orders** - Generate grocery and household order plans from wellness, schedule, and budget context
 - **Schedule events** - Create calendar events, update timelines, and coordinate smart scheduling workflows
-- **Approve important actions** - Review schedule, order, budget, and payment approval requests before they happen
-- **Monitor wellness signals** - Track sleep, readiness, recovery, lifestyle context, and daily health patterns
-- **Wellness recommendations** - Receive personalized recommendations based on routines, goals, and current context
+- **Approve medium/high-risk actions** - Review schedule, order, budget, and payment approval requests before they happen
 
 ---
 
@@ -30,10 +30,7 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 ### Working Features
 
 - Conversational AI companion interface
-- Natural language chat interaction with Simone
 - Grocery list generation based on:
-  - wellness data
-  - fitness goals
   - meal-prep requests
   - budgeting preferences
 - AI-generated meal planning workflows
@@ -43,14 +40,8 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 - Frontend timeline and dashboard UI
 - Timeline auto-sync after AI creates calendar events
 - Order page auto-population from live chat outputs
-- Persistent database storage
-- Real-time state synchronization across pages
 - Authentication / user account system
-- Full mobile optimization
-- Advanced memory/context retention between sessions
 - Error handling and fallback workflows
-- Apple Health integration
-- Calendar API integration
 - Smart scheduling and automatic appointment booking
 - Budget tracking and financial insights
 - Health / readiness / sleep contextual logic
@@ -64,15 +55,14 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 ---
 
 ### Planned / TBD Features
-
+- Apple Health integration
+- Calendar API integration
 - Real grocery ordering integrations
-- Multi-agent orchestration system
 - Long-term personalized AI memory and messaging
 - Cross-platform integrations
 - Voice interaction
 - Push notifications
 - Agent-to-agent ecosystem architecture
-- Enterprise/team collaboration workflows
 
 ---
 
@@ -80,7 +70,6 @@ Simone is an autonomous AI life companion that understands your schedule, energy
 
 - Workflows currently rely on backend demo data
 - Production-grade security and authentication are still under development
-
 ---
 
 ## Tech Stack
