@@ -1,6 +1,5 @@
-# Simone
+# Simone: An Autonomous AI Companion That Orchestrates Your Life  
 
-**Title:** Simone: An Autonomous AI Companion That Orchestrates Your Life  
 **Track:** The One Last Mile
 
 ## One-Paragraph Pitch
