@@ -11,6 +11,10 @@ Simone is an AI life companion that understands your schedule, energy, household
 
 **Demo URL:** https://simone-ai-companion.lovable.app
 
+## Demo Account Login Credentials
+- Email: jordanross@wolfcapital.ai
+- Password: WolfCapital!26
+
 ---
 
 ## Core Features
