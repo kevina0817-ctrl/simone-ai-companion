@@ -122,8 +122,6 @@ Full template: [`.env.example`](.env.example)
 
 **Demo URL:** https://simone-ai-companion.lovable.app
 
----
-
 ## Demo Account Login Credentials
 - Email: jordanross@wolfcapital.ai
 - Password: WolfCapital!26
