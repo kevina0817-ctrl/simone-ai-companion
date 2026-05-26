@@ -125,8 +125,8 @@ Full template: [`.env.example`](.env.example)
 ---
 
 ## Demo Account Login Credentials
-Email: jordanross@wolfcapital.ai
-Password: WolfCapital!26
+- Email: jordanross@wolfcapital.ai
+- Password: WolfCapital!26
 
 ---
 
